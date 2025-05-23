@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  recipe-app:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - recipe_data:/data
+    environment:
+      - DB_PATH=/data/recipes.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/recipes"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  recipe_data:
+    driver: local

@@ -1,0 +1,304 @@
+{{define "recipe-content"}}
+<div class="recipe-view">
+    <div class="recipe-header">
+        <div class="recipe-title-section">
+            <h1>{{.Recipe.Title}}</h1>
+            <div class="recipe-author">
+                <i class="fas fa-user"></i> Created by {{.Recipe.AuthorName}}
+            </div>
+        </div>
+        
+        {{if and .IsLoggedIn (eq .Recipe.CreatedBy .User.ID)}}
+            <div class="recipe-actions">
+                <a href="/recipe/{{.Recipe.ID}}/edit" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit Recipe
+                </a>
+                <button onclick="deleteRecipe({{.Recipe.ID}})" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Delete Recipe
+                </button>
+            </div>
+        {{end}}
+    </div>
+    
+    {{if .Recipe.Description}}
+        <div class="recipe-description">
+            <p>{{.Recipe.Description}}</p>
+        </div>
+    {{end}}
+    
+    <div class="recipe-meta-section">
+        <div class="meta-grid">
+            <div class="meta-item">
+                <i class="fas fa-clock"></i>
+                <div>
+                    <strong>Prep Time</strong>
+                    <span>{{if .Recipe.PrepTime}}{{.Recipe.PrepTime}} minutes{{else}}Not specified{{end}}</span>
+                </div>
+            </div>
+            <div class="meta-item">
+                <i class="fas fa-fire"></i>
+                <div>
+                    <strong>Cook Time</strong>
+                    <span>{{if .Recipe.CookTime}}{{.Recipe.CookTime}} minutes{{else}}Not specified{{end}}</span>
+                </div>
+            </div>
+            <div class="meta-item">
+                <i class="fas fa-users"></i>
+                <div>
+                    <strong>Servings</strong>
+                    <span>{{if .Recipe.Servings}}{{.Recipe.Servings}} people{{else}}Not specified{{end}}</span>
+                </div>
+            </div>
+            <div class="meta-item">
+                <i class="fas fa-calendar"></i>
+                <div>
+                    <strong>Created</strong>
+                    <span>{{.Recipe.CreatedAt.Format "Jan 2, 2006"}}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="recipe-content">
+        <div class="ingredients-section">
+            <div class="ingredients-header">
+                <h2><i class="fas fa-list"></i> Ingredients</h2>
+                {{if .Recipe.Servings}}
+                    <div class="serving-calculator">
+                        <label for="servingSize">Adjust for:</label>
+                        <input type="number" id="servingSize" min="1" max="50" value="{{.Recipe.Servings}}" class="serving-input">
+                        <span class="serving-label">servings</span>
+                        <button type="button" id="resetServings" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-undo"></i> Reset
+                        </button>
+                    </div>
+                {{end}}
+            </div>
+            
+            {{if .Recipe.Ingredients}}
+                <ul class="ingredients-list" id="ingredientsList">
+                    {{range .Recipe.Ingredients}}
+                        <li class="ingredient-item" data-original-quantity="{{.Quantity}}">
+                            <span class="quantity">{{.Quantity}}</span>
+                            <span class="unit">{{.Unit}}</span>
+                            <span class="name">{{.Name}}</span>
+                        </li>
+                    {{end}}
+                </ul>
+            {{else}}
+                <p class="no-ingredients">No ingredients specified</p>
+            {{end}}
+        </div>
+        
+        <div class="instructions-section">
+            <h2><i class="fas fa-utensils"></i> Instructions</h2>
+            <div class="instructions-content">
+                {{.Recipe.Instructions | nl2br}}
+            </div>
+        </div>
+    </div>
+    
+    <div class="recipe-navigation">
+        <a href="/recipes" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Recipes
+        </a>
+    </div>
+</div>
+{{end}}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Recipe Book</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
+            </div>
+            <div class="nav-links">
+                <a href="/recipes" class="nav-link">
+                    <i class="fas fa-list"></i> Recipes
+                </a>
+                <a href="/ingredients" class="nav-link">
+                    <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                {{if .IsLoggedIn}}
+                    <a href="/recipe/new" class="nav-link">
+                        <i class="fas fa-plus"></i> Add Recipe
+                    </a>
+                    <a href="/ingredients/new" class="nav-link">
+                        <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <div class="user-menu">
+                        <span class="username">
+                            <i class="fas fa-user"></i> {{.User.Username}}
+                        </span>
+                        <form action="/api/logout" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </form>
+                    </div>
+                {{else}}
+                    <div class="auth-buttons">
+                        <a href="/login" class="btn btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="/register" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {{if .Error}}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{.Error}}
+            </div>
+        {{end}}
+        
+        {{if .Message}}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{.Message}}
+            </div>
+        {{end}}
+
+        {{template "recipe-content" .}}
+    </div>
+
+    <script src="/static/app.js"></script>
+    
+    <script>
+        // Recipe serving calculator
+        document.addEventListener('DOMContentLoaded', function() {
+            const servingInput = document.getElementById('servingSize');
+            const resetButton = document.getElementById('resetServings');
+            const originalServings = {{.Recipe.Servings}};
+            
+            if (servingInput) {
+                servingInput.addEventListener('input', function() {
+                    const newServings = parseInt(this.value) || 1;
+                    recalculateIngredients(newServings, originalServings);
+                });
+                
+                // Also trigger on change (for better mobile support)
+                servingInput.addEventListener('change', function() {
+                    const newServings = parseInt(this.value) || 1;
+                    recalculateIngredients(newServings, originalServings);
+                });
+            }
+            
+            if (resetButton) {
+                resetButton.addEventListener('click', function() {
+                    servingInput.value = originalServings;
+                    recalculateIngredients(originalServings, originalServings);
+                });
+            }
+        });
+        
+        function recalculateIngredients(newServings, originalServings) {
+            const ingredientItems = document.querySelectorAll('.ingredient-item');
+            const ratio = newServings / originalServings;
+            
+            ingredientItems.forEach(function(item) {
+                const quantitySpan = item.querySelector('.quantity');
+                const originalQuantity = parseFloat(item.dataset.originalQuantity);
+                
+                if (quantitySpan && !isNaN(originalQuantity)) {
+                    const newQuantity = originalQuantity * ratio;
+                    
+                    // Format the number nicely
+                    let displayQuantity;
+                    if (newQuantity < 0.1) {
+                        displayQuantity = newQuantity.toFixed(3);
+                    } else if (newQuantity < 1) {
+                        displayQuantity = newQuantity.toFixed(2);
+                    } else if (newQuantity < 10) {
+                        displayQuantity = newQuantity.toFixed(1);
+                    } else {
+                        displayQuantity = Math.round(newQuantity * 10) / 10;
+                    }
+                    
+                    // Convert decimals to fractions for common cooking amounts
+                    displayQuantity = formatCookingQuantity(parseFloat(displayQuantity));
+                    
+                    quantitySpan.textContent = displayQuantity;
+                    
+                    // Add visual feedback
+                    if (ratio !== 1) {
+                        quantitySpan.classList.add('quantity-adjusted');
+                    } else {
+                        quantitySpan.classList.remove('quantity-adjusted');
+                    }
+                }
+            });
+            
+            // Update the visual feedback for the calculator
+            const calculator = document.querySelector('.serving-calculator');
+            if (calculator) {
+                if (newServings !== originalServings) {
+                    calculator.classList.add('calculator-active');
+                } else {
+                    calculator.classList.remove('calculator-active');
+                }
+            }
+        }
+        
+        function formatCookingQuantity(quantity) {
+            // Convert common decimal amounts to fractions
+            const fractions = {
+                0.125: '⅛',
+                0.25: '¼', 
+                0.33: '⅓',
+                0.375: '⅜',
+                0.5: '½',
+                0.625: '⅝',
+                0.67: '⅔',
+                0.75: '¾',
+                0.875: '⅞'
+            };
+            
+            // Check if it's a whole number
+            if (quantity === Math.floor(quantity)) {
+                return quantity.toString();
+            }
+            
+            // Check for exact fraction matches
+            const rounded = Math.round(quantity * 1000) / 1000;
+            for (const [decimal, fraction] of Object.entries(fractions)) {
+                if (Math.abs(rounded - decimal) < 0.01) {
+                    return fraction;
+                }
+            }
+            
+            // Check for mixed numbers (like 1½)
+            const whole = Math.floor(quantity);
+            const remainder = quantity - whole;
+            
+            for (const [decimal, fraction] of Object.entries(fractions)) {
+                if (Math.abs(remainder - decimal) < 0.01) {
+                    return whole > 0 ? `${whole}${fraction}` : fraction;
+                }
+            }
+            
+            // Fall back to decimal
+            if (quantity < 1) {
+                return quantity.toFixed(2);
+            } else {
+                return quantity.toFixed(1);
+            }
+        }
+    </script>
+</body>
+</html>

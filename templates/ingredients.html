@@ -1,0 +1,136 @@
+{{define "ingredients-content"}}
+<div class="page-header">
+    <h1><i class="fas fa-leaf"></i> Ingredients</h1>
+    {{if .IsLoggedIn}}
+        <a href="/ingredients/new" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Ingredient
+        </a>
+    {{end}}
+</div>
+
+{{if .Ingredients}}
+    <div class="ingredients-grid">
+        {{range .Ingredients}}
+            <div class="ingredient-card">
+                <div class="ingredient-header">
+                    <h3 class="ingredient-name">{{.Name}}</h3>
+                </div>
+                
+                {{if $.IsLoggedIn}}
+                    <div class="ingredient-actions">
+                        <button onclick="deleteIngredient({{.ID}}, '{{.Name}}')" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                {{end}}
+            </div>
+        {{end}}
+    </div>
+{{else}}
+    <div class="empty-state">
+        <i class="fas fa-leaf"></i>
+        <h3>No ingredients found</h3>
+        <p>{{if .IsLoggedIn}}Add some ingredients to get started!{{else}}Please log in to manage ingredients.{{end}}</p>
+        {{if .IsLoggedIn}}
+            <a href="/ingredients/new" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Your First Ingredient
+            </a>
+        {{end}}
+    </div>
+{{end}}
+
+<script>
+    function deleteIngredient(id, name) {
+        if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+            fetch(`/api/ingredients/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert('Failed to delete ingredient. It might be used in existing recipes.');
+                }
+            })
+            .catch(error => {
+                alert('Error deleting ingredient: ' + error.message);
+            });
+        }
+    }
+</script>
+{{end}}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Recipe Book</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
+            </div>
+            <div class="nav-links">
+                <a href="/recipes" class="nav-link">
+                    <i class="fas fa-list"></i> Recipes
+                </a>
+                <a href="/ingredients" class="nav-link">
+                    <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                {{if .IsLoggedIn}}
+                    <a href="/recipe/new" class="nav-link">
+                        <i class="fas fa-plus"></i> Add Recipe
+                    </a>
+                    <a href="/ingredients/new" class="nav-link">
+                        <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <div class="user-menu">
+                        <span class="username">
+                            <i class="fas fa-user"></i> {{.User.Username}}
+                        </span>
+                        <form action="/api/logout" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </form>
+                    </div>
+                {{else}}
+                    <div class="auth-buttons">
+                        <a href="/login" class="btn btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="/register" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {{if .Error}}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{.Error}}
+            </div>
+        {{end}}
+        
+        {{if .Message}}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{.Message}}
+            </div>
+        {{end}}
+
+        {{template "ingredients-content" .}}
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+{{define "recipes-content"}}
+<div class="page-header">
+    <h1><i class="fas fa-utensils"></i> Recipes</h1>
+    {{if .IsLoggedIn}}
+        <a href="/recipe/new" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Recipe
+        </a>
+    {{end}}
+</div>
+
+<div class="search-section">
+    <form action="/recipes" method="GET" class="search-form">
+        <div class="search-container">
+            <input type="text" name="search" class="search-input" placeholder="Search recipes..." 
+                   value="">
+            <button type="submit" class="search-btn">
+                <i class="fas fa-search"></i>
+            </button>
+        </div>
+    </form>
+</div>
+
+{{if .Recipes}}
+    <div class="recipe-grid">
+        {{range .Recipes}}
+            <div class="recipe-card">
+                <div class="recipe-header">
+                    <h3 class="recipe-title">
+                        <a href="/recipe/{{.ID}}">{{.Title}}</a>
+                    </h3>
+                    <div class="recipe-author">
+                        <i class="fas fa-user"></i> {{.AuthorName}}
+                    </div>
+                </div>
+                
+                {{if .Description}}
+                    <p class="recipe-description">{{.Description}}</p>
+                {{end}}
+                
+                <div class="recipe-meta">
+                    <span class="meta-item">
+                        <i class="fas fa-clock"></i> 
+                        {{if .PrepTime}}{{.PrepTime}}min prep{{else}}No prep time{{end}}
+                    </span>
+                    <span class="meta-item">
+                        <i class="fas fa-fire"></i> 
+                        {{if .CookTime}}{{.CookTime}}min cook{{else}}No cook time{{end}}
+                    </span>
+                    <span class="meta-item">
+                        <i class="fas fa-users"></i> 
+                        {{if .Servings}}{{.Servings}} servings{{else}}No serving info{{end}}
+                    </span>
+                </div>
+                
+                {{if .Ingredients}}
+                    <div class="recipe-ingredients-preview">
+                        <strong>Ingredients:</strong>
+                        {{range $index, $ingredient := .Ingredients}}
+                            {{if lt $index 3}}
+                                {{$ingredient.Name}}{{if lt (add $index 1) (len $.Ingredients)}}, {{end}}
+                            {{end}}
+                        {{end}}
+                        {{if gt (len .Ingredients) 3}}
+                            <span class="more-ingredients">and {{sub (len .Ingredients) 3}} more...</span>
+                        {{end}}
+                    </div>
+                {{end}}
+                
+                <div class="recipe-actions">
+                    <a href="/recipe/{{.ID}}" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-eye"></i> View
+                    </a>
+                    {{if and $.IsLoggedIn (eq .CreatedBy $.User.ID)}}
+                        <a href="/recipe/{{.ID}}/edit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <button onclick="deleteRecipe({{.ID}})" class="btn btn-danger btn-sm">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    {{end}}
+                </div>
+            </div>
+        {{end}}
+    </div>
+{{else}}
+    <div class="empty-state">
+        <i class="fas fa-utensils"></i>
+        <h3>No recipes found</h3>
+        <p>{{if .IsLoggedIn}}Be the first to add a delicious recipe!{{else}}Please log in to add recipes.{{end}}</p>
+        {{if .IsLoggedIn}}
+            <a href="/recipe/new" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Your First Recipe
+            </a>
+        {{end}}
+    </div>
+{{end}}
+{{end}}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Recipe Book</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
+            </div>
+            <div class="nav-links">
+                <a href="/recipes" class="nav-link">
+                    <i class="fas fa-list"></i> Recipes
+                </a>
+                <a href="/ingredients" class="nav-link">
+                    <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                {{if .IsLoggedIn}}
+                    <a href="/recipe/new" class="nav-link">
+                        <i class="fas fa-plus"></i> Add Recipe
+                    </a>
+                    <a href="/ingredients/new" class="nav-link">
+                        <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <div class="user-menu">
+                        <span class="username">
+                            <i class="fas fa-user"></i> {{.User.Username}}
+                        </span>
+                        <form action="/api/logout" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </form>
+                    </div>
+                {{else}}
+                    <div class="auth-buttons">
+                        <a href="/login" class="btn btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="/register" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {{if .Error}}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{.Error}}
+            </div>
+        {{end}}
+        
+        {{if .Message}}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{.Message}}
+            </div>
+        {{end}}
+
+        {{template "recipes-content" .}}
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

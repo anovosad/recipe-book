@@ -1,0 +1,280 @@
+{{define "recipe-form-content"}}
+<div class="form-container">
+    <div class="form-header">
+        <h1>
+            {{if .Recipe}}
+                <i class="fas fa-edit"></i> Edit Recipe
+            {{else}}
+                <i class="fas fa-plus"></i> New Recipe
+            {{end}}
+        </h1>
+    </div>
+    
+    <form action="{{if .Recipe}}/recipe/{{.Recipe.ID}}/edit{{else}}/api/recipes{{end}}" method="POST" class="recipe-form">
+        
+        <div class="form-section">
+            <h3>Basic Information</h3>
+            
+            <div class="form-group">
+                <label for="title">Recipe Title *</label>
+                <input type="text" id="title" name="title" class="form-control" 
+                       value="{{if .Recipe}}{{.Recipe.Title}}{{end}}" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" class="form-control" rows="3" 
+                          placeholder="Brief description of your recipe">{{if .Recipe}}{{.Recipe.Description}}{{end}}</textarea>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h3>Recipe Details</h3>
+            
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="prep_time">Prep Time (minutes)</label>
+                    <input type="number" id="prep_time" name="prep_time" class="form-control" 
+                           value="{{if .Recipe}}{{.Recipe.PrepTime}}{{end}}" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="cook_time">Cook Time (minutes)</label>
+                    <input type="number" id="cook_time" name="cook_time" class="form-control" 
+                           value="{{if .Recipe}}{{.Recipe.CookTime}}{{end}}" min="0">
+                </div>
+                
+                <div class="form-group">
+                    <label for="servings">Servings</label>
+                    <input type="number" id="servings" name="servings" class="form-control" 
+                           value="{{if .Recipe}}{{.Recipe.Servings}}{{end}}" min="1">
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-section">
+            <h3>Ingredients</h3>
+            <div id="ingredients-container">
+                {{if .Recipe}}
+                    {{range $index, $ingredient := .Recipe.Ingredients}}
+                        <div class="ingredient-row">
+                            <!-- Debug: Ingredient Unit = {{$ingredient.Unit}} -->
+                            <select name="ingredient_{{$index}}" class="form-control ingredient-select" required>
+                                <option value="">Select ingredient...</option>
+                                {{range $.Ingredients}}
+                                    <option value="{{.ID}}" {{if eq .ID $ingredient.IngredientID}}selected{{end}}>
+                                        {{.Name}}
+                                    </option>
+                                {{end}}
+                            </select>
+                            <input type="number" name="quantity_{{$index}}" class="form-control quantity-input" 
+                                   placeholder="Quantity" step="0.1" min="0" value="{{$ingredient.Quantity}}" required>
+                            <select name="unit_{{$index}}" class="form-control unit-select" required>
+                                <option value="">Unit...</option>
+                                <optgroup label="Volume">
+                                    <option value="tsp"{{if streq $ingredient.Unit "tsp"}} selected{{end}}>Teaspoon</option>
+                                    <option value="tbsp"{{if streq $ingredient.Unit "tbsp"}} selected{{end}}>Tablespoon</option>
+                                    <option value="cup"{{if streq $ingredient.Unit "cup"}} selected{{end}}>Cup</option>
+                                    <option value="ml"{{if streq $ingredient.Unit "ml"}} selected{{end}}>Milliliter</option>
+                                    <option value="l"{{if streq $ingredient.Unit "l"}} selected{{end}}>Liter</option>
+                                    <option value="fl oz"{{if streq $ingredient.Unit "fl oz"}} selected{{end}}>Fluid Ounce</option>
+                                </optgroup>
+                                <optgroup label="Weight">
+                                    <option value="g"{{if streq $ingredient.Unit "g"}} selected{{end}}>Gram</option>
+                                    <option value="kg"{{if streq $ingredient.Unit "kg"}} selected{{end}}>Kilogram</option>
+                                    <option value="oz"{{if streq $ingredient.Unit "oz"}} selected{{end}}>Ounce</option>
+                                    <option value="lb"{{if streq $ingredient.Unit "lb"}} selected{{end}}>Pound</option>
+                                </optgroup>
+                                <optgroup label="Count">
+                                    <option value="piece"{{if streq $ingredient.Unit "piece"}} selected{{end}}>Piece</option>
+                                    <option value="clove"{{if streq $ingredient.Unit "clove"}} selected{{end}}>Clove</option>
+                                    <option value="slice"{{if streq $ingredient.Unit "slice"}} selected{{end}}>Slice</option>
+                                    <option value="can"{{if streq $ingredient.Unit "can"}} selected{{end}}>Can</option>
+                                </optgroup>
+                                <optgroup label="Other">
+                                    <option value="pinch"{{if streq $ingredient.Unit "pinch"}} selected{{end}}>Pinch</option>
+                                    <option value="dash"{{if streq $ingredient.Unit "dash"}} selected{{end}}>Dash</option>
+                                    <option value="to taste"{{if streq $ingredient.Unit "to taste"}} selected{{end}}>To taste</option>
+                                </optgroup>
+                            </select>
+                            <button type="button" class="btn btn-danger btn-sm remove-ingredient">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    {{end}}
+                {{end}}
+            </div>
+            
+            <button type="button" id="add-ingredient" class="btn btn-secondary">
+                <i class="fas fa-plus"></i> Add Ingredient
+            </button>
+        </div>
+        
+        <div class="form-section">
+            <h3>Instructions</h3>
+            
+            <div class="form-group">
+                <label for="instructions">Cooking Instructions *</label>
+                <textarea id="instructions" name="instructions" class="form-control" rows="8" 
+                          placeholder="Step-by-step cooking instructions" required>{{if .Recipe}}{{.Recipe.Instructions}}{{end}}</textarea>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <a href="{{if .Recipe}}/recipe/{{.Recipe.ID}}{{else}}/recipes{{end}}" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> 
+                {{if .Recipe}}Update Recipe{{else}}Save Recipe{{end}}
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+    let ingredientCounter = {{if .Recipe}}{{len .Recipe.Ingredients}}{{else}}0{{end}};
+    
+    document.getElementById('add-ingredient').addEventListener('click', function() {
+        addIngredientRow();
+    });
+    
+    function addIngredientRow() {
+        const container = document.getElementById('ingredients-container');
+        const row = document.createElement('div');
+        row.className = 'ingredient-row';
+        
+        row.innerHTML = `
+            <select name="ingredient_${ingredientCounter}" class="form-control ingredient-select" required>
+                <option value="">Select ingredient...</option>
+                {{range .Ingredients}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                {{end}}
+            </select>
+            <input type="number" name="quantity_${ingredientCounter}" class="form-control quantity-input" 
+                   placeholder="Quantity" step="0.1" min="0" required>
+            <select name="unit_${ingredientCounter}" class="form-control unit-select" required>
+                <option value="">Unit...</option>
+                <optgroup label="Volume">
+                    <option value="tsp">Teaspoon</option>
+                    <option value="tbsp">Tablespoon</option>
+                    <option value="cup">Cup</option>
+                    <option value="ml">Milliliter</option>
+                    <option value="l">Liter</option>
+                    <option value="fl oz">Fluid Ounce</option>
+                </optgroup>
+                <optgroup label="Weight">
+                    <option value="g">Gram</option>
+                    <option value="kg">Kilogram</option>
+                    <option value="oz">Ounce</option>
+                    <option value="lb">Pound</option>
+                </optgroup>
+                <optgroup label="Count">
+                    <option value="piece">Piece</option>
+                    <option value="clove">Clove</option>
+                    <option value="slice">Slice</option>
+                    <option value="can">Can</option>
+                </optgroup>
+                <optgroup label="Other">
+                    <option value="pinch">Pinch</option>
+                    <option value="dash">Dash</option>
+                    <option value="to taste">To taste</option>
+                </optgroup>
+            </select>
+            <button type="button" class="btn btn-danger btn-sm remove-ingredient">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        
+        container.appendChild(row);
+        ingredientCounter++;
+        
+        // Add event listener to remove button
+        row.querySelector('.remove-ingredient').addEventListener('click', function() {
+            row.remove();
+        });
+    }
+    
+    // Add event listeners to existing remove buttons
+    document.querySelectorAll('.remove-ingredient').forEach(button => {
+        button.addEventListener('click', function() {
+            button.closest('.ingredient-row').remove();
+        });
+    });
+</script>
+{{end}}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Recipe Book</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
+            </div>
+            <div class="nav-links">
+                <a href="/recipes" class="nav-link">
+                    <i class="fas fa-list"></i> Recipes
+                </a>
+                <a href="/ingredients" class="nav-link">
+                    <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                {{if .IsLoggedIn}}
+                    <a href="/recipe/new" class="nav-link">
+                        <i class="fas fa-plus"></i> Add Recipe
+                    </a>
+                    <a href="/ingredients/new" class="nav-link">
+                        <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <div class="user-menu">
+                        <span class="username">
+                            <i class="fas fa-user"></i> {{.User.Username}}
+                        </span>
+                        <form action="/api/logout" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </form>
+                    </div>
+                {{else}}
+                    <div class="auth-buttons">
+                        <a href="/login" class="btn btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="/register" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {{if .Error}}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{.Error}}
+            </div>
+        {{end}}
+        
+        {{if .Message}}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{.Message}}
+            </div>
+        {{end}}
+
+        {{template "recipe-form-content" .}}
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
