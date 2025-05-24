@@ -60,17 +60,19 @@ type Claims struct {
 	Username string `json:"username"`
 }
 
-// Update PageData to include Tags
 type PageData struct {
 	User        *User
 	IsLoggedIn  bool
 	Recipe      *Recipe
 	Recipes     []Recipe
 	Ingredients []Ingredient
-	Tags        []Tag // Add this line
+	Tags        []Tag
 	Title       string
 	Message     string
 	Error       string
+	SearchQuery string
+	ActiveTagID int
+	ActiveTag   *Tag
 }
 
 // Common serving units

@@ -1,6 +1,24 @@
 {{define "recipes-content"}}
 <div class="page-header">
     <h1><i class="fas fa-utensils"></i> Recipes</h1>
+    
+    <!-- Search moved into header -->
+    <div class="header-search">
+        <form action="/recipes" method="GET" class="search-form">
+            <div class="search-container">
+                <input type="text" name="search" class="search-input" placeholder="Search recipes..." 
+                       value="{{.SearchQuery}}">
+                <button type="submit" class="search-btn">
+                    <i class="fas fa-search"></i>
+                </button>
+                <!-- Preserve current tag filter when searching -->
+                {{if .ActiveTagID}}
+                    <input type="hidden" name="tag" value="{{.ActiveTagID}}">
+                {{end}}
+            </div>
+        </form>
+    </div>
+    
     <div class="header-actions">
         <!-- View Toggle -->
         <div class="view-toggle">
@@ -19,31 +37,30 @@
     </div>
 </div>
 
-<div class="search-section">
-    <form action="/recipes" method="GET" class="search-form">
-        <div class="search-container">
-            <input type="text" name="search" class="search-input" placeholder="Search recipes..." 
-                   value="">
-            <button type="submit" class="search-btn">
-                <i class="fas fa-search"></i>
-            </button>
-        </div>
-    </form>
-</div>
+
 
 <!-- Tag Filter Section -->
 {{if .Tags}}
     <div class="filter-section">
         <div class="filter-header">
             <h3><i class="fas fa-filter"></i> Filter by Tags</h3>
-            <a href="/recipes" class="btn btn-secondary btn-sm clear-filters">
-                <i class="fas fa-times"></i> Clear Filters
-            </a>
+            {{if .ActiveTagID}}
+                <a href="/recipes{{if .SearchQuery}}?search={{.SearchQuery}}{{end}}" class="btn btn-secondary btn-sm clear-filters">
+                    <i class="fas fa-times"></i> Clear Tag Filter
+                </a>
+            {{end}}
         </div>
         <div class="tag-filters">
             {{range .Tags}}
-                <a href="/recipes?tag={{.ID}}" class="tag-filter" style="background-color: {{.Color}};">
+                {{$isActive := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
+                <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                   class="tag-filter {{if $isActive}}active{{end}}" 
+                   
+                   title="{{if $isActive}}Currently filtering by {{.Name}} - click to remove filter{{else}}Filter recipes by {{.Name}}{{end}}">
                     {{.Name}}
+                    {{if $isActive}}
+                        <i class="fas fa-check" style="margin-left: 5px;"></i>
+                    {{end}}
                 </a>
             {{end}}
         </div>
@@ -71,8 +88,15 @@
                 {{if .Tags}}
                     <div class="recipe-tags-compact">
                         {{range .Tags}}
-                            <a href="/recipes?tag={{.ID}}" class="recipe-tag" style="background-color: {{.Color}};">
+                            {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
+                            <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                               class="recipe-tag {{if $isActiveTag}}recipe-tag-active{{end}}" 
+                               
+                               title="Filter by {{.Name}}">
                                 {{.Name}}
+                                {{if $isActiveTag}}
+                                    <i class="fas fa-star" style="margin-left: 3px; font-size: 0.7em;"></i>
+                                {{end}}
                             </a>
                         {{end}}
                     </div>
@@ -106,8 +130,15 @@
                     {{if .Tags}}
                         <div class="recipe-tags-compact">
                             {{range .Tags}}
-                                <a href="/recipes?tag={{.ID}}" class="recipe-tag" style="background-color: {{.Color}};">
+                                {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
+                                <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                                   class="recipe-tag {{if $isActiveTag}}recipe-tag-active{{end}}" 
+                                   
+                                   title="Filter by {{.Name}}">
                                     {{.Name}}
+                                    {{if $isActiveTag}}
+                                        <i class="fas fa-star" style="margin-left: 3px; font-size: 0.7em;"></i>
+                                    {{end}}
                                 </a>
                             {{end}}
                         </div>
@@ -133,8 +164,17 @@
     <div class="empty-state">
         <i class="fas fa-utensils"></i>
         <h3>No recipes found</h3>
-        <p>{{if .IsLoggedIn}}Be the first to add a delicious recipe!{{else}}Please log in to add recipes.{{end}}</p>
-        {{if .IsLoggedIn}}
+        <p>
+            {{if or .SearchQuery .ActiveTag}}
+                No recipes match your current filters. 
+                <a href="/recipes">Clear filters</a> to see all recipes.
+            {{else if .IsLoggedIn}}
+                Be the first to add a delicious recipe!
+            {{else}}
+                Please log in to add recipes.
+            {{end}}
+        </p>
+        {{if and .IsLoggedIn (not .SearchQuery) (not .ActiveTag)}}
             <a href="/recipe/new" class="btn btn-primary">
                 <i class="fas fa-plus"></i> Add Your First Recipe
             </a>
@@ -182,6 +222,26 @@ document.addEventListener('DOMContentLoaded', function() {
         compactViewBtn.classList.add('active');
         cardViewBtn.classList.remove('active');
     }
+});
+
+// Enhanced tag filter interactions
+document.addEventListener('DOMContentLoaded', function() {
+    // Add click handlers for tag filters to show loading state
+    const tagFilters = document.querySelectorAll('.tag-filter');
+    tagFilters.forEach(filter => {
+        filter.addEventListener('click', function(e) {
+            if (!this.classList.contains('active')) {
+                // Show loading state for new filter selection
+                const originalContent = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + this.textContent.trim();
+                
+                // Let the navigation happen naturally
+                setTimeout(() => {
+                    this.innerHTML = originalContent;
+                }, 1000);
+            }
+        });
+    });
 });
 </script>
 {{end}}

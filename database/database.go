@@ -650,3 +650,13 @@ func GetRecipeImages(recipeID int) []models.RecipeImage {
 
 	return images
 }
+
+func GetTagByID(id int) (*models.Tag, error) {
+	var tag models.Tag
+	err := DB.QueryRow("SELECT id, name, color FROM tags WHERE id = ?", id).
+		Scan(&tag.ID, &tag.Name, &tag.Color)
+	if err != nil {
+		return nil, err
+	}
+	return &tag, nil
+}

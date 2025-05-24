@@ -1,0 +1,246 @@
+/* tags.css - Tag system and filtering styles */
+
+/* Tags Grid - Monochromatic Management */
+.tags-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.tag-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 15px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tag-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(31, 38, 135, 0.3);
+}
+
+.tag-info {
+    flex-grow: 1;
+}
+
+.tag-preview {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    margin-bottom: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.tag-name {
+    /* No text shadow needed for monochromatic */
+}
+
+.tag-usage {
+    margin-top: 0.5rem;
+}
+
+.view-recipes-link {
+    color: #666;
+    text-decoration: none;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color 0.3s ease;
+}
+
+.view-recipes-link:hover {
+    color: #ff6b6b;
+}
+
+.tag-actions {
+    flex-shrink: 0;
+}
+
+/* Recipe Tags Display - Monochromatic */
+.recipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 1rem 0;
+}
+
+.recipe-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.recipe-tag:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 107, 107, 0.15);
+    border-color: rgba(255, 107, 107, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    color: #ff6b6b;
+    text-decoration: none;
+}
+
+/* Tag Filter Section - Monochromatic */
+.filter-section {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 15px rgba(31, 38, 135, 0.2);
+}
+
+.filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.filter-header h3 {
+    color: #333;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+}
+
+.clear-filters {
+    font-size: 0.85rem;
+    padding: 4px 8px;
+}
+
+.tag-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tag-filter {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.3);
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.tag-filter:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 107, 107, 0.15);
+    border-color: rgba(255, 107, 107, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    color: #ff6b6b;
+    text-decoration: none;
+}
+
+/* Simple active tag highlighting - monochromatic darkened version */
+.tag-filter.active {
+    background: rgba(255, 107, 107, 0.2) !important;
+    border-color: rgba(255, 107, 107, 0.5) !important;
+    color: #d63447 !important;
+    font-weight: 600;
+    filter: brightness(0.9);
+}
+
+.tag-filter.active:hover {
+    background: rgba(255, 107, 107, 0.25) !important;
+    border-color: rgba(255, 107, 107, 0.6) !important;
+    color: #d63447 !important;
+    filter: brightness(0.85);
+}
+
+/* Simple active tag highlighting on recipe cards - monochromatic */
+.recipe-tag-active {
+    background: rgba(255, 107, 107, 0.2) !important;
+    border-color: rgba(255, 107, 107, 0.5) !important;
+    color: #d63447 !important;
+    font-weight: 600;
+    filter: brightness(0.9);
+}
+
+.recipe-tag-active:hover {
+    background: rgba(255, 107, 107, 0.25) !important;
+    border-color: rgba(255, 107, 107, 0.6) !important;
+    color: #d63447 !important;
+    filter: brightness(0.85);
+}
+
+/* Remove any pseudo-elements that might add symbols */
+.tag-filter.active::after,
+.recipe-tag-active::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* Improved tag filter section when active */
+.filter-section:has(.tag-filter.active) {
+    border: 2px solid rgba(255, 107, 107, 0.4);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.15);
+    background: rgba(255, 107, 107, 0.02);
+}
+
+/* Make clear filters button more prominent when there are active filters */
+.clear-filters {
+    background: #ff6b6b !important;
+    color: white !important;
+    border: 2px solid #ff6b6b !important;
+}
+
+.clear-filters:hover {
+    background: #ff5252 !important;
+    border-color: #ff5252 !important;
+}
+
+/* Compact tags display for recipe cards - monochromatic */
+.recipe-tags-compact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 0.5rem;
+}
+
+.recipe-tags-compact .recipe-tag {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    border-radius: 10px;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    border: 1px solid rgba(255, 107, 107, 0.2);
+}
+
+/* Tag count badges - monochromatic */
+.tag-count {
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 5px;
+    font-weight: 500;
+}

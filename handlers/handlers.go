@@ -45,6 +45,8 @@ func RegisterPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// Updated RecipesPageHandler function in handlers/handlers.go
+// Updated RecipesPageHandler function in handlers/handlers.go
 func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.GetUserFromToken(r)
 
@@ -52,12 +54,28 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 	tagFilter := r.URL.Query().Get("tag")
 	var recipes []models.Recipe
 	var err error
+	var activeTagID int
+	var activeTag *models.Tag
 
+	// Parse tag filter
 	if tagFilter != "" {
+		activeTagID, err = strconv.Atoi(tagFilter)
+		if err != nil {
+			activeTagID = 0
+		}
+	}
+
+	// Get recipes based on filters
+	if activeTagID > 0 {
 		// Filter by tag
-		tagID, err := strconv.Atoi(tagFilter)
-		if err == nil {
-			recipes, err = database.GetRecipesByTag(tagID)
+		recipes, err = database.GetRecipesByTag(activeTagID)
+
+		// Get the active tag details
+		activeTag, err = database.GetTagByID(activeTagID)
+		if err != nil {
+			log.Printf("Error loading active tag: %v", err)
+			activeTag = nil
+			activeTagID = 0
 		}
 	} else if query != "" {
 		// Search recipes
@@ -80,11 +98,14 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := models.PageData{
-		Title:      "Recipes",
-		User:       user,
-		IsLoggedIn: user != nil,
-		Recipes:    recipes,
-		Tags:       tags,
+		Title:       "Recipes",
+		User:        user,
+		IsLoggedIn:  user != nil,
+		Recipes:     recipes,
+		Tags:        tags,
+		SearchQuery: query,
+		ActiveTagID: activeTagID,
+		ActiveTag:   activeTag,
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "recipes.html", data); err != nil {
