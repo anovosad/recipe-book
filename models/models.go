@@ -1,4 +1,4 @@
-// File: models/models.go
+// File: models/models.go - Add the Tag struct and update Recipe struct
 package models
 
 import "time"
@@ -13,6 +13,13 @@ type User struct {
 type Ingredient struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
+}
+
+// Add this new Tag struct
+type Tag struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Color string `json:"color"`
 }
 
 type RecipeIngredient struct {
@@ -30,6 +37,7 @@ type RecipeImage struct {
 	Order    int    `json:"order"`
 }
 
+// Update Recipe struct to include Tags
 type Recipe struct {
 	ID           int                `json:"id"`
 	Title        string             `json:"title"`
@@ -38,11 +46,12 @@ type Recipe struct {
 	PrepTime     int                `json:"prep_time"`
 	CookTime     int                `json:"cook_time"`
 	Servings     int                `json:"servings"`
-	ServingUnit  string             `json:"serving_unit"` // NEW: Unit for servings
+	ServingUnit  string             `json:"serving_unit"`
 	CreatedBy    int                `json:"created_by"`
 	CreatedAt    time.Time          `json:"created_at"`
 	Ingredients  []RecipeIngredient `json:"ingredients"`
 	Images       []RecipeImage      `json:"images"`
+	Tags         []Tag              `json:"tags"` // Add this line
 	AuthorName   string             `json:"author_name"`
 }
 
@@ -51,12 +60,14 @@ type Claims struct {
 	Username string `json:"username"`
 }
 
+// Update PageData to include Tags
 type PageData struct {
 	User        *User
 	IsLoggedIn  bool
 	Recipe      *Recipe
 	Recipes     []Recipe
 	Ingredients []Ingredient
+	Tags        []Tag // Add this line
 	Title       string
 	Message     string
 	Error       string

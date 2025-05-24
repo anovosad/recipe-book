@@ -1,11 +1,22 @@
 {{define "recipes-content"}}
 <div class="page-header">
     <h1><i class="fas fa-utensils"></i> Recipes</h1>
-    {{if .IsLoggedIn}}
-        <a href="/recipe/new" class="btn btn-primary">
-            <i class="fas fa-plus"></i> Add New Recipe
-        </a>
-    {{end}}
+    <div class="header-actions">
+        <!-- View Toggle -->
+        <div class="view-toggle">
+            <button id="card-view-btn" class="btn btn-secondary btn-sm view-btn active" title="Card View">
+                <i class="fas fa-th"></i>
+            </button>
+            <button id="compact-view-btn" class="btn btn-secondary btn-sm view-btn" title="Compact View">
+                <i class="fas fa-list"></i>
+            </button>
+        </div>
+        {{if .IsLoggedIn}}
+            <a href="/recipe/new" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add New Recipe
+            </a>
+        {{end}}
+    </div>
 </div>
 
 <div class="search-section">
@@ -20,8 +31,28 @@
     </form>
 </div>
 
+<!-- Tag Filter Section -->
+{{if .Tags}}
+    <div class="filter-section">
+        <div class="filter-header">
+            <h3><i class="fas fa-filter"></i> Filter by Tags</h3>
+            <a href="/recipes" class="btn btn-secondary btn-sm clear-filters">
+                <i class="fas fa-times"></i> Clear Filters
+            </a>
+        </div>
+        <div class="tag-filters">
+            {{range .Tags}}
+                <a href="/recipes?tag={{.ID}}" class="tag-filter" style="background-color: {{.Color}};">
+                    {{.Name}}
+                </a>
+            {{end}}
+        </div>
+    </div>
+{{end}}
+
 {{if .Recipes}}
-    <div class="recipe-grid">
+    <!-- Card View -->
+    <div id="card-view" class="recipe-grid">
         {{range .Recipes}}
             <div class="recipe-card">
                 <div class="recipe-header">
@@ -37,31 +68,12 @@
                     <p class="recipe-description">{{.Description}}</p>
                 {{end}}
                 
-                <div class="recipe-meta">
-                    <span class="meta-item">
-                        <i class="fas fa-clock"></i> 
-                        {{if .PrepTime}}{{.PrepTime}}min prep{{else}}No prep time{{end}}
-                    </span>
-                    <span class="meta-item">
-                        <i class="fas fa-fire"></i> 
-                        {{if .CookTime}}{{.CookTime}}min cook{{else}}No cook time{{end}}
-                    </span>
-                    <span class="meta-item">
-                        <i class="fas fa-users"></i> 
-                        {{if .Servings}}{{.Servings}} {{.ServingUnit}}{{else}}No serving info{{end}}
-                    </span>
-                </div>
-                
-                {{if .Ingredients}}
-                    <div class="recipe-ingredients-preview">
-                        <strong>Ingredients:</strong>
-                        {{range $index, $ingredient := .Ingredients}}
-                            {{if lt $index 3}}
-                                {{$ingredient.Name}}{{if lt (add $index 1) (len $.Ingredients)}}, {{end}}
-                            {{end}}
-                        {{end}}
-                        {{if gt (len .Ingredients) 3}}
-                            <span class="more-ingredients">and {{sub (len .Ingredients) 3}} more...</span>
+                {{if .Tags}}
+                    <div class="recipe-tags-compact">
+                        {{range .Tags}}
+                            <a href="/recipes?tag={{.ID}}" class="recipe-tag" style="background-color: {{.Color}};">
+                                {{.Name}}
+                            </a>
                         {{end}}
                     </div>
                 {{end}}
@@ -82,6 +94,41 @@
             </div>
         {{end}}
     </div>
+
+    <!-- Compact View -->
+    <div id="compact-view" class="recipe-list-compact" style="display: none;">
+        {{range .Recipes}}
+            <div class="recipe-item-compact">
+                <div class="recipe-info">
+                    <h4 class="recipe-title-compact">
+                        <a href="/recipe/{{.ID}}">{{.Title}}</a>
+                    </h4>
+                    {{if .Tags}}
+                        <div class="recipe-tags-compact">
+                            {{range .Tags}}
+                                <a href="/recipes?tag={{.ID}}" class="recipe-tag" style="background-color: {{.Color}};">
+                                    {{.Name}}
+                                </a>
+                            {{end}}
+                        </div>
+                    {{end}}
+                </div>
+                <div class="recipe-actions-compact">
+                    <a href="/recipe/{{.ID}}" class="btn btn-secondary btn-sm" title="View Recipe">
+                        <i class="fas fa-eye"></i>
+                    </a>
+                    {{if and $.IsLoggedIn (eq .CreatedBy $.User.ID)}}
+                        <a href="/recipe/{{.ID}}/edit" class="btn btn-primary btn-sm" title="Edit Recipe">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button onclick="deleteRecipe({{.ID}})" class="btn btn-danger btn-sm" title="Delete Recipe">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    {{end}}
+                </div>
+            </div>
+        {{end}}
+    </div>
 {{else}}
     <div class="empty-state">
         <i class="fas fa-utensils"></i>
@@ -94,6 +141,49 @@
         {{end}}
     </div>
 {{end}}
+
+<script>
+// View toggle functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const cardViewBtn = document.getElementById('card-view-btn');
+    const compactViewBtn = document.getElementById('compact-view-btn');
+    const cardView = document.getElementById('card-view');
+    const compactView = document.getElementById('compact-view');
+    
+    // Load saved preference or default to card view
+    const savedView = localStorage.getItem('recipes-view') || 'card';
+    
+    if (savedView === 'compact') {
+        showCompactView();
+    } else {
+        showCardView();
+    }
+    
+    cardViewBtn.addEventListener('click', function() {
+        showCardView();
+        localStorage.setItem('recipes-view', 'card');
+    });
+    
+    compactViewBtn.addEventListener('click', function() {
+        showCompactView();
+        localStorage.setItem('recipes-view', 'compact');
+    });
+    
+    function showCardView() {
+        cardView.style.display = 'grid';
+        compactView.style.display = 'none';
+        cardViewBtn.classList.add('active');
+        compactViewBtn.classList.remove('active');
+    }
+    
+    function showCompactView() {
+        cardView.style.display = 'none';
+        compactView.style.display = 'block';
+        compactViewBtn.classList.add('active');
+        cardViewBtn.classList.remove('active');
+    }
+});
+</script>
 {{end}}
 
 <!DOCTYPE html>
@@ -117,6 +207,9 @@
                 </a>
                 <a href="/ingredients" class="nav-link">
                     <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                <a href="/tags" class="nav-link">
+                    <i class="fas fa-tags"></i> Tags
                 </a>
                 {{if .IsLoggedIn}}
                     <a href="/recipe/new" class="nav-link">

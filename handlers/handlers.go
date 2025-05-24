@@ -49,12 +49,21 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.GetUserFromToken(r)
 
 	query := r.URL.Query().Get("search")
+	tagFilter := r.URL.Query().Get("tag")
 	var recipes []models.Recipe
 	var err error
 
-	if query != "" {
+	if tagFilter != "" {
+		// Filter by tag
+		tagID, err := strconv.Atoi(tagFilter)
+		if err == nil {
+			recipes, err = database.GetRecipesByTag(tagID)
+		}
+	} else if query != "" {
+		// Search recipes
 		recipes, err = database.SearchRecipes(query)
 	} else {
+		// Get all recipes
 		recipes, err = database.GetAllRecipes()
 	}
 
@@ -63,11 +72,19 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 		recipes = []models.Recipe{}
 	}
 
+	// Get all tags for the filter dropdown
+	tags, err := database.GetAllTags()
+	if err != nil {
+		log.Printf("Error loading tags: %v", err)
+		tags = []models.Tag{}
+	}
+
 	data := models.PageData{
 		Title:      "Recipes",
 		User:       user,
 		IsLoggedIn: user != nil,
 		Recipes:    recipes,
+		Tags:       tags,
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "recipes.html", data); err != nil {
@@ -116,11 +133,18 @@ func NewRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 		ingredients = []models.Ingredient{}
 	}
 
+	tags, err := database.GetAllTags()
+	if err != nil {
+		log.Printf("Error loading tags: %v", err)
+		tags = []models.Tag{}
+	}
+
 	data := models.PageData{
 		Title:       "New Recipe",
 		User:        user,
 		IsLoggedIn:  true,
 		Ingredients: ingredients,
+		Tags:        tags,
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "recipe-form.html", data); err != nil {
@@ -167,12 +191,19 @@ func EditRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 		ingredients = []models.Ingredient{}
 	}
 
+	tags, err := database.GetAllTags()
+	if err != nil {
+		log.Printf("Error loading tags: %v", err)
+		tags = []models.Tag{}
+	}
+
 	data := models.PageData{
 		Title:       "Edit Recipe",
 		User:        user,
 		IsLoggedIn:  true,
 		Recipe:      recipe,
 		Ingredients: ingredients,
+		Tags:        tags,
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "recipe-form.html", data); err != nil {
@@ -216,6 +247,46 @@ func NewIngredientPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "ingredient-form.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// Tag Page Handlers
+func TagsPageHandler(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.GetUserFromToken(r)
+
+	tags, err := database.GetAllTags()
+	if err != nil {
+		log.Printf("Error loading tags: %v", err)
+		tags = []models.Tag{}
+	}
+
+	data := models.PageData{
+		Title:      "Tags",
+		User:       user,
+		IsLoggedIn: user != nil,
+		Tags:       tags,
+	}
+
+	if err := utils.Templates.ExecuteTemplate(w, "tags.html", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func NewTagPageHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	data := models.PageData{
+		Title:      "New Tag",
+		User:       user,
+		IsLoggedIn: true,
+	}
+
+	if err := utils.Templates.ExecuteTemplate(w, "tag-form.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -318,11 +389,13 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if title == "" || instructions == "" {
 		ingredients, _ := database.GetAllIngredients()
+		tags, _ := database.GetAllTags()
 		data := models.PageData{
 			Title:       "New Recipe",
 			User:        user,
 			IsLoggedIn:  true,
 			Ingredients: ingredients,
+			Tags:        tags,
 			Error:       "Title and instructions are required",
 		}
 		utils.Templates.ExecuteTemplate(w, "recipe-form.html", data)
@@ -336,11 +409,13 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		ingredients, _ := database.GetAllIngredients()
+		tags, _ := database.GetAllTags()
 		data := models.PageData{
 			Title:       "New Recipe",
 			User:        user,
 			IsLoggedIn:  true,
 			Ingredients: ingredients,
+			Tags:        tags,
 			Error:       "Error creating recipe",
 		}
 		utils.Templates.ExecuteTemplate(w, "recipe-form.html", data)
@@ -348,6 +423,14 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recipeID, _ := result.LastInsertId()
+
+	// Handle tags
+	selectedTags := r.Form["tags"] // Get selected tag IDs
+	for _, tagIDStr := range selectedTags {
+		if tagID, err := strconv.Atoi(tagIDStr); err == nil {
+			database.DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID)
+		}
+	}
 
 	// Handle file uploads
 	if r.MultipartForm != nil && r.MultipartForm.File != nil {
@@ -431,12 +514,14 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	if title == "" || instructions == "" {
 		recipe, _ := database.GetRecipeByID(recipeID)
 		ingredients, _ := database.GetAllIngredients()
+		tags, _ := database.GetAllTags()
 		data := models.PageData{
 			Title:       "Edit Recipe",
 			User:        user,
 			IsLoggedIn:  true,
 			Recipe:      recipe,
 			Ingredients: ingredients,
+			Tags:        tags,
 			Error:       "Title and instructions are required",
 		}
 		utils.Templates.ExecuteTemplate(w, "recipe-form.html", data)
@@ -451,16 +536,27 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	if err != nil {
 		recipe, _ := database.GetRecipeByID(recipeID)
 		ingredients, _ := database.GetAllIngredients()
+		tags, _ := database.GetAllTags()
 		data := models.PageData{
 			Title:       "Edit Recipe",
 			User:        user,
 			IsLoggedIn:  true,
 			Recipe:      recipe,
 			Ingredients: ingredients,
+			Tags:        tags,
 			Error:       "Error updating recipe",
 		}
 		utils.Templates.ExecuteTemplate(w, "recipe-form.html", data)
 		return
+	}
+
+	// Update tags
+	database.DB.Exec("DELETE FROM recipe_tags WHERE recipe_id = ?", recipeID)
+	selectedTags := r.Form["tags"] // Get selected tag IDs
+	for _, tagIDStr := range selectedTags {
+		if tagID, err := strconv.Atoi(tagIDStr); err == nil {
+			database.DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID)
+		}
 	}
 
 	// Handle new image uploads
@@ -657,6 +753,70 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.DB.Exec("DELETE FROM ingredients WHERE id = ?", id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// Tag API Handlers
+func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	name := r.FormValue("name")
+	color := r.FormValue("color")
+	if color == "" {
+		color = "#ff6b6b" // default color
+	}
+
+	if name == "" {
+		data := models.PageData{
+			Title:      "New Tag",
+			User:       user,
+			IsLoggedIn: true,
+			Error:      "Tag name is required",
+		}
+		utils.Templates.ExecuteTemplate(w, "tag-form.html", data)
+		return
+	}
+
+	_, err = database.DB.Exec("INSERT INTO tags (name, color) VALUES (?, ?)", name, color)
+	if err != nil {
+		data := models.PageData{
+			Title:      "New Tag",
+			User:       user,
+			IsLoggedIn: true,
+			Error:      "Tag already exists or database error",
+		}
+		utils.Templates.ExecuteTemplate(w, "tag-form.html", data)
+		return
+	}
+
+	http.Redirect(w, r, "/tags", http.StatusSeeOther)
+}
+
+func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
+	_, err := auth.GetUserFromToken(r)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Extract ID from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/tags/")
+	id, err := strconv.Atoi(path)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	_, err = database.DB.Exec("DELETE FROM tags WHERE id = ?", id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

@@ -107,16 +107,6 @@
                         <option value="pancakes" {{if and .Recipe (streq .Recipe.ServingUnit "pancakes")}}selected{{end}}>Pancakes</option>
                     </select>
                 </div>
-            </div><label for="cook_time">Cook Time (minutes)</label>
-                    <input type="number" id="cook_time" name="cook_time" class="form-control" 
-                           value="{{if .Recipe}}{{.Recipe.CookTime}}{{end}}" min="0">
-                </div>
-                
-                <div class="form-group">
-                    <label for="servings">Servings</label>
-                    <input type="number" id="servings" name="servings" class="form-control" 
-                           value="{{if .Recipe}}{{.Recipe.Servings}}{{end}}" min="1">
-                </div>
             </div>
         </div>
         
@@ -131,7 +121,6 @@
                 {{if .Recipe}}
                     {{range $index, $ingredient := .Recipe.Ingredients}}
                         <div class="ingredient-row">
-                            <!-- Debug: Ingredient Unit = {{$ingredient.Unit}} -->
                             <select name="ingredient_{{$index}}" class="form-control ingredient-select" required>
                                 <option value="">Select ingredient...</option>
                                 {{range $.Ingredients}}
@@ -181,6 +170,34 @@
             <button type="button" id="add-ingredient" class="btn btn-secondary">
                 <i class="fas fa-plus"></i> Add Ingredient
             </button>
+        </div>
+        
+        <div class="form-section">
+            <h3>Tags</h3>
+            
+            <div class="tags-selection">
+                <label>Select Categories/Tags</label>
+                <div class="tags-checkboxes">
+                    {{range .Tags}}
+                        <div class="tag-checkbox">
+                            <input type="checkbox" id="tag_{{.ID}}" name="tags" value="{{.ID}}"
+                                   {{if $.Recipe}}
+                                       {{range $.Recipe.Tags}}
+                                           {{if eq .ID $.ID}}checked{{end}}
+                                       {{end}}
+                                   {{end}}>
+                            <label for="tag_{{.ID}}" class="tag-checkbox-label">
+                                <span class="tag-checkbox-preview" style="background-color: {{.Color}};">{{.Name}}</span>
+                                <span class="tag-checkbox-name">{{.Name}}</span>
+                            </label>
+                        </div>
+                    {{end}}
+                </div>
+                <div class="help-text">
+                    <i class="fas fa-info-circle"></i> 
+                    Select tags to help categorize and organize your recipe.
+                </div>
+            </div>
         </div>
         
         <div class="form-section">
@@ -241,6 +258,15 @@
             {id: {{.ID}}, name: "{{.Name}}"},
         {{end}}
     ];
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize remove buttons for existing ingredient rows
+        document.querySelectorAll('.remove-ingredient').forEach(button => {
+            button.addEventListener('click', function() {
+                this.closest('.ingredient-row').remove();
+            });
+        });
+    });
     
     document.getElementById('add-ingredient').addEventListener('click', function() {
         addIngredientRow();

@@ -1,0 +1,164 @@
+{{define "tag-form-content"}}
+<div class="form-container">
+    <div class="form-header">
+        <h1><i class="fas fa-tag"></i> New Tag</h1>
+    </div>
+    
+    <form action="/api/tags" method="POST" class="tag-form">
+        <div class="form-section">
+            <div class="form-group">
+                <label for="name">Tag Name *</label>
+                <input type="text" id="name" name="name" class="form-control" 
+                       placeholder="e.g., Dessert, Vegetarian, Quick & Easy" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="color">Tag Color</label>
+                <div class="color-input-container">
+                    <input type="color" id="color" name="color" class="color-input" value="#ff6b6b">
+                    <input type="text" id="color-text" class="form-control color-text-input" value="#ff6b6b" placeholder="#ff6b6b">
+                </div>
+                <div class="color-preview">
+                    <span class="tag-preview-sample" id="tag-preview">Sample Tag</span>
+                </div>
+            </div>
+            
+            <p class="help-text">
+                <i class="fas fa-info-circle"></i> 
+                Tags help organize and categorize your recipes. Choose a color that represents the category.
+            </p>
+        </div>
+        
+        <div class="form-actions">
+            <a href="/tags" class="btn btn-secondary">
+                <i class="fas fa-times"></i> Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Tag
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const colorInput = document.getElementById('color');
+    const colorTextInput = document.getElementById('color-text');
+    const tagPreview = document.getElementById('tag-preview');
+    const nameInput = document.getElementById('name');
+    
+    function updatePreview() {
+        const color = colorInput.value;
+        const name = nameInput.value || 'Sample Tag';
+        
+        tagPreview.style.backgroundColor = color;
+        tagPreview.textContent = name;
+        colorTextInput.value = color;
+        
+        // Calculate if we need light or dark text
+        const hex = color.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        
+        tagPreview.style.color = brightness > 155 ? '#333' : '#fff';
+    }
+    
+    colorInput.addEventListener('input', updatePreview);
+    nameInput.addEventListener('input', updatePreview);
+    
+    colorTextInput.addEventListener('input', function() {
+        const value = this.value;
+        if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+            colorInput.value = value;
+            updatePreview();
+        }
+    });
+    
+    // Initial preview update
+    updatePreview();
+});
+</script>
+{{end}}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Recipe Book</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/style.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="logo">
+                <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
+            </div>
+            <div class="nav-links">
+                <a href="/recipes" class="nav-link">
+                    <i class="fas fa-list"></i> Recipes
+                </a>
+                <a href="/ingredients" class="nav-link">
+                    <i class="fas fa-leaf"></i> Ingredients
+                </a>
+                <a href="/tags" class="nav-link">
+                    <i class="fas fa-tags"></i> Tags
+                </a>
+                {{if .IsLoggedIn}}
+                    <a href="/recipe/new" class="nav-link">
+                        <i class="fas fa-plus"></i> Add Recipe
+                    </a>
+                    <a href="/ingredients/new" class="nav-link">
+                        <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <a href="/tags/new" class="nav-link">
+                        <i class="fas fa-tag"></i> Add Tag
+                    </a>
+                    <div class="user-menu">
+                        <span class="username">
+                            <i class="fas fa-user"></i> {{.User.Username}}
+                        </span>
+                        <form action="/api/logout" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-secondary">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </button>
+                        </form>
+                    </div>
+                {{else}}
+                    <div class="auth-buttons">
+                        <a href="/login" class="btn btn-secondary">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                        <a href="/register" class="btn btn-primary">
+                            <i class="fas fa-user-plus"></i> Register
+                        </a>
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {{if .Error}}
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                {{.Error}}
+            </div>
+        {{end}}
+        
+        {{if .Message}}
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                {{.Message}}
+            </div>
+        {{end}}
+
+        {{template "tag-form-content" .}}
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

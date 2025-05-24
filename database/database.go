@@ -24,6 +24,7 @@ func InitDB() {
 	migrateDatabase()
 	createTables()
 	insertDefaultIngredients()
+	insertDefaultTags()
 	os.MkdirAll("./uploads", 0755)
 	insertDefaultRecipes()
 
@@ -55,6 +56,13 @@ func createTables() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT UNIQUE NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS tags (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		color TEXT DEFAULT '#ff6b6b',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	
 	CREATE TABLE IF NOT EXISTS recipes (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +86,14 @@ func createTables() {
 		PRIMARY KEY (recipe_id, ingredient_id),
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
 		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id)
+	);
+
+	CREATE TABLE IF NOT EXISTS recipe_tags (
+		recipe_id INTEGER,
+		tag_id INTEGER,
+		PRIMARY KEY (recipe_id, tag_id),
+		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
+		FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
 	);
 
 	CREATE TABLE IF NOT EXISTS recipe_images (
@@ -127,6 +143,33 @@ func insertDefaultIngredients() {
 	}
 }
 
+func insertDefaultTags() {
+	defaultTags := []struct {
+		Name  string
+		Color string
+	}{
+		{"Main Dish", "#ff6b6b"},
+		{"Soup", "#4ecdc4"},
+		{"Dessert", "#ff8e53"},
+		{"Appetizer", "#a8e6cf"},
+		{"Breakfast", "#ffd93d"},
+		{"Lunch", "#74c0fc"},
+		{"Dinner", "#ff8787"},
+		{"Vegetarian", "#51cf66"},
+		{"Vegan", "#40c057"},
+		{"Gluten-Free", "#fab005"},
+		{"Dairy-Free", "#fd7e14"},
+		{"Quick & Easy", "#9775fa"},
+		{"Comfort Food", "#f06292"},
+		{"Healthy", "#69db7c"},
+		{"Spicy", "#ff5722"},
+	}
+
+	for _, tag := range defaultTags {
+		DB.Exec("INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)", tag.Name, tag.Color)
+	}
+}
+
 func insertDefaultRecipes() {
 	var userID int
 	err := DB.QueryRow("SELECT id FROM users WHERE username = 'admin'").Scan(&userID)
@@ -156,6 +199,7 @@ func insertDefaultRecipes() {
 		CookTime     int
 		Servings     int
 		ServingUnit  string
+		Tags         []string // Tag names to assign
 		Ingredients  []struct {
 			Name     string
 			Quantity float64
@@ -188,6 +232,7 @@ func insertDefaultRecipes() {
 			CookTime:    15,
 			Servings:    4,
 			ServingUnit: "people",
+			Tags:        []string{"Main Dish", "Vegetarian", "Dinner"},
 			Ingredients: []struct {
 				Name     string
 				Quantity float64
@@ -234,6 +279,7 @@ func insertDefaultRecipes() {
 			CookTime:    20,
 			Servings:    4,
 			ServingUnit: "servings",
+			Tags:        []string{"Main Dish", "Comfort Food", "Dinner"},
 			Ingredients: []struct {
 				Name     string
 				Quantity float64
@@ -277,6 +323,7 @@ func insertDefaultRecipes() {
 			CookTime:    15,
 			Servings:    8,
 			ServingUnit: "pancakes",
+			Tags:        []string{"Breakfast", "Quick & Easy", "Vegetarian"},
 			Ingredients: []struct {
 				Name     string
 				Quantity float64
@@ -307,6 +354,7 @@ func insertDefaultRecipes() {
 
 		recipeID, _ := result.LastInsertId()
 
+		// Add ingredients
 		for _, ingredient := range recipe.Ingredients {
 			var ingredientID int
 			err := DB.QueryRow("SELECT id FROM ingredients WHERE name = ?", ingredient.Name).Scan(&ingredientID)
@@ -319,6 +367,21 @@ func insertDefaultRecipes() {
 				recipeID, ingredientID, ingredient.Quantity, ingredient.Unit)
 			if err != nil {
 				log.Printf("Error inserting ingredient %s for recipe %s: %v", ingredient.Name, recipe.Title, err)
+			}
+		}
+
+		// Add tags
+		for _, tagName := range recipe.Tags {
+			var tagID int
+			err := DB.QueryRow("SELECT id FROM tags WHERE name = ?", tagName).Scan(&tagID)
+			if err != nil {
+				log.Printf("Tag %s not found for recipe %s", tagName, recipe.Title)
+				continue
+			}
+
+			_, err = DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID)
+			if err != nil {
+				log.Printf("Error inserting tag %s for recipe %s: %v", tagName, recipe.Title, err)
 			}
 		}
 
@@ -354,6 +417,7 @@ func GetAllRecipes() ([]models.Recipe, error) {
 
 		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
 		recipe.Images = GetRecipeImages(recipe.ID)
+		recipe.Tags = GetRecipeTags(recipe.ID)
 		recipes = append(recipes, recipe)
 	}
 
@@ -378,6 +442,7 @@ func GetRecipeByID(id int) (*models.Recipe, error) {
 
 	recipe.Ingredients = GetRecipeIngredients(recipe.ID)
 	recipe.Images = GetRecipeImages(recipe.ID)
+	recipe.Tags = GetRecipeTags(recipe.ID)
 	return &recipe, nil
 }
 
@@ -389,14 +454,17 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 		JOIN users u ON r.created_by = u.id
 		LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
 		LEFT JOIN ingredients i ON ri.ingredient_id = i.id
+		LEFT JOIN recipe_tags rt ON r.id = rt.recipe_id
+		LEFT JOIN tags t ON rt.tag_id = t.id
 		WHERE r.title LIKE ? 
 		   OR r.description LIKE ? 
 		   OR r.instructions LIKE ?
 		   OR i.name LIKE ?
+		   OR t.name LIKE ?
 		ORDER BY 
 		   CASE WHEN r.title LIKE ? THEN 0 ELSE 1 END,
 		   r.created_at DESC
-	`, "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%")
+	`, "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%")
 
 	if err != nil {
 		return nil, err
@@ -421,8 +489,43 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 
 		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
 		recipe.Images = GetRecipeImages(recipe.ID)
+		recipe.Tags = GetRecipeTags(recipe.ID)
 		recipes = append(recipes, recipe)
 		seenRecipes[recipe.ID] = true
+	}
+
+	return recipes, nil
+}
+
+func GetRecipesByTag(tagID int) ([]models.Recipe, error) {
+	rows, err := DB.Query(`
+		SELECT DISTINCT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
+		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		FROM recipes r
+		JOIN users u ON r.created_by = u.id
+		JOIN recipe_tags rt ON r.id = rt.recipe_id
+		WHERE rt.tag_id = ?
+		ORDER BY r.created_at DESC
+	`, tagID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var recipes []models.Recipe
+	for rows.Next() {
+		var recipe models.Recipe
+		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
+			&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.CreatedBy,
+			&recipe.CreatedAt, &recipe.AuthorName)
+		if err != nil {
+			continue
+		}
+
+		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
+		recipe.Images = GetRecipeImages(recipe.ID)
+		recipe.Tags = GetRecipeTags(recipe.ID)
+		recipes = append(recipes, recipe)
 	}
 
 	return recipes, nil
@@ -446,6 +549,26 @@ func GetAllIngredients() ([]models.Ingredient, error) {
 	}
 
 	return ingredients, nil
+}
+
+func GetAllTags() ([]models.Tag, error) {
+	rows, err := DB.Query("SELECT id, name, color FROM tags ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []models.Tag
+	for rows.Next() {
+		var tag models.Tag
+		err := rows.Scan(&tag.ID, &tag.Name, &tag.Color)
+		if err != nil {
+			continue
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags, nil
 }
 
 func GetRecipeIngredients(recipeID int) []models.RecipeIngredient {
@@ -473,6 +596,33 @@ func GetRecipeIngredients(recipeID int) []models.RecipeIngredient {
 	}
 
 	return ingredients
+}
+
+func GetRecipeTags(recipeID int) []models.Tag {
+	rows, err := DB.Query(`
+		SELECT t.id, t.name, t.color
+		FROM recipe_tags rt
+		JOIN tags t ON rt.tag_id = t.id
+		WHERE rt.recipe_id = ?
+		ORDER BY t.name
+	`, recipeID)
+
+	if err != nil {
+		return []models.Tag{}
+	}
+	defer rows.Close()
+
+	var tags []models.Tag
+	for rows.Next() {
+		var tag models.Tag
+		err := rows.Scan(&tag.ID, &tag.Name, &tag.Color)
+		if err != nil {
+			continue
+		}
+		tags = append(tags, tag)
+	}
+
+	return tags
 }
 
 func GetRecipeImages(recipeID int) []models.RecipeImage {

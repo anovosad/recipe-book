@@ -31,6 +31,10 @@ func main() {
 	r.HandleFunc("/ingredients", handlers.IngredientsPageHandler).Methods("GET")
 	r.HandleFunc("/ingredients/new", handlers.NewIngredientPageHandler).Methods("GET")
 
+	// Tag routes
+	r.HandleFunc("/tags", handlers.TagsPageHandler).Methods("GET")
+	r.HandleFunc("/tags/new", handlers.NewTagPageHandler).Methods("GET")
+
 	// API routes
 	r.HandleFunc("/api/register", handlers.RegisterHandler).Methods("POST")
 	r.HandleFunc("/api/login", handlers.LoginHandler).Methods("POST")
@@ -41,6 +45,10 @@ func main() {
 	r.HandleFunc("/api/ingredients", handlers.CreateIngredientHandler).Methods("POST")
 	r.HandleFunc("/api/ingredients/{id}", handlers.DeleteIngredientHandler).Methods("DELETE")
 	r.HandleFunc("/api/search", handlers.SearchHandler).Methods("GET")
+
+	// Tag API routes
+	r.HandleFunc("/api/tags", handlers.CreateTagHandler).Methods("POST")
+	r.HandleFunc("/api/tags/{id}", handlers.DeleteTagHandler).Methods("DELETE")
 
 	// Image routes
 	r.HandleFunc("/api/images/{id}", handlers.DeleteImageHandler).Methods("DELETE")
