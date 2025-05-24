@@ -20,6 +20,22 @@
         {{end}}
     </div>
     
+    {{if .Recipe.Images}}
+        <div class="recipe-images">
+            <h3><i class="fas fa-images"></i> Photos</h3>
+            <div class="recipe-image-gallery">
+                {{range .Recipe.Images}}
+                    <div class="recipe-image-card">
+                        <img src="/uploads/{{.Filename}}" alt="{{.Caption}}" class="recipe-image-main" onclick="openImageModal(this)">
+                        {{if .Caption}}
+                            <div class="recipe-image-caption">{{.Caption}}</div>
+                        {{end}}
+                    </div>
+                {{end}}
+            </div>
+        </div>
+    {{end}}
+    
     {{if .Recipe.Description}}
         <div class="recipe-description">
             <p>{{.Recipe.Description}}</p>
@@ -46,7 +62,7 @@
                 <i class="fas fa-users"></i>
                 <div>
                     <strong>Servings</strong>
-                    <span>{{if .Recipe.Servings}}{{.Recipe.Servings}} people{{else}}Not specified{{end}}</span>
+                    <span>{{if .Recipe.Servings}}{{.Recipe.Servings}} {{.Recipe.ServingUnit}}{{else}}Not specified{{end}}</span>
                 </div>
             </div>
             <div class="meta-item">
@@ -67,7 +83,7 @@
                     <div class="serving-calculator">
                         <label for="servingSize">Adjust for:</label>
                         <input type="number" id="servingSize" min="1" max="50" value="{{.Recipe.Servings}}" class="serving-input">
-                        <span class="serving-label">servings</span>
+                        <span class="serving-label">{{.Recipe.ServingUnit}}</span>
                         <button type="button" id="resetServings" class="btn btn-secondary btn-sm">
                             <i class="fas fa-undo"></i> Reset
                         </button>
@@ -103,6 +119,14 @@
             <i class="fas fa-arrow-left"></i> Back to Recipes
         </a>
     </div>
+</div>
+
+<!-- Image Modal for full-size viewing -->
+<div id="image-modal" class="image-modal" style="display: none;" onclick="closeImageModal()">
+    <div class="image-modal-close" onclick="closeImageModal()">
+        <i class="fas fa-times"></i>
+    </div>
+    <img id="modal-image" src="" alt="">
 </div>
 {{end}}
 
@@ -180,6 +204,29 @@
     <script src="/static/app.js"></script>
     
     <script>
+        // Image modal functionality
+        function openImageModal(img) {
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-image');
+            modalImg.src = img.src;
+            modalImg.alt = img.alt;
+            modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+        
+        function closeImageModal() {
+            const modal = document.getElementById('image-modal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto'; // Restore scrolling
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            }
+        });
+        
         // Recipe serving calculator
         document.addEventListener('DOMContentLoaded', function() {
             const servingInput = document.getElementById('servingSize');
@@ -192,7 +239,6 @@
                     recalculateIngredients(newServings, originalServings);
                 });
                 
-                // Also trigger on change (for better mobile support)
                 servingInput.addEventListener('change', function() {
                     const newServings = parseInt(this.value) || 1;
                     recalculateIngredients(newServings, originalServings);
@@ -218,7 +264,6 @@
                 if (quantitySpan && !isNaN(originalQuantity)) {
                     const newQuantity = originalQuantity * ratio;
                     
-                    // Format the number nicely
                     let displayQuantity;
                     if (newQuantity < 0.1) {
                         displayQuantity = newQuantity.toFixed(3);
@@ -230,12 +275,9 @@
                         displayQuantity = Math.round(newQuantity * 10) / 10;
                     }
                     
-                    // Convert decimals to fractions for common cooking amounts
                     displayQuantity = formatCookingQuantity(parseFloat(displayQuantity));
-                    
                     quantitySpan.textContent = displayQuantity;
                     
-                    // Add visual feedback
                     if (ratio !== 1) {
                         quantitySpan.classList.add('quantity-adjusted');
                     } else {
@@ -244,7 +286,6 @@
                 }
             });
             
-            // Update the visual feedback for the calculator
             const calculator = document.querySelector('.serving-calculator');
             if (calculator) {
                 if (newServings !== originalServings) {
@@ -256,7 +297,6 @@
         }
         
         function formatCookingQuantity(quantity) {
-            // Convert common decimal amounts to fractions
             const fractions = {
                 0.125: '⅛',
                 0.25: '¼', 
@@ -269,12 +309,10 @@
                 0.875: '⅞'
             };
             
-            // Check if it's a whole number
             if (quantity === Math.floor(quantity)) {
                 return quantity.toString();
             }
             
-            // Check for exact fraction matches
             const rounded = Math.round(quantity * 1000) / 1000;
             for (const [decimal, fraction] of Object.entries(fractions)) {
                 if (Math.abs(rounded - decimal) < 0.01) {
@@ -282,7 +320,6 @@
                 }
             }
             
-            // Check for mixed numbers (like 1½)
             const whole = Math.floor(quantity);
             const remainder = quantity - whole;
             
@@ -292,7 +329,6 @@
                 }
             }
             
-            // Fall back to decimal
             if (quantity < 1) {
                 return quantity.toFixed(2);
             } else {

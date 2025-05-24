@@ -342,3 +342,54 @@ if ('serviceWorker' in navigator) {
             });
     });
 }
+
+// Definitive fix for instruction formatting
+document.addEventListener('DOMContentLoaded', function() {
+    const instructionsContent = document.querySelector('.instructions-content');
+    if (instructionsContent) {
+        // Get the original HTML content (which should have <br> tags from nl2br)
+        let html = instructionsContent.innerHTML;
+        
+        // Remove any leading <br> tags or whitespace that cause initial padding
+        html = html.replace(/^(\s|<br\s*\/?>\s*)+/i, '');
+        
+        // Ensure proper spacing: Convert single <br> to <br> and double <br><br> to paragraph spacing
+        html = html.replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '<br><br>'); // Ensure double breaks
+        
+        // Set the cleaned HTML back
+        instructionsContent.innerHTML = html;
+        
+        // Ensure no CSS padding issues
+        instructionsContent.style.paddingTop = '0';
+        instructionsContent.style.marginTop = '0';
+    }
+});
+
+// Alternative approach - if the above doesn't work, try this more direct method
+document.addEventListener('DOMContentLoaded', function() {
+    const instructionsElements = document.querySelectorAll('.instructions-content');
+    instructionsElements.forEach(function(element) {
+        // Check if we need to add spacing between numbered steps
+        let html = element.innerHTML;
+        
+        // Add extra spacing after lines that end with a period and are followed by a number
+        // This catches patterns like "...step." followed by "2. Next step"
+        html = html.replace(/(\.\s*)<br\s*\/?>\s*(\d+\.)/gi, '$1<br><br>$2');
+        
+        // Remove leading breaks and whitespace
+        html = html.replace(/^(\s|<br\s*\/?>\s*)+/i, '');
+        
+        element.innerHTML = html;
+    });
+});
+
+// Debug helper - uncomment to see what's actually in the instructions
+/*
+document.addEventListener('DOMContentLoaded', function() {
+    const instructionsContent = document.querySelector('.instructions-content');
+    if (instructionsContent) {
+        console.log('Original HTML:', instructionsContent.innerHTML);
+        console.log('Text content:', instructionsContent.textContent);
+    }
+});
+*/
