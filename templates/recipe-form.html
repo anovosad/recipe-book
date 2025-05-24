@@ -89,23 +89,33 @@
                 <div class="form-group">
                     <label for="serving_unit">Serving Unit</label>
                     <select id="serving_unit" name="serving_unit" class="form-control">
-                        <option value="people" {{if and .Recipe (streq .Recipe.ServingUnit "people")}}selected{{else}}{{if not .Recipe}}selected{{end}}{{end}}>People</option>
-                        <option value="servings" {{if and .Recipe (streq .Recipe.ServingUnit "servings")}}selected{{end}}>Servings</option>
-                        <option value="portions" {{if and .Recipe (streq .Recipe.ServingUnit "portions")}}selected{{end}}>Portions</option>
-                        <option value="pieces" {{if and .Recipe (streq .Recipe.ServingUnit "pieces")}}selected{{end}}>Pieces</option>
-                        <option value="slices" {{if and .Recipe (streq .Recipe.ServingUnit "slices")}}selected{{end}}>Slices</option>
-                        <option value="cups" {{if and .Recipe (streq .Recipe.ServingUnit "cups")}}selected{{end}}>Cups</option>
-                        <option value="bowls" {{if and .Recipe (streq .Recipe.ServingUnit "bowls")}}selected{{end}}>Bowls</option>
-                        <option value="glasses" {{if and .Recipe (streq .Recipe.ServingUnit "glasses")}}selected{{end}}>Glasses</option>
-                        <option value="liters" {{if and .Recipe (streq .Recipe.ServingUnit "liters")}}selected{{end}}>Liters</option>
-                        <option value="ml" {{if and .Recipe (streq .Recipe.ServingUnit "ml")}}selected{{end}}>Milliliters</option>
-                        <option value="kg" {{if and .Recipe (streq .Recipe.ServingUnit "kg")}}selected{{end}}>Kilograms</option>
-                        <option value="g" {{if and .Recipe (streq .Recipe.ServingUnit "g")}}selected{{end}}>Grams</option>
-                        <option value="dozen" {{if and .Recipe (streq .Recipe.ServingUnit "dozen")}}selected{{end}}>Dozen</option>
-                        <option value="cookies" {{if and .Recipe (streq .Recipe.ServingUnit "cookies")}}selected{{end}}>Cookies</option>
-                        <option value="muffins" {{if and .Recipe (streq .Recipe.ServingUnit "muffins")}}selected{{end}}>Muffins</option>
-                        <option value="pancakes" {{if and .Recipe (streq .Recipe.ServingUnit "pancakes")}}selected{{end}}>Pancakes</option>
+                        <option value="people">People</option>
+                        <option value="servings">Servings</option>
+                        <option value="portions">Portions</option>
+                        <option value="pieces">Pieces</option>
+                        <option value="slices">Slices</option>
+                        <option value="cups">Cups</option>
+                        <option value="bowls">Bowls</option>
+                        <option value="glasses">Glasses</option>
+                        <option value="liters">Liters</option>
+                        <option value="ml">Milliliters</option>
+                        <option value="kg">Kilograms</option>
+                        <option value="g">Grams</option>
+                        <option value="dozen">Dozen</option>
+                        <option value="cookies">Cookies</option>
+                        <option value="muffins">Muffins</option>
+                        <option value="pancakes">Pancakes</option>
                     </select>
+                    <script>
+                        // Set the selected value via JavaScript to avoid template syntax issues
+                        document.addEventListener('DOMContentLoaded', function() {
+                            const servingUnitSelect = document.getElementById('serving_unit');
+                            const currentValue = '{{if .Recipe}}{{.Recipe.ServingUnit}}{{else}}people{{end}}';
+                            if (servingUnitSelect && currentValue) {
+                                servingUnitSelect.value = currentValue;
+                            }
+                        });
+                    </script>
                 </div>
             </div>
         </div>
@@ -120,13 +130,11 @@
             <div id="ingredients-container">
                 {{if .Recipe}}
                     {{range $index, $ingredient := .Recipe.Ingredients}}
-                        <div class="ingredient-row">
+                        <div class="ingredient-row" data-ingredient-id="{{$ingredient.IngredientID}}" data-quantity="{{$ingredient.Quantity}}" data-unit="{{$ingredient.Unit}}">
                             <select name="ingredient_{{$index}}" class="form-control ingredient-select" required>
                                 <option value="">Select ingredient...</option>
                                 {{range $.Ingredients}}
-                                    <option value="{{.ID}}" {{if eq .ID $ingredient.IngredientID}}selected{{end}}>
-                                        {{.Name}}
-                                    </option>
+                                    <option value="{{.ID}}">{{.Name}}</option>
                                 {{end}}
                             </select>
                             <input type="number" name="quantity_{{$index}}" class="form-control quantity-input" 
@@ -134,29 +142,29 @@
                             <select name="unit_{{$index}}" class="form-control unit-select" required>
                                 <option value="">Unit...</option>
                                 <optgroup label="Volume">
-                                    <option value="tsp"{{if streq $ingredient.Unit "tsp"}} selected{{end}}>Teaspoon</option>
-                                    <option value="tbsp"{{if streq $ingredient.Unit "tbsp"}} selected{{end}}>Tablespoon</option>
-                                    <option value="cup"{{if streq $ingredient.Unit "cup"}} selected{{end}}>Cup</option>
-                                    <option value="ml"{{if streq $ingredient.Unit "ml"}} selected{{end}}>Milliliter</option>
-                                    <option value="l"{{if streq $ingredient.Unit "l"}} selected{{end}}>Liter</option>
-                                    <option value="fl oz"{{if streq $ingredient.Unit "fl oz"}} selected{{end}}>Fluid Ounce</option>
+                                    <option value="tsp">Teaspoon</option>
+                                    <option value="tbsp">Tablespoon</option>
+                                    <option value="cup">Cup</option>
+                                    <option value="ml">Milliliter</option>
+                                    <option value="l">Liter</option>
+                                    <option value="fl oz">Fluid Ounce</option>
                                 </optgroup>
                                 <optgroup label="Weight">
-                                    <option value="g"{{if streq $ingredient.Unit "g"}} selected{{end}}>Gram</option>
-                                    <option value="kg"{{if streq $ingredient.Unit "kg"}} selected{{end}}>Kilogram</option>
-                                    <option value="oz"{{if streq $ingredient.Unit "oz"}} selected{{end}}>Ounce</option>
-                                    <option value="lb"{{if streq $ingredient.Unit "lb"}} selected{{end}}>Pound</option>
+                                    <option value="g">Gram</option>
+                                    <option value="kg">Kilogram</option>
+                                    <option value="oz">Ounce</option>
+                                    <option value="lb">Pound</option>
                                 </optgroup>
                                 <optgroup label="Count">
-                                    <option value="piece"{{if streq $ingredient.Unit "piece"}} selected{{end}}>Piece</option>
-                                    <option value="clove"{{if streq $ingredient.Unit "clove"}} selected{{end}}>Clove</option>
-                                    <option value="slice"{{if streq $ingredient.Unit "slice"}} selected{{end}}>Slice</option>
-                                    <option value="can"{{if streq $ingredient.Unit "can"}} selected{{end}}>Can</option>
+                                    <option value="piece">Piece</option>
+                                    <option value="clove">Clove</option>
+                                    <option value="slice">Slice</option>
+                                    <option value="can">Can</option>
                                 </optgroup>
                                 <optgroup label="Other">
-                                    <option value="pinch"{{if streq $ingredient.Unit "pinch"}} selected{{end}}>Pinch</option>
-                                    <option value="dash"{{if streq $ingredient.Unit "dash"}} selected{{end}}>Dash</option>
-                                    <option value="to taste"{{if streq $ingredient.Unit "to taste"}} selected{{end}}>To taste</option>
+                                    <option value="pinch">Pinch</option>
+                                    <option value="dash">Dash</option>
+                                    <option value="to taste">To taste</option>
                                 </optgroup>
                             </select>
                             <button type="button" class="btn btn-danger btn-sm remove-ingredient">
@@ -176,26 +184,24 @@
             <h3>Tags</h3>
             
             <div class="tags-selection">
-                <label>Select Categories/Tags</label>
-                <div class="tags-checkboxes">
+                <label>Select Categories/Tags (click to toggle)</label>
+                <div class="tag-filters">
                     {{range .Tags}}
-                        <div class="tag-checkbox">
-                            <input type="checkbox" id="tag_{{.ID}}" name="tags" value="{{.ID}}"
-                                   {{if $.Recipe}}
-                                       {{range $.Recipe.Tags}}
-                                           {{if eq .ID $.ID}}checked{{end}}
-                                       {{end}}
-                                   {{end}}>
-                            <label for="tag_{{.ID}}" class="tag-checkbox-label">
-                                <span class="tag-checkbox-preview" >{{.Name}}</span>
-                                <span class="tag-checkbox-name">{{.Name}}</span>
-                            </label>
-                        </div>
+                        <button type="button" class="tag-filter" data-tag-id="{{.ID}}" data-tag-name="{{.Name}}">
+                            {{.Name}}
+                        </button>
+                        <input type="checkbox" id="tag_{{.ID}}" name="tags" value="{{.ID}}" style="display: none;"
+                               {{if $.Recipe}}
+                                   {{$currentTagID := .ID}}
+                                   {{range $.Recipe.Tags}}
+                                       {{if eq .ID $currentTagID}}checked{{end}}
+                                   {{end}}
+                               {{end}}>
                     {{end}}
                 </div>
                 <div class="help-text">
                     <i class="fas fa-info-circle"></i> 
-                    Select tags to help categorize and organize your recipe.
+                    Click on tags to select/deselect them for your recipe.
                 </div>
             </div>
         </div>
@@ -205,7 +211,7 @@
             
             <div class="form-group">
                 <label for="instructions">Cooking Instructions *</label>
-                <textarea id="instructions" name="instructions" class="form-control" rows="8" 
+                <textarea id="instructions" name="instructions" class="form-control" rows="22" 
                           placeholder="Step-by-step cooking instructions" required>{{if .Recipe}}{{.Recipe.Instructions}}{{end}}</textarea>
             </div>
         </div>
@@ -266,6 +272,75 @@
                 this.closest('.ingredient-row').remove();
             });
         });
+        
+        // Set ingredient and unit selections for existing recipe ingredients
+        document.querySelectorAll('.ingredient-row').forEach(row => {
+            const ingredientId = row.dataset.ingredientId;
+            const unit = row.dataset.unit;
+            
+            if (ingredientId) {
+                const ingredientSelect = row.querySelector('.ingredient-select');
+                if (ingredientSelect) {
+                    ingredientSelect.value = ingredientId;
+                }
+            }
+            
+            if (unit) {
+                const unitSelect = row.querySelector('.unit-select');
+                if (unitSelect) {
+                    unitSelect.value = unit;
+                }
+            }
+        });
+        
+        // Initialize tag buttons
+        document.querySelectorAll('.tag-filter').forEach(button => {
+            const tagId = button.dataset.tagId;
+            const checkbox = document.getElementById('tag_' + tagId);
+            
+            // Set initial state based on checkbox (for edit mode)
+            if (checkbox && checkbox.checked) {
+                button.classList.add('active');
+            }
+            
+            // Add click handler
+            button.addEventListener('click', function() {
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    button.classList.toggle('active', checkbox.checked);
+                }
+            });
+        });
+        
+        // Ensure all form sections are visible (failsafe)
+        const formSections = document.querySelectorAll('.form-section');
+        formSections.forEach(section => {
+            section.style.display = 'block';
+            section.style.visibility = 'visible';
+            section.style.opacity = '1';
+        });
+        
+        // Specific visibility checks
+        const ingredientsContainer = document.getElementById('ingredients-container');
+        const tagsSelection = document.querySelector('.tags-selection');
+        const instructionsTextarea = document.getElementById('instructions');
+        
+        if (ingredientsContainer) {
+            ingredientsContainer.style.display = 'block';
+            ingredientsContainer.style.visibility = 'visible';
+        }
+        
+        if (tagsSelection) {
+            tagsSelection.style.display = 'block';
+            tagsSelection.style.visibility = 'visible';
+        }
+        
+        if (instructionsTextarea) {
+            instructionsTextarea.style.display = 'block';
+            instructionsTextarea.style.visibility = 'visible';
+        }
+        
+        console.log('Form sections initialized and visibility ensured');
     });
     
     document.getElementById('add-ingredient').addEventListener('click', function() {
@@ -530,6 +605,12 @@
     <title>{{.Title}} - Recipe Book</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/static/style.css" rel="stylesheet">
+    <style>
+        /* Make instructions textarea taller */
+        #instructions {
+            min-height: 360px !important;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -544,12 +625,18 @@
                 <a href="/ingredients" class="nav-link">
                     <i class="fas fa-leaf"></i> Ingredients
                 </a>
+                <a href="/tags" class="nav-link">
+                    <i class="fas fa-tags"></i> Tags
+                </a>
                 {{if .IsLoggedIn}}
                     <a href="/recipe/new" class="nav-link">
                         <i class="fas fa-plus"></i> Add Recipe
                     </a>
                     <a href="/ingredients/new" class="nav-link">
                         <i class="fas fa-plus-circle"></i> Add Ingredient
+                    </a>
+                    <a href="/tags/new" class="nav-link">
+                        <i class="fas fa-tag"></i> Add Tag
                     </a>
                     <div class="user-menu">
                         <span class="username">

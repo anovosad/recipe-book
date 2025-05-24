@@ -88,6 +88,24 @@
     
     .recipe-title-section h1 {
         font-size: 2rem;
+        text-align: center;
+    }
+
+    .recipe-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+
+    .recipe-actions {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .recipe-actions .btn {
+        flex: 1;
+        min-width: 120px;
+        justify-content: center;
     }
     
     .ingredients-header {
@@ -241,6 +259,21 @@
     .recipe-grid {
         grid-template-columns: 1fr;
         gap: 1rem;
+    }
+
+    .recipe-tags {
+        gap: 6px;
+        margin: 0.25rem 0 1.25rem 0; /* Reduced top margin on mobile too */
+    }
+    
+    .recipe-tag {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+        border-radius: 14px;
+    }
+    
+    .recipe-card {
+        gap: 0.75rem;
     }
 }
 

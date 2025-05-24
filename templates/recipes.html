@@ -35,31 +35,31 @@
             </a>
         {{end}}
     </div>
-</div>
 
-<!-- Tag Filter Section -->
-{{if .Tags}}
-    <div class="filter-section">
-        <div class="filter-header">
-            <h3><i class="fas fa-filter"></i> Filter by Tags</h3>
-            {{if .ActiveTagID}}
-                <a href="/recipes{{if .SearchQuery}}?search={{.SearchQuery}}{{end}}" class="btn btn-secondary btn-sm clear-filters">
-                    <i class="fas fa-times"></i> Clear Tag Filter
-                </a>
-            {{end}}
+    <!-- Tag Filter Section merged into header -->
+    {{if .Tags}}
+        <div class="filter-section-inline">
+            <div class="filter-header">
+                <h3><i class="fas fa-filter"></i> Filter by Tags</h3>
+                {{if .ActiveTagID}}
+                    <a href="/recipes{{if .SearchQuery}}?search={{.SearchQuery}}{{end}}" class="btn btn-secondary btn-sm clear-filters">
+                        <i class="fas fa-times"></i> Clear Tag Filter
+                    </a>
+                {{end}}
+            </div>
+            <div class="tag-filters">
+                {{range .Tags}}
+                    {{$isActive := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
+                    <a href="{{if $isActive}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
+                       class="tag-filter {{if $isActive}}active{{end}}" 
+                       title="{{if $isActive}}Currently filtering by {{.Name}} - click to remove filter{{else}}Filter recipes by {{.Name}}{{end}}">
+                        {{.Name}}
+                    </a>
+                {{end}}
+            </div>
         </div>
-        <div class="tag-filters">
-            {{range .Tags}}
-                {{$isActive := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
-                <a href="{{if $isActive}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
-                   class="tag-filter {{if $isActive}}active{{end}}" 
-                   title="{{if $isActive}}Currently filtering by {{.Name}} - click to remove filter{{else}}Filter recipes by {{.Name}}{{end}}">
-                    {{.Name}}
-                </a>
-            {{end}}
-        </div>
-    </div>
-{{end}}
+    {{end}}
+</div>
 
 {{if .Recipes}}
     <!-- Card View -->
@@ -70,9 +70,6 @@
                     <h3 class="recipe-title">
                         <a href="/recipe/{{.ID}}">{{.Title}}</a>
                     </h3>
-                    <div class="recipe-author">
-                        <i class="fas fa-user"></i> {{.AuthorName}}
-                    </div>
                 </div>
                 
                 {{if .Description}}
@@ -80,7 +77,7 @@
                 {{end}}
                 
                 {{if .Tags}}
-                    <div class="recipe-tags-compact">
+                    <div class="recipe-tags">
                         {{range .Tags}}
                             {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
                             <a href="{{if $isActiveTag}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
@@ -118,7 +115,7 @@
                         <a href="/recipe/{{.ID}}">{{.Title}}</a>
                     </h4>
                     {{if .Tags}}
-                        <div class="recipe-tags-compact">
+                        <div class="recipe-tags">
                             {{range .Tags}}
                                 {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
                                 <a href="{{if $isActiveTag}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 

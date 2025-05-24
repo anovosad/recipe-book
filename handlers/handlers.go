@@ -762,6 +762,7 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := auth.GetUserFromToken(r)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
 		return
 	}
 
@@ -770,16 +771,77 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(path)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ingredient ID"})
 		return
 	}
 
+	// Check if ingredient is used in any recipes
+	var recipeCount int
+	err = database.DB.QueryRow("SELECT COUNT(*) FROM recipe_ingredients WHERE ingredient_id = ?", id).Scan(&recipeCount)
+	if err != nil {
+		log.Printf("Error checking ingredient usage: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Database error"})
+		return
+	}
+
+	if recipeCount > 0 {
+		// Get ingredient name for better error message
+		var ingredientName string
+		err = database.DB.QueryRow("SELECT name FROM ingredients WHERE id = ?", id).Scan(&ingredientName)
+		if err != nil {
+			ingredientName = "this ingredient"
+		}
+
+		// Get some recipe titles that use this ingredient (limit to 3 for display)
+		rows, err := database.DB.Query(`
+			SELECT r.title 
+			FROM recipes r 
+			JOIN recipe_ingredients ri ON r.id = ri.recipe_id 
+			WHERE ri.ingredient_id = ? 
+			LIMIT 3
+		`, id)
+
+		var recipeNames []string
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var title string
+				if rows.Scan(&title) == nil {
+					recipeNames = append(recipeNames, title)
+				}
+			}
+		}
+
+		errorMsg := fmt.Sprintf("Cannot delete %s because it is used in %d recipe(s)", ingredientName, recipeCount)
+		if len(recipeNames) > 0 {
+			errorMsg += fmt.Sprintf(": %s", strings.Join(recipeNames, ", "))
+			if recipeCount > len(recipeNames) {
+				errorMsg += fmt.Sprintf(" and %d more", recipeCount-len(recipeNames))
+			}
+		}
+
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":         errorMsg,
+			"usedInRecipes": true,
+			"recipeCount":   recipeCount,
+			"recipeNames":   recipeNames,
+		})
+		return
+	}
+
+	// If not used in any recipes, proceed with deletion
 	_, err = database.DB.Exec("DELETE FROM ingredients WHERE id = ?", id)
 	if err != nil {
+		log.Printf("Error deleting ingredient: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete ingredient"})
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Ingredient deleted successfully"})
 }
 
 // Tag API Handlers

@@ -3,9 +3,6 @@
     <div class="recipe-header">
         <div class="recipe-title-section">
             <h1>{{.Recipe.Title}}</h1>
-            <div class="recipe-author">
-                <i class="fas fa-user"></i> Created by {{.Recipe.AuthorName}}
-            </div>
         </div>
         
         {{if and .IsLoggedIn (eq .Recipe.CreatedBy .User.ID)}}
@@ -39,6 +36,19 @@
     {{if .Recipe.Description}}
         <div class="recipe-description">
             <p>{{.Recipe.Description}}</p>
+        </div>
+    {{end}}
+    
+    {{if .Recipe.Tags}}
+        <div class="recipe-tags-section">
+            <h3><i class="fas fa-tags"></i> Categories</h3>
+            <div class="recipe-tags">
+                {{range .Recipe.Tags}}
+                    <a href="/recipes?tag={{.ID}}" class="recipe-tag" title="View all {{.Name}} recipes">
+                        {{.Name}}
+                    </a>
+                {{end}}
+            </div>
         </div>
     {{end}}
     

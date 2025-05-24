@@ -1,6 +1,6 @@
-/* tags.css - Tag system and filtering styles */
+/* tags.css - Tag system and filtering styles with improved readability */
 
-/* Tags Grid - Monochromatic Management */
+/* Tags Grid - Management */
 .tags-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -34,15 +34,15 @@
     border-radius: 20px;
     font-weight: 500;
     font-size: 0.9rem;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.3);
+    background: #f8f9fa;
+    color: #495057;
+    border: 2px solid #dee2e6;
     margin-bottom: 0.75rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .tag-name {
-    /* No text shadow needed for monochromatic */
+    /* No text shadow needed for better readability */
 }
 
 .tag-usage {
@@ -67,38 +67,41 @@
     flex-shrink: 0;
 }
 
-/* Recipe Tags Display - Monochromatic */
+/* Recipe Tags Display - Improved Readability */
 .recipe-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin: 1rem 0;
+    margin: 0.25rem 0 1.5rem 0; /* Reduced top margin from 0.5rem to 0.25rem */
+    padding: 0; /* Removed padding */
 }
 
 .recipe-tag {
     display: inline-block;
-    padding: 4px 12px;
-    border-radius: 15px;
-    font-size: 0.8rem;
+    padding: 6px 14px;
+    border-radius: 18px;
+    font-size: 0.85rem;
     font-weight: 500;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.3);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
     text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    
+    /* High contrast, readable colors */
+    background: #f8f9fa;
+    color: #495057;
+    border: 2px solid #dee2e6;
 }
 
 .recipe-tag:hover {
     transform: translateY(-1px);
-    background: rgba(255, 107, 107, 0.15);
-    border-color: rgba(255, 107, 107, 0.4);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    color: #ff6b6b;
+    background: #ff6b6b;
+    color: white;
+    border-color: #ff6b6b;
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
     text-decoration: none;
 }
 
-/* Tag Filter Section - Monochromatic */
+/* Tag Filter Section - Improved Contrast */
 .filter-section {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
@@ -141,54 +144,58 @@
     border-radius: 18px;
     font-size: 0.85rem;
     font-weight: 500;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.3);
     text-decoration: none;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
     transition: all 0.3s ease;
     cursor: pointer;
+    
+    /* High contrast default state */
+    background: #f8f9fa;
+    color: #495057;
+    border: 2px solid #dee2e6;
 }
 
 .tag-filter:hover {
     transform: translateY(-1px);
-    background: rgba(255, 107, 107, 0.15);
-    border-color: rgba(255, 107, 107, 0.4);
+    background: #e9ecef;
+    border-color: #adb5bd;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    color: #ff6b6b;
+    color: #495057;
     text-decoration: none;
 }
 
-/* Simple active tag highlighting - monochromatic darkened version */
+/* Active tag highlighting - better contrast */
 .tag-filter.active {
-    background: rgba(255, 107, 107, 0.2) !important;
-    border-color: rgba(255, 107, 107, 0.5) !important;
-    color: #d63447 !important;
+    background: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+    color: white !important;
     font-weight: 600;
-    filter: brightness(0.9);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
 }
 
 .tag-filter.active:hover {
-    background: rgba(255, 107, 107, 0.25) !important;
-    border-color: rgba(255, 107, 107, 0.6) !important;
-    color: #d63447 !important;
-    filter: brightness(0.85);
+    background: #ff5252 !important;
+    border-color: #ff5252 !important;
+    color: white !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
 }
 
-/* Simple active tag highlighting on recipe cards - monochromatic */
+/* Active recipe tags */
 .recipe-tag-active {
-    background: rgba(255, 107, 107, 0.2) !important;
-    border-color: rgba(255, 107, 107, 0.5) !important;
-    color: #d63447 !important;
+    background: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+    color: white !important;
     font-weight: 600;
-    filter: brightness(0.9);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
 }
 
 .recipe-tag-active:hover {
-    background: rgba(255, 107, 107, 0.25) !important;
-    border-color: rgba(255, 107, 107, 0.6) !important;
-    color: #d63447 !important;
-    filter: brightness(0.85);
+    background: #ff5252 !important;
+    border-color: #ff5252 !important;
+    color: white !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
 }
 
 /* Remove any pseudo-elements that might add symbols */
@@ -217,7 +224,7 @@
     border-color: #ff5252 !important;
 }
 
-/* Compact tags display for recipe cards - monochromatic */
+/* Compact tags display for recipe cards */
 .recipe-tags-compact {
     display: flex;
     flex-wrap: wrap;
@@ -226,21 +233,90 @@
 }
 
 .recipe-tags-compact .recipe-tag {
-    padding: 2px 8px;
-    font-size: 0.7rem;
-    border-radius: 10px;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.2);
+    padding: 3px 10px;
+    font-size: 0.8rem;
+    border-radius: 12px;
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
 }
 
-/* Tag count badges - monochromatic */
+.recipe-tags-compact .recipe-tag:hover {
+    background: #ff6b6b;
+    color: white;
+    border-color: #ff6b6b;
+}
+
+/* Tag count badges */
 .tag-count {
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
+    background: #f8f9fa;
+    color: #495057;
     font-size: 0.7rem;
     padding: 2px 6px;
     border-radius: 10px;
     margin-left: 5px;
     font-weight: 500;
+    border: 1px solid #dee2e6;
+}
+
+/* Recipe tags section for single recipe view */
+.recipe-tags-section {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 15px;
+    border-left: 4px solid #ff6b6b;
+}
+
+.recipe-tags-section h3 {
+    color: #333;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.recipe-tags-section .recipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.recipe-tags-section .recipe-tag {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    border-radius: 20px;
+}
+
+/* Mobile responsiveness for tags */
+@media (max-width: 768px) {
+    .tags-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .tag-card {
+        padding: 1rem;
+    }
+    
+    .filter-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: stretch;
+    }
+    
+    .tag-filters {
+        justify-content: center;
+    }
+    
+    .recipe-tags,
+    .recipe-tags-compact {
+        gap: 6px;
+    }
+    
+    .recipe-tag {
+        font-size: 0.8rem;
+        padding: 4px 10px;
+    }
 }

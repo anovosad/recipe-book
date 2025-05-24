@@ -24,20 +24,50 @@ function deleteRecipe(id) {
 }
 
 function deleteIngredient(id, name) {
-    if (confirm(`Are you sure you want to delete "${name}"? This action cannot be undone and may affect existing recipes.`)) {
-        fetch(`/api/ingredients/${id}`, {
-            method: 'DELETE'
-        })
-        .then(response => {
-            if (response.ok) {
-                location.reload();
-            } else {
-                alert('Failed to delete ingredient. It might be used in existing recipes.');
-            }
-        })
-        .catch(error => {
-            alert('Error deleting ingredient: ' + error.message);
-        });
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+        // Show loading state
+        const deleteButton = document.querySelector(`button[onclick="deleteIngredient(${id}, '${name}')"]`);
+        if (deleteButton) {
+            const originalText = deleteButton.innerHTML;
+            deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            deleteButton.disabled = true;
+            
+            // Restore button state function
+            const restoreButton = () => {
+                deleteButton.innerHTML = originalText;
+                deleteButton.disabled = false;
+            };
+            
+            fetch(`/api/ingredients/${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json().then(data => {
+                        showSuccess(data.message || 'Ingredient deleted successfully');
+                        // Remove the ingredient card from the page
+                        const ingredientCard = deleteButton.closest('.ingredient-card');
+                        if (ingredientCard) {
+                            ingredientCard.style.opacity = '0';
+                            ingredientCard.style.transform = 'translateY(-20px)';
+                            setTimeout(() => ingredientCard.remove(), 300);
+                        }
+                    });
+                } else if (response.status === 409) {
+                    // Ingredient is used in recipes
+                    return response.json().then(data => {
+                        restoreButton();
+                        showIngredientUsageError(data);
+                    });
+                } else {
+                    throw new Error('Failed to delete ingredient');
+                }
+            })
+            .catch(error => {
+                restoreButton();
+                showError('Error deleting ingredient: ' + error.message);
+            });
+        }
     }
 }
 
@@ -382,6 +412,163 @@ document.addEventListener('DOMContentLoaded', function() {
         element.innerHTML = html;
     });
 });
+
+function showIngredientUsageError(data) {
+    const modal = createModal();
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle" style="color: #ff6b6b;"></i> Cannot Delete Ingredient</h3>
+                <button type="button" class="modal-close" onclick="closeModal(this)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p><strong>${data.error}</strong></p>
+                
+                ${data.recipeNames && data.recipeNames.length > 0 ? `
+                    <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
+                        <h4 style="margin: 0 0 0.5rem 0; color: #495057;">Used in these recipes:</h4>
+                        <ul style="margin: 0; padding-left: 1.5rem;">
+                            ${data.recipeNames.map(name => `<li style="margin: 0.25rem 0;">${name}</li>`).join('')}
+                        </ul>
+                        ${data.recipeCount > data.recipeNames.length ? 
+                            `<p style="margin: 0.5rem 0 0 0; font-style: italic; color: #6c757d;">
+                                ...and ${data.recipeCount - data.recipeNames.length} more recipe${data.recipeCount - data.recipeNames.length > 1 ? 's' : ''}
+                            </p>` : ''}
+                    </div>
+                ` : ''}
+                
+                <div style="margin-top: 1.5rem; padding: 1rem; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;">
+                    <p style="margin: 0; color: #1976d2;">
+                        <i class="fas fa-info-circle"></i> 
+                        To delete this ingredient, you must first remove it from all recipes that use it, or delete those recipes.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal(this)">
+                    <i class="fas fa-check"></i> Understood
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+}
+
+function createModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+    `;
+    return modal;
+}
+
+function closeModal(element) {
+    const modal = element.closest('.modal');
+    if (modal) {
+        modal.style.opacity = '0';
+        setTimeout(() => modal.remove(), 200);
+    }
+}
+
+function showSuccess(message) {
+    showNotification(message, 'success');
+}
+
+function showError(message) {
+    showNotification(message, 'error');
+}
+
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1001;
+        max-width: 400px;
+        opacity: 0;
+        transform: translateX(100%);
+        transition: all 0.3s ease;
+    `;
+    
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-triangle';
+    notification.innerHTML = `
+        <i class="fas fa-${icon}"></i>
+        ${message}
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Trigger animation
+    setTimeout(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Remove after 4 seconds
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 4000);
+}
+
+// Enhanced delete function with loading states for recipe form
+function deleteIngredientWithLoading(id, name, button) {
+    const originalText = button.innerHTML;
+    const addLoadingState = () => {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+    };
+    
+    const removeLoadingState = () => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    };
+    
+    if (confirm(`Are you sure you want to delete "${name}"?`)) {
+        addLoadingState();
+        
+        fetch(`/api/ingredients/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.json().then(data => {
+                    showSuccess(data.message || 'Ingredient deleted successfully');
+                    location.reload();
+                });
+            } else if (response.status === 409) {
+                return response.json().then(data => {
+                    removeLoadingState();
+                    showIngredientUsageError(data);
+                });
+            } else {
+                throw new Error('Failed to delete ingredient');
+            }
+        })
+        .catch(error => {
+            removeLoadingState();
+            showError('Error deleting ingredient: ' + error.message);
+        });
+    }
+}
 
 // Debug helper - uncomment to see what's actually in the instructions
 /*

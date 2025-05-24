@@ -1,4 +1,4 @@
-/* forms.css - Form styling and components */
+/* forms.css - Form styling and components with visibility fixes */
 
 /* Auth Pages */
 .auth-container {
@@ -100,18 +100,167 @@
     gap: 15px;
 }
 
+/* CRITICAL VISIBILITY FIXES FOR RECIPE FORM */
 .form-section {
-    margin-bottom: 2rem;
-    padding: 1.5rem;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 15px;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin-bottom: 2rem !important;
+    padding: 1.5rem !important;
+    background: rgba(255, 255, 255, 0.5) !important;
+    border-radius: 15px !important;
 }
 
 .form-section h3 {
-    color: #333;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid rgba(255, 107, 107, 0.1);
+    color: #333 !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 2px solid rgba(255, 107, 107, 0.1) !important;
+    display: block !important;
+    visibility: visible !important;
+}
+
+/* Ensure ingredients container is always visible */
+#ingredients-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Force ingredient rows to be visible */
+.ingredient-row {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr 1.5fr auto !important;
+    gap: 10px !important;
+    margin-bottom: 1rem !important;
+    align-items: end !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    max-width: 800px !important;
+}
+
+.ingredient-select,
+.quantity-input,
+.unit-select {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.remove-ingredient {
+    width: 40px !important;
+    height: 40px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    visibility: visible !important;
+}
+
+/* Ensure tags section is always visible */
+.tags-selection {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-top: 1rem !important;
+}
+
+.tags-selection label {
+    font-weight: 500 !important;
+    color: #555 !important;
+    margin-bottom: 1rem !important;
+    display: block !important;
+}
+
+.tags-checkboxes {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+    gap: 0.75rem !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    padding: 1rem !important;
+    background: rgba(255, 255, 255, 0.7) !important;
+    border-radius: 10px !important;
+    border: 2px solid rgba(255, 107, 107, 0.1) !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.tag-checkbox {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 6px !important;
+    border-radius: 8px !important;
+    transition: background-color 0.2s ease !important;
+    cursor: pointer !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.tag-checkbox:hover {
+    background: rgba(255, 107, 107, 0.05) !important;
+}
+
+.tag-checkbox input[type="checkbox"] {
+    margin: 0 !important;
+    cursor: pointer !important;
+    display: block !important;
+    visibility: visible !important;
+}
+
+.tag-checkbox-label {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    cursor: pointer !important;
+    flex-grow: 1 !important;
+    visibility: visible !important;
+}
+
+.tag-checkbox-preview {
+    display: inline-block !important;
+    padding: 2px 8px !important;
+    border-radius: 10px !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    background: rgba(255, 107, 107, 0.1) !important;
+    color: #ff6b6b !important;
+    border: 1px solid rgba(255, 107, 107, 0.2) !important;
+    min-width: 60px !important;
+    text-align: center !important;
+    visibility: visible !important;
+}
+
+.tag-checkbox-name {
+    font-size: 0.9rem !important;
+    color: #333 !important;
+    visibility: visible !important;
+}
+
+/* Ensure instructions section is always visible */
+#instructions {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 120px !important;
+    resize: vertical !important;
+    font-family: inherit !important;
+    box-sizing: border-box !important;
+}
+
+/* Force form groups to be visible */
+.form-group {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin-bottom: 1.5rem !important;
 }
 
 .form-grid {
@@ -128,38 +277,6 @@
     padding-top: 2rem;
     border-top: 2px solid rgba(255, 107, 107, 0.1);
     max-width: 800px;
-}
-
-/* Ingredient Form */
-.ingredient-row {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1.5fr auto;
-    gap: 10px;
-    margin-bottom: 1rem;
-    align-items: end;
-    max-width: 800px;
-}
-
-.ingredient-select {
-    /* Takes 2 parts of the grid */
-}
-
-.quantity-input {
-    /* Takes 1 part of the grid */
-}
-
-.unit-select {
-    /* Takes 1.5 parts of the grid */
-}
-
-.remove-ingredient {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
 }
 
 .help-text {
@@ -183,12 +300,6 @@ textarea.form-control {
     resize: vertical;
     font-family: inherit;
     max-width: 100%;
-}
-
-#instructions {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
 }
 
 /* Image Upload Section */
@@ -322,71 +433,120 @@ textarea.form-control {
     transition: all 0.3s ease;
 }
 
-/* Recipe Form Tag Selection - Monochromatic */
-.tags-selection {
-    margin-top: 1rem;
+/* Override any potential hiding styles */
+.recipe-form .form-section,
+.form-container .form-section {
+    display: block !important;
+    visibility: visible !important;
 }
 
-.tags-selection label {
-    font-weight: 500;
-    color: #555;
-    margin-bottom: 1rem;
-    display: block;
+.recipe-form #ingredients-container,
+.recipe-form .tags-selection,
+.recipe-form #instructions {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
-.tags-checkboxes {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 0.75rem;
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.7);
-    border-radius: 10px;
-    border: 2px solid rgba(255, 107, 107, 0.1);
+/* Specific overrides for edit mode */
+body:has(.recipe-form) .form-section {
+    display: block !important;
 }
 
-.tag-checkbox {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px;
-    border-radius: 8px;
-    transition: background-color 0.2s ease;
-    cursor: pointer;
+/* Remove any transforms or animations that might hide content */
+.form-section *,
+.ingredient-row *,
+.tag-checkbox * {
+    transform: none !important;
+    animation: none !important;
 }
 
-.tag-checkbox:hover {
-    background: rgba(255, 107, 107, 0.05);
+/* Mobile responsive fixes */
+@media (max-width: 768px) {
+    .form-container {
+        padding: 1rem;
+        margin: 0.5rem;
+    }
+    
+    .form-grid {
+        grid-template-columns: 1fr;
+        max-width: 100%;
+    }
+    
+    .ingredient-row {
+        grid-template-columns: 1fr !important;
+        gap: 8px !important;
+        max-width: 100% !important;
+    }
+    
+    .ingredient-select,
+    .quantity-input,
+    .unit-select {
+        width: 100% !important;
+    }
+    
+    .form-actions {
+        flex-direction: column;
+        max-width: 100%;
+    }
+    
+    /* Images */
+    .image-gallery {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .recipe-image-preview {
+        height: 120px;
+    }
+    
+    .image-preview-container {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+    
+    .tags-checkboxes {
+        grid-template-columns: 1fr !important;
+        max-height: 150px !important;
+    }
+    
+    /* Ensure all sections remain visible on mobile */
+    .form-section {
+        display: block !important;
+        visibility: visible !important;
+        padding: 1rem !important;
+    }
+    
+    #ingredients-container,
+    .tags-selection,
+    #instructions {
+        display: block !important;
+        visibility: visible !important;
+    }
 }
 
-.tag-checkbox input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
+/* Print styles override */
+@media print {
+    .form-section {
+        display: block !important;
+        visibility: visible !important;
+    }
 }
 
-.tag-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    flex-grow: 1;
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .form-container,
+    .form-section {
+        border: 2px solid #333;
+    }
 }
 
-.tag-checkbox-preview {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.2);
-    min-width: 60px;
-    text-align: center;
-}
-
-.tag-checkbox-name {
-    font-size: 0.9rem;
-    color: #333;
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .form-section *,
+    .ingredient-row *,
+    .tag-checkbox * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
