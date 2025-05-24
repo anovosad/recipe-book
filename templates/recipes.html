@@ -37,8 +37,6 @@
     </div>
 </div>
 
-
-
 <!-- Tag Filter Section -->
 {{if .Tags}}
     <div class="filter-section">
@@ -53,14 +51,10 @@
         <div class="tag-filters">
             {{range .Tags}}
                 {{$isActive := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
-                <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                <a href="{{if $isActive}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
                    class="tag-filter {{if $isActive}}active{{end}}" 
-                   
                    title="{{if $isActive}}Currently filtering by {{.Name}} - click to remove filter{{else}}Filter recipes by {{.Name}}{{end}}">
                     {{.Name}}
-                    {{if $isActive}}
-                        <i class="fas fa-check" style="margin-left: 5px;"></i>
-                    {{end}}
                 </a>
             {{end}}
         </div>
@@ -89,14 +83,10 @@
                     <div class="recipe-tags-compact">
                         {{range .Tags}}
                             {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
-                            <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                            <a href="{{if $isActiveTag}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
                                class="recipe-tag {{if $isActiveTag}}recipe-tag-active{{end}}" 
-                               
-                               title="Filter by {{.Name}}">
+                               title="{{if $isActiveTag}}Remove {{.Name}} filter{{else}}Filter by {{.Name}}{{end}}">
                                 {{.Name}}
-                                {{if $isActiveTag}}
-                                    <i class="fas fa-star" style="margin-left: 3px; font-size: 0.7em;"></i>
-                                {{end}}
                             </a>
                         {{end}}
                     </div>
@@ -131,14 +121,10 @@
                         <div class="recipe-tags-compact">
                             {{range .Tags}}
                                 {{$isActiveTag := and $.ActiveTagID (eq .ID $.ActiveTagID)}}
-                                <a href="/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}" 
+                                <a href="{{if $isActiveTag}}/recipes{{if $.SearchQuery}}?search={{$.SearchQuery}}{{end}}{{else}}/recipes?tag={{.ID}}{{if $.SearchQuery}}&search={{$.SearchQuery}}{{end}}{{end}}" 
                                    class="recipe-tag {{if $isActiveTag}}recipe-tag-active{{end}}" 
-                                   
-                                   title="Filter by {{.Name}}">
+                                   title="{{if $isActiveTag}}Remove {{.Name}} filter{{else}}Filter by {{.Name}}{{end}}">
                                     {{.Name}}
-                                    {{if $isActiveTag}}
-                                        <i class="fas fa-star" style="margin-left: 3px; font-size: 0.7em;"></i>
-                                    {{end}}
                                 </a>
                             {{end}}
                         </div>
@@ -224,22 +210,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Enhanced tag filter interactions
+// Enhanced tag filter interactions with smooth transitions
 document.addEventListener('DOMContentLoaded', function() {
     // Add click handlers for tag filters to show loading state
-    const tagFilters = document.querySelectorAll('.tag-filter');
+    const tagFilters = document.querySelectorAll('.tag-filter, .recipe-tag');
     tagFilters.forEach(filter => {
         filter.addEventListener('click', function(e) {
-            if (!this.classList.contains('active')) {
-                // Show loading state for new filter selection
-                const originalContent = this.innerHTML;
-                this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + this.textContent.trim();
-                
-                // Let the navigation happen naturally
-                setTimeout(() => {
-                    this.innerHTML = originalContent;
-                }, 1000);
-            }
+            // Show loading state
+            const originalContent = this.innerHTML;
+            this.style.opacity = '0.7';
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + this.textContent.trim();
+            
+            // Let the navigation happen naturally, but restore content if it fails
+            setTimeout(() => {
+                this.innerHTML = originalContent;
+                this.style.opacity = '1';
+            }, 2000);
         });
     });
 });
