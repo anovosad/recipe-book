@@ -39,19 +39,6 @@
         </div>
     {{end}}
     
-    {{if .Recipe.Tags}}
-        <div class="recipe-tags-section">
-            <h3><i class="fas fa-tags"></i> Categories</h3>
-            <div class="recipe-tags">
-                {{range .Recipe.Tags}}
-                    <a href="/recipes?tag={{.ID}}" class="recipe-tag" title="View all {{.Name}} recipes">
-                        {{.Name}}
-                    </a>
-                {{end}}
-            </div>
-        </div>
-    {{end}}
-    
     <div class="recipe-meta-section">
         <div class="meta-grid">
             <div class="meta-item">
@@ -113,6 +100,19 @@
                 </ul>
             {{else}}
                 <p class="no-ingredients">No ingredients specified</p>
+            {{end}}
+            
+            {{if .Recipe.Tags}}
+                <div class="recipe-tags-compact">
+                    <h4><i class="fas fa-tags"></i> Categories</h4>
+                    <div class="recipe-tags">
+                        {{range .Recipe.Tags}}
+                            <a href="/recipes?tag={{.ID}}" class="recipe-tag" title="View all {{.Name}} recipes">
+                                {{.Name}}
+                            </a>
+                        {{end}}
+                    </div>
+                </div>
             {{end}}
         </div>
         

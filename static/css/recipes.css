@@ -497,3 +497,176 @@
 .image-modal-close:hover {
     background: rgba(255, 107, 107, 0.8);
 }
+
+/* Add this to your existing CSS files - preferably in static/css/recipes.css */
+
+/* Compact Recipe Tags in Single Recipe View */
+.recipe-tags-compact {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid rgba(255, 107, 107, 0.1);
+}
+
+.recipe-tags-compact h4 {
+    color: #333;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.recipe-tags-compact .recipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.recipe-tags-compact .recipe-tag {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.recipe-tags-compact .recipe-tag:hover {
+    transform: translateY(-1px);
+    background: #ff6b6b;
+    color: white;
+    border-color: #ff6b6b;
+    box-shadow: 0 3px 8px rgba(255, 107, 107, 0.3);
+    text-decoration: none;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .recipe-tags-compact {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+    }
+    
+    .recipe-tags-compact h4 {
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .recipe-tags-compact .recipe-tag {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+        border-radius: 12px;
+    }
+}
+
+/* Add this to your existing CSS files - preferably in static/css/recipes.css */
+
+/* Single Recipe View Spacing Improvements - Only affects recipe.html */
+.recipe-view .recipe-header {
+    margin-bottom: 1.5rem;
+}
+
+.recipe-view .recipe-description {
+    margin-bottom: 2rem;
+    padding-top: 0.5rem;
+}
+
+.recipe-view .recipe-description p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: #666;
+    margin: 0;
+    font-style: italic;
+}
+
+.recipe-view .recipe-meta-section {
+    margin-bottom: 2.5rem;
+}
+
+/* Compact Recipe Tags in Single Recipe View */
+.recipe-tags-compact {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid rgba(255, 107, 107, 0.1);
+}
+
+.recipe-tags-compact h4 {
+    color: #333;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+}
+
+.recipe-tags-compact .recipe-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.recipe-tags-compact .recipe-tag {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+}
+
+.recipe-tags-compact .recipe-tag:hover {
+    transform: translateY(-1px);
+    background: #ff6b6b;
+    color: white;
+    border-color: #ff6b6b;
+    box-shadow: 0 3px 8px rgba(255, 107, 107, 0.3);
+    text-decoration: none;
+}
+
+/* Responsive adjustments - Only for single recipe view */
+@media (max-width: 768px) {
+    .recipe-view .recipe-header {
+        margin-bottom: 1rem;
+    }
+    
+    .recipe-view .recipe-description {
+        margin-bottom: 1.5rem;
+        padding-top: 0.25rem;
+    }
+    
+    .recipe-view .recipe-description p {
+        font-size: 1rem;
+    }
+    
+    .recipe-view .recipe-meta-section {
+        margin-bottom: 2rem;
+    }
+    
+    .recipe-tags-compact {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+    }
+    
+    .recipe-tags-compact h4 {
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .recipe-tags-compact .recipe-tag {
+        padding: 4px 10px;
+        font-size: 0.8rem;
+        border-radius: 12px;
+    }
+}
