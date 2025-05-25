@@ -13,7 +13,9 @@
         {{range .Ingredients}}
             <div class="ingredient-card compact">
                 <div class="ingredient-content">
-                    <span class="ingredient-name">{{.Name}}</span>
+                    <a href="/recipes?search={{.Name}}" class="tag-name" title="Find recipes using {{.Name}}">
+                        {{.Name}}
+                    </a>
                     {{if $.IsLoggedIn}}
                         <button onclick="deleteIngredient({{.ID}}, '{{.Name}}')" class="btn-delete" title="Delete {{.Name}}">
                             <i class="fas fa-trash"></i>
@@ -84,6 +86,20 @@ function deleteIngredient(id, name) {
         }
     }
 }
+
+// Add click tracking for analytics (optional)
+document.addEventListener('DOMContentLoaded', function() {
+    const ingredientLinks = document.querySelectorAll('.tag-name');
+    ingredientLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            // Add visual feedback
+            this.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+                this.style.transform = '';
+            }, 150);
+        });
+    });
+});
 </script>
 {{end}}
 

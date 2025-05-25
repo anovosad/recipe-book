@@ -63,10 +63,6 @@
     text-decoration: none;
 }
 
-.tag-card.compact .tag-name {
-    font-size: 0.95rem;
-    font-weight: 500;
-}
 
 /* Delete Button Styling - Same as ingredients */
 .tag-card .btn-delete {
