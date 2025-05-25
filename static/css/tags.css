@@ -3,8 +3,13 @@
 /* Tag Management Grid */
 .tags-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1rem;
+}
+
+.tags-grid.compact {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
 }
 
 .tag-card {
@@ -14,53 +19,78 @@
     transition: all 0.3s ease;
     border: 1px solid rgba(255, 255, 255, 0.18);
     backdrop-filter: blur(10px);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    box-shadow: 0 4px 15px rgba(31, 38, 135, 0.2);
+}
+
+.tag-card.compact {
+    border-radius: 10px;
+    padding: 1rem;
 }
 
 .tag-card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-3px);
     box-shadow: 0 8px 25px rgba(31, 38, 135, 0.3);
 }
 
-.tag-info {
-    flex-grow: 1;
+.tag-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(31, 38, 135, 0.25);
 }
 
-.tag-preview {
-    display: inline-block;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: 500;
-    font-size: 0.9rem;
-    background: #f8f9fa;
-    color: #495057;
-    border: 2px solid #dee2e6;
-    margin-bottom: 0.75rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.tag-usage {
-    margin-top: 0.5rem;
-}
-
-.view-recipes-link {
-    color: #666;
-    text-decoration: none;
-    font-size: 0.85rem;
+/* Tag Content Layout */
+.tag-content {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 5px;
+    gap: 12px;
+}
+
+.tag-name {
+    color: #333;
+    font-size: 1rem;
+    font-weight: 600;
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
     transition: color 0.3s ease;
 }
 
-.view-recipes-link:hover {
+.tag-name:hover {
     color: #ff6b6b;
+    text-decoration: none;
 }
 
-.tag-actions {
+.tag-card.compact .tag-name {
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+/* Delete Button Styling - Same as ingredients */
+.tag-card .btn-delete {
+    background: none;
+    border: none;
+    color: #ff4757;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
     flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.tag-card .btn-delete:hover {
+    background: rgba(255, 71, 87, 0.1);
+    color: #ff3742;
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.tag-card:hover .btn-delete {
+    opacity: 1;
 }
 
 /* Recipe Tags Display */
@@ -68,7 +98,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin: 0.25rem 0 1.5rem 0;
+    margin: 0.25rem 0 0.5rem 0;
     padding: 0;
 }
 
@@ -219,4 +249,63 @@
     padding: 8px 16px;
     font-size: 0.9rem;
     border-radius: 20px;
+}
+
+/* Responsive adjustments for compact design */
+@media (max-width: 768px) {
+    .tags-grid {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .tags-grid.compact {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .tag-card {
+        padding: 1rem;
+    }
+    
+    .tag-card.compact {
+        padding: 0.75rem;
+    }
+    
+    .tag-content {
+        gap: 8px;
+    }
+    
+    .tag-name {
+        font-size: 0.95rem;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .tags-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+    
+    .tags-grid.compact {
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .tags-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.25rem;
+    }
+    
+    .tags-grid.compact {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1rem;
+    }
+    
+    .tag-card {
+        padding: 1.75rem;
+    }
+    
+    .tag-name {
+        font-size: 1.1rem;
+    }
 }

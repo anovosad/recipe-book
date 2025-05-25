@@ -9,26 +9,17 @@
 </div>
 
 {{if .Tags}}
-    <div class="tags-grid">
+    <div class="tags-grid compact">
         {{range .Tags}}
-            <div class="tag-card">
-                <div class="tag-info">
-                    <div class="tag-preview" >
-                        <span class="tag-name">{{.Name}}</span>
-                    </div>
-                    <div class="tag-usage">
-                        <a href="/recipes?tag={{.ID}}" class="view-recipes-link">
-                            <i class="fas fa-utensils"></i> View Recipes
-                        </a>
-                    </div>
-                </div>
-                {{if $.IsLoggedIn}}
-                    <div class="tag-actions">
-                        <button onclick="deleteTag({{.ID}}, '{{.Name}}')" class="btn btn-danger btn-sm" title="Delete {{.Name}}">
+            <div class="tag-card compact">
+                <div class="tag-content">
+                    <a href="/recipes?tag={{.ID}}" class="tag-name" title="View all {{.Name}} recipes">{{.Name}}</a>
+                    {{if $.IsLoggedIn}}
+                        <button onclick="deleteTag({{.ID}}, '{{.Name}}')" class="btn-delete" title="Delete {{.Name}}">
                             <i class="fas fa-trash"></i>
                         </button>
-                    </div>
-                {{end}}
+                    {{end}}
+                </div>
             </div>
         {{end}}
     </div>
