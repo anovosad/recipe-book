@@ -1,5 +1,6 @@
 /* base.css - Core styles, resets, and global settings */
 
+/* Reset and Base Styles */
 * {
     margin: 0;
     padding: 0;
@@ -14,77 +15,111 @@ body {
     min-height: 100vh;
 }
 
+/* Container and Layout */
 .container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
 }
 
-/* Input and form element fixes */
+/* Form Element Standardization */
 input[type="text"],
 input[type="number"],
 input[type="email"],
 input[type="password"],
 input[type="file"],
+input[type="color"],
 select,
 textarea {
     box-sizing: border-box;
     max-width: 100%;
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
 }
 
 /* Utility Classes */
-.text-center {
-    text-align: center;
+.text-center { text-align: center; }
+.flex { display: flex; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+.flex-center { display: flex; justify-content: center; align-items: center; }
+.gap-1 { gap: 0.5rem; }
+.gap-2 { gap: 1rem; }
+.gap-3 { gap: 1.5rem; }
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+
+/* Add these utility classes to base.css */
+
+/* Additional Utilities */
+.hidden {
+    display: none !important;
 }
 
-.flex {
-    display: flex;
+.visible {
+    display: block !important;
 }
 
-.flex-between {
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+/* Form specific utilities */
+.hidden-checkbox {
+    display: none;
+}
+
+.instructions-textarea {
+    min-height: 360px !important;
+}
+
+/* Content specific styling */
+.ingredient-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
 }
 
-.flex-center {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+.ingredient-name {
+    color: #333;
+    font-size: 0.95rem;
+    font-weight: 500;
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.gap-1 {
-    gap: 0.5rem;
+/* Alternating row colors */
+.recipe-item-compact:nth-child(even) {
+    background: rgba(255, 107, 107, 0.02);
 }
 
-.gap-2 {
-    gap: 1rem;
-}
-
-.gap-3 {
-    gap: 1.5rem;
-}
-
-.mb-1 {
-    margin-bottom: 0.5rem;
-}
-
-.mb-2 {
-    margin-bottom: 1rem;
-}
-
-.mb-3 {
-    margin-bottom: 1.5rem;
-}
-
-.mt-1 {
-    margin-top: 0.5rem;
-}
-
-.mt-2 {
-    margin-top: 1rem;
-}
-
-.mt-3 {
-    margin-top: 1.5rem;
+.recipe-item-compact:nth-child(even):hover {
+    background: rgba(255, 107, 107, 0.08);
 }

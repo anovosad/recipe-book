@@ -106,23 +106,13 @@
                         <option value="muffins">Muffins</option>
                         <option value="pancakes">Pancakes</option>
                     </select>
-                    <script>
-                        // Set the selected value via JavaScript to avoid template syntax issues
-                        document.addEventListener('DOMContentLoaded', function() {
-                            const servingUnitSelect = document.getElementById('serving_unit');
-                            const currentValue = '{{if .Recipe}}{{.Recipe.ServingUnit}}{{else}}people{{end}}';
-                            if (servingUnitSelect && currentValue) {
-                                servingUnitSelect.value = currentValue;
-                            }
-                        });
-                    </script>
                 </div>
             </div>
         </div>
         
         <div class="form-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h3 style="margin: 0;">Ingredients</h3>
+            <div class="flex-between mb-3">
+                <h3>Ingredients</h3>
                 <button type="button" id="add-new-ingredient-btn" class="btn btn-secondary btn-sm">
                     <i class="fas fa-plus-circle"></i> Add New Ingredient
                 </button>
@@ -190,7 +180,7 @@
                         <button type="button" class="tag-filter" data-tag-id="{{.ID}}" data-tag-name="{{.Name}}">
                             {{.Name}}
                         </button>
-                        <input type="checkbox" id="tag_{{.ID}}" name="tags" value="{{.ID}}" style="display: none;"
+                        <input type="checkbox" id="tag_{{.ID}}" name="tags" value="{{.ID}}" class="hidden-checkbox"
                                {{if $.Recipe}}
                                    {{$currentTagID := .ID}}
                                    {{range $.Recipe.Tags}}
@@ -211,7 +201,7 @@
             
             <div class="form-group">
                 <label for="instructions">Cooking Instructions *</label>
-                <textarea id="instructions" name="instructions" class="form-control" rows="22" 
+                <textarea id="instructions" name="instructions" class="form-control instructions-textarea" rows="22" 
                           placeholder="Step-by-step cooking instructions" required>{{if .Recipe}}{{.Recipe.Instructions}}{{end}}</textarea>
             </div>
         </div>
@@ -229,7 +219,7 @@
 </div>
 
 <!-- New Ingredient Modal -->
-<div id="ingredient-modal" class="modal" style="display: none;">
+<div id="ingredient-modal" class="modal hidden">
     <div class="modal-content">
         <div class="modal-header">
             <h3><i class="fas fa-plus-circle"></i> Add New Ingredient</h3>
@@ -312,35 +302,12 @@
             });
         });
         
-        // Ensure all form sections are visible (failsafe)
-        const formSections = document.querySelectorAll('.form-section');
-        formSections.forEach(section => {
-            section.style.display = 'block';
-            section.style.visibility = 'visible';
-            section.style.opacity = '1';
-        });
-        
-        // Specific visibility checks
-        const ingredientsContainer = document.getElementById('ingredients-container');
-        const tagsSelection = document.querySelector('.tags-selection');
-        const instructionsTextarea = document.getElementById('instructions');
-        
-        if (ingredientsContainer) {
-            ingredientsContainer.style.display = 'block';
-            ingredientsContainer.style.visibility = 'visible';
+        // Set serving unit value
+        const servingUnitSelect = document.getElementById('serving_unit');
+        const currentValue = '{{if .Recipe}}{{.Recipe.ServingUnit}}{{else}}people{{end}}';
+        if (servingUnitSelect && currentValue) {
+            servingUnitSelect.value = currentValue;
         }
-        
-        if (tagsSelection) {
-            tagsSelection.style.display = 'block';
-            tagsSelection.style.visibility = 'visible';
-        }
-        
-        if (instructionsTextarea) {
-            instructionsTextarea.style.display = 'block';
-            instructionsTextarea.style.visibility = 'visible';
-        }
-        
-        console.log('Form sections initialized and visibility ensured');
     });
     
     document.getElementById('add-ingredient').addEventListener('click', function() {
@@ -358,12 +325,16 @@
     });
     
     function openIngredientModal() {
-        document.getElementById('ingredient-modal').style.display = 'flex';
+        const modal = document.getElementById('ingredient-modal');
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
         document.getElementById('new-ingredient-name').focus();
     }
     
     function closeIngredientModal() {
-        document.getElementById('ingredient-modal').style.display = 'none';
+        const modal = document.getElementById('ingredient-modal');
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
         document.getElementById('new-ingredient-name').value = '';
     }
     
@@ -473,7 +444,7 @@
     
     // Close modal with Escape key
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && document.getElementById('ingredient-modal').style.display === 'flex') {
+        if (e.key === 'Escape' && !document.getElementById('ingredient-modal').classList.contains('hidden')) {
             closeIngredientModal();
         }
     });
@@ -605,12 +576,6 @@
     <title>{{.Title}} - Recipe Book</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/static/style.css" rel="stylesheet">
-    <style>
-        /* Make instructions textarea taller */
-        #instructions {
-            min-height: 360px !important;
-        }
-    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -642,7 +607,7 @@
                         <span class="username">
                             <i class="fas fa-user"></i> {{.User.Username}}
                         </span>
-                        <form action="/api/logout" method="POST" style="display: inline;">
+                        <form action="/api/logout" method="POST">
                             <button type="submit" class="btn btn-secondary">
                                 <i class="fas fa-sign-out-alt"></i> Logout
                             </button>

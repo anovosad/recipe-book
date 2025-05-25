@@ -1,11 +1,11 @@
-/* forms.css - Form styling and components with visibility fixes */
+/* forms.css - Streamlined form styles without duplicates */
 
-/* Auth Pages */
+/* Auth Forms */
 .auth-container {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 60vh;  
+    min-height: 60vh;
 }
 
 .auth-card {
@@ -46,37 +46,7 @@
     text-decoration: underline;
 }
 
-/* Forms */
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: #555;
-}
-
-.form-control {
-    width: 100%;
-    padding: 12px 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 10px;
-    font-size: 1rem;
-    transition: all 0.3s ease;
-    background: rgba(255, 255, 255, 0.9);
-    box-sizing: border-box;
-    max-width: 100%;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: #ff6b6b;
-    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
-}
-
-/* Forms - Enhanced and Fixed */
+/* Form Structure */
 .form-container {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
@@ -100,167 +70,45 @@
     gap: 15px;
 }
 
-/* CRITICAL VISIBILITY FIXES FOR RECIPE FORM */
 .form-section {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    height: auto !important;
-    overflow: visible !important;
-    margin-bottom: 2rem !important;
-    padding: 1.5rem !important;
-    background: rgba(255, 255, 255, 0.5) !important;
-    border-radius: 15px !important;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 15px;
 }
 
 .form-section h3 {
-    color: #333 !important;
-    margin-bottom: 1.5rem !important;
-    padding-bottom: 0.5rem !important;
-    border-bottom: 2px solid rgba(255, 107, 107, 0.1) !important;
-    display: block !important;
-    visibility: visible !important;
+    color: #333;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(255, 107, 107, 0.1);
 }
 
-/* Ensure ingredients container is always visible */
-#ingredients-container {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    margin-bottom: 1rem !important;
-}
-
-/* Force ingredient rows to be visible */
-.ingredient-row {
-    display: grid !important;
-    grid-template-columns: 2fr 1fr 1.5fr auto !important;
-    gap: 10px !important;
-    margin-bottom: 1rem !important;
-    align-items: end !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    max-width: 800px !important;
-}
-
-.ingredient-select,
-.quantity-input,
-.unit-select {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.remove-ingredient {
-    width: 40px !important;
-    height: 40px !important;
-    border-radius: 50% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-shrink: 0 !important;
-    visibility: visible !important;
-}
-
-/* Ensure tags section is always visible */
-.tags-selection {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    margin-top: 1rem !important;
-}
-
-.tags-selection label {
-    font-weight: 500 !important;
-    color: #555 !important;
-    margin-bottom: 1rem !important;
-    display: block !important;
-}
-
-.tags-checkboxes {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
-    gap: 0.75rem !important;
-    max-height: 200px !important;
-    overflow-y: auto !important;
-    padding: 1rem !important;
-    background: rgba(255, 255, 255, 0.7) !important;
-    border-radius: 10px !important;
-    border: 2px solid rgba(255, 107, 107, 0.1) !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.tag-checkbox {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    padding: 6px !important;
-    border-radius: 8px !important;
-    transition: background-color 0.2s ease !important;
-    cursor: pointer !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-.tag-checkbox:hover {
-    background: rgba(255, 107, 107, 0.05) !important;
-}
-
-.tag-checkbox input[type="checkbox"] {
-    margin: 0 !important;
-    cursor: pointer !important;
-    display: block !important;
-    visibility: visible !important;
-}
-
-.tag-checkbox-label {
-    display: flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    cursor: pointer !important;
-    flex-grow: 1 !important;
-    visibility: visible !important;
-}
-
-.tag-checkbox-preview {
-    display: inline-block !important;
-    padding: 2px 8px !important;
-    border-radius: 10px !important;
-    font-size: 0.75rem !important;
-    font-weight: 500 !important;
-    background: rgba(255, 107, 107, 0.1) !important;
-    color: #ff6b6b !important;
-    border: 1px solid rgba(255, 107, 107, 0.2) !important;
-    min-width: 60px !important;
-    text-align: center !important;
-    visibility: visible !important;
-}
-
-.tag-checkbox-name {
-    font-size: 0.9rem !important;
-    color: #333 !important;
-    visibility: visible !important;
-}
-
-/* Ensure instructions section is always visible */
-#instructions {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    min-height: 120px !important;
-    resize: vertical !important;
-    font-family: inherit !important;
-    box-sizing: border-box !important;
-}
-
-/* Force form groups to be visible */
 .form-group {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    margin-bottom: 1.5rem !important;
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #555;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
 }
 
 .form-grid {
@@ -279,6 +127,7 @@
     max-width: 800px;
 }
 
+/* Help Text */
 .help-text {
     background: rgba(255, 107, 107, 0.05);
     border: 1px solid rgba(255, 107, 107, 0.1);
@@ -294,7 +143,91 @@
     margin-right: 5px;
 }
 
-/* Textarea specific styling */
+/* Ingredient Rows */
+.ingredient-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.5fr auto;
+    gap: 10px;
+    margin-bottom: 1rem;
+    align-items: end;
+    max-width: 800px;
+}
+
+.ingredient-select,
+.quantity-input,
+.unit-select {
+    width: 100%;
+}
+
+.remove-ingredient {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+/* Tags Selection */
+.tags-selection {
+    margin-top: 1rem;
+}
+
+.tags-selection label {
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.tag-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tag-filter {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 18px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    background: #f8f9fa;
+    color: #495057;
+    border: 2px solid #dee2e6;
+}
+
+.tag-filter:hover {
+    transform: translateY(-1px);
+    background: #e9ecef;
+    border-color: #adb5bd;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    color: #495057;
+    text-decoration: none;
+}
+
+.tag-filter.active {
+    background: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+    color: white !important;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+}
+
+.tag-filter.active:hover {
+    background: #ff5252 !important;
+    border-color: #ff5252 !important;
+    color: white !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+}
+
+/* Textarea */
 textarea.form-control {
     min-height: 120px;
     resize: vertical;
@@ -302,7 +235,7 @@ textarea.form-control {
     max-width: 100%;
 }
 
-/* Image Upload Section */
+/* Image Upload */
 .image-upload-section {
     margin-top: 1rem;
 }
@@ -400,153 +333,4 @@ textarea.form-control {
     justify-content: center;
     padding: 0;
     font-size: 0.8rem;
-}
-
-/* Tag Form Styles - Monochromatic */
-.color-input-container {
-    display: none; /* Hide color picker since we're going monochromatic */
-}
-
-.color-input {
-    display: none; /* Hide color input */
-}
-
-.color-text-input {
-    display: none; /* Hide color text input */
-}
-
-.color-preview {
-    margin-top: 1rem;
-    text-align: center;
-}
-
-.tag-preview-sample {
-    display: inline-block;
-    padding: 10px 20px;
-    border-radius: 25px;
-    font-weight: 500;
-    font-size: 1rem;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-    border: 1px solid rgba(255, 107, 107, 0.3);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
-}
-
-/* Override any potential hiding styles */
-.recipe-form .form-section,
-.form-container .form-section {
-    display: block !important;
-    visibility: visible !important;
-}
-
-.recipe-form #ingredients-container,
-.recipe-form .tags-selection,
-.recipe-form #instructions {
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-
-/* Specific overrides for edit mode */
-body:has(.recipe-form) .form-section {
-    display: block !important;
-}
-
-/* Remove any transforms or animations that might hide content */
-.form-section *,
-.ingredient-row *,
-.tag-checkbox * {
-    transform: none !important;
-    animation: none !important;
-}
-
-/* Mobile responsive fixes */
-@media (max-width: 768px) {
-    .form-container {
-        padding: 1rem;
-        margin: 0.5rem;
-    }
-    
-    .form-grid {
-        grid-template-columns: 1fr;
-        max-width: 100%;
-    }
-    
-    .ingredient-row {
-        grid-template-columns: 1fr !important;
-        gap: 8px !important;
-        max-width: 100% !important;
-    }
-    
-    .ingredient-select,
-    .quantity-input,
-    .unit-select {
-        width: 100% !important;
-    }
-    
-    .form-actions {
-        flex-direction: column;
-        max-width: 100%;
-    }
-    
-    /* Images */
-    .image-gallery {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 0.75rem;
-    }
-    
-    .recipe-image-preview {
-        height: 120px;
-    }
-    
-    .image-preview-container {
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    }
-    
-    .tags-checkboxes {
-        grid-template-columns: 1fr !important;
-        max-height: 150px !important;
-    }
-    
-    /* Ensure all sections remain visible on mobile */
-    .form-section {
-        display: block !important;
-        visibility: visible !important;
-        padding: 1rem !important;
-    }
-    
-    #ingredients-container,
-    .tags-selection,
-    #instructions {
-        display: block !important;
-        visibility: visible !important;
-    }
-}
-
-/* Print styles override */
-@media print {
-    .form-section {
-        display: block !important;
-        visibility: visible !important;
-    }
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-    .form-container,
-    .form-section {
-        border: 2px solid #333;
-    }
-}
-
-/* Reduced motion support */
-@media (prefers-reduced-motion: reduce) {
-    .form-section *,
-    .ingredient-row *,
-    .tag-checkbox * {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-    }
 }

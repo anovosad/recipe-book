@@ -1,6 +1,6 @@
-/* tags.css - Tag system and filtering styles with improved readability */
+/* tags.css - Tag system styles */
 
-/* Tags Grid - Management */
+/* Tag Management Grid */
 .tags-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -41,10 +41,6 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.tag-name {
-    /* No text shadow needed for better readability */
-}
-
 .tag-usage {
     margin-top: 0.5rem;
 }
@@ -67,13 +63,13 @@
     flex-shrink: 0;
 }
 
-/* Recipe Tags Display - Improved Readability */
+/* Recipe Tags Display */
 .recipe-tags {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    margin: 0.25rem 0 1.5rem 0; /* Reduced top margin from 0.5rem to 0.25rem */
-    padding: 0; /* Removed padding */
+    margin: 0.25rem 0 1.5rem 0;
+    padding: 0;
 }
 
 .recipe-tag {
@@ -85,8 +81,6 @@
     text-decoration: none;
     transition: all 0.3s ease;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    
-    /* High contrast, readable colors */
     background: #f8f9fa;
     color: #495057;
     border: 2px solid #dee2e6;
@@ -101,8 +95,26 @@
     text-decoration: none;
 }
 
-/* Tag Filter Section - Improved Contrast */
-.filter-section {
+/* Active Tags */
+.recipe-tag-active {
+    background: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+    color: white !important;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
+}
+
+.recipe-tag-active:hover {
+    background: #ff5252 !important;
+    border-color: #ff5252 !important;
+    color: white !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+}
+
+/* Filter Section */
+.filter-section,
+.filter-section-inline {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     border-radius: 15px;
@@ -130,90 +142,6 @@
 .clear-filters {
     font-size: 0.85rem;
     padding: 4px 8px;
-}
-
-.tag-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.tag-filter {
-    display: inline-block;
-    padding: 6px 14px;
-    border-radius: 18px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    text-decoration: none;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    transition: all 0.3s ease;
-    cursor: pointer;
-    
-    /* High contrast default state */
-    background: #f8f9fa;
-    color: #495057;
-    border: 2px solid #dee2e6;
-}
-
-.tag-filter:hover {
-    transform: translateY(-1px);
-    background: #e9ecef;
-    border-color: #adb5bd;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    color: #495057;
-    text-decoration: none;
-}
-
-/* Active tag highlighting - better contrast */
-.tag-filter.active {
-    background: #ff6b6b !important;
-    border-color: #ff6b6b !important;
-    color: white !important;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-}
-
-.tag-filter.active:hover {
-    background: #ff5252 !important;
-    border-color: #ff5252 !important;
-    color: white !important;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
-}
-
-/* Active recipe tags */
-.recipe-tag-active {
-    background: #ff6b6b !important;
-    border-color: #ff6b6b !important;
-    color: white !important;
-    font-weight: 600;
-    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-}
-
-.recipe-tag-active:hover {
-    background: #ff5252 !important;
-    border-color: #ff5252 !important;
-    color: white !important;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
-}
-
-/* Remove any pseudo-elements that might add symbols */
-.tag-filter.active::after,
-.recipe-tag-active::after {
-    display: none !important;
-    content: none !important;
-}
-
-/* Improved tag filter section when active */
-.filter-section:has(.tag-filter.active) {
-    border: 2px solid rgba(255, 107, 107, 0.4);
-    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.15);
-    background: rgba(255, 107, 107, 0.02);
-}
-
-/* Make clear filters button more prominent when there are active filters */
-.clear-filters {
     background: #ff6b6b !important;
     color: white !important;
     border: 2px solid #ff6b6b !important;
@@ -224,7 +152,14 @@
     border-color: #ff5252 !important;
 }
 
-/* Compact tags display for recipe cards */
+/* Active Filter Section */
+.filter-section:has(.tag-filter.active) {
+    border: 2px solid rgba(255, 107, 107, 0.4);
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.15);
+    background: rgba(255, 107, 107, 0.02);
+}
+
+/* Compact Tags */
 .recipe-tags-compact {
     display: flex;
     flex-wrap: wrap;
@@ -247,7 +182,7 @@
     border-color: #ff6b6b;
 }
 
-/* Tag count badges */
+/* Tag Count */
 .tag-count {
     background: #f8f9fa;
     color: #495057;
@@ -259,7 +194,7 @@
     border: 1px solid #dee2e6;
 }
 
-/* Recipe tags section for single recipe view */
+/* Recipe Tags Section */
 .recipe-tags-section {
     margin: 2rem 0;
     padding: 1.5rem;
@@ -287,36 +222,4 @@
     padding: 8px 16px;
     font-size: 0.9rem;
     border-radius: 20px;
-}
-
-/* Mobile responsiveness for tags */
-@media (max-width: 768px) {
-    .tags-grid {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-    
-    .tag-card {
-        padding: 1rem;
-    }
-    
-    .filter-header {
-        flex-direction: column;
-        gap: 1rem;
-        align-items: stretch;
-    }
-    
-    .tag-filters {
-        justify-content: center;
-    }
-    
-    .recipe-tags,
-    .recipe-tags-compact {
-        gap: 6px;
-    }
-    
-    .recipe-tag {
-        font-size: 0.8rem;
-        padding: 4px 10px;
-    }
 }
