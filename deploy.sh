@@ -256,7 +256,7 @@ validate_config() {
     done
     
     # Validate docker-compose.yml
-    if ! docker-compose config > /dev/null 2>&1; then
+    if ! docker compose config > /dev/null 2>&1; then
         echo -e "${RED}❌ Invalid docker-compose.yml${NC}"
         exit 1
     fi
@@ -270,15 +270,15 @@ deploy() {
     
     # Stop existing containers
     echo -e "${YELLOW}⏹️  Stopping existing containers...${NC}"
-    docker-compose down --remove-orphans || true
+    docker compose down --remove-orphans || true
     
     # Build new images
     echo -e "${YELLOW}🔨 Building application...${NC}"
-    docker-compose build --no-cache
+    docker compose build --no-cache
     
     # Start services
     echo -e "${YELLOW}▶️  Starting services...${NC}"
-    docker-compose up -d
+    docker compose up -d
     
     # Wait for services to be ready
     echo -e "${YELLOW}⏳ Waiting for services to be ready...${NC}"
@@ -313,14 +313,14 @@ check_health() {
     
     echo -e "${RED}❌ Application health check failed${NC}"
     echo -e "${YELLOW}📋 Checking logs...${NC}"
-    docker-compose logs --tail=20
+    docker compose logs --tail=20
     return 1
 }
 
 # Show logs
 show_logs() {
     echo -e "${BLUE}📋 Application logs:${NC}"
-    docker-compose logs -f
+    docker compose logs -f
 }
 
 # Backup data
@@ -331,11 +331,11 @@ backup() {
     mkdir -p "$backup_dir"
     
     # Backup database
-    docker-compose exec -T recipe-app cp /data/recipes.db /tmp/backup.db 2>/dev/null || true
-    docker cp $(docker-compose ps -q recipe-app):/tmp/backup.db "$backup_dir/recipes.db" 2>/dev/null || true
+    docker compose exec -T recipe-app cp /data/recipes.db /tmp/backup.db 2>/dev/null || true
+    docker cp $(docker compose ps -q recipe-app):/tmp/backup.db "$backup_dir/recipes.db" 2>/dev/null || true
     
     # Backup uploads
-    docker cp $(docker-compose ps -q recipe-app):/app/uploads "$backup_dir/" 2>/dev/null || true
+    docker cp $(docker compose ps -q recipe-app):/app/uploads "$backup_dir/" 2>/dev/null || true
     
     # Backup configuration
     cp -r nginx "$backup_dir/"
@@ -357,20 +357,20 @@ restore() {
     echo -e "${BLUE}🔄 Restoring from backup: $backup_dir${NC}"
     
     # Stop services
-    docker-compose down
+    docker compose down
     
     # Restore database
     if [[ -f "$backup_dir/recipes.db" ]]; then
-        docker-compose run --rm -v "$backup_dir:/backup" recipe-app cp /backup/recipes.db /data/recipes.db
+        docker compose run --rm -v "$backup_dir:/backup" recipe-app cp /backup/recipes.db /data/recipes.db
     fi
     
     # Restore uploads
     if [[ -d "$backup_dir/uploads" ]]; then
-        docker-compose run --rm -v "$backup_dir:/backup" recipe-app cp -r /backup/uploads /app/
+        docker compose run --rm -v "$backup_dir:/backup" recipe-app cp -r /backup/uploads /app/
     fi
     
     # Start services
-    docker-compose up -d
+    docker compose up -d
     
     echo -e "${GREEN}✅ Restore completed${NC}"
 }
@@ -436,7 +436,7 @@ security_audit() {
     
     # Check Docker security
     echo -e "${YELLOW}📋 Checking Docker security...${NC}"
-    if docker-compose exec recipe-app whoami | grep -q root; then
+    if docker compose exec recipe-app whoami | grep -q root; then
         echo -e "${YELLOW}⚠️  Application is running as root - consider using non-root user${NC}"
     fi
     
@@ -455,7 +455,7 @@ monitor() {
         
         # Container status
         echo -e "${YELLOW}🐳 Container Status:${NC}"
-        docker-compose ps
+        docker compose ps
         echo
         
         # Resource usage
@@ -470,7 +470,7 @@ monitor() {
         
         # Recent logs
         echo -e "${YELLOW}📋 Recent Logs (last 5 lines):${NC}"
-        docker-compose logs --tail=5 recipe-app 2>/dev/null || echo "No logs available"
+        docker compose logs --tail=5 recipe-app 2>/dev/null || echo "No logs available"
         
         echo
         echo -e "${BLUE}Press Ctrl+C to exit monitoring${NC}"
@@ -525,17 +525,17 @@ main() {
             ;;
         "stop")
             echo -e "${YELLOW}⏹️  Stopping services...${NC}"
-            docker-compose down
+            docker compose down
             echo -e "${GREEN}✅ Services stopped${NC}"
             ;;
         "restart")
             echo -e "${YELLOW}🔄 Restarting services...${NC}"
-            docker-compose restart
+            docker compose restart
             echo -e "${GREEN}✅ Services restarted${NC}"
             ;;
         "status")
             echo -e "${BLUE}📋 Service Status:${NC}"
-            docker-compose ps
+            docker compose ps
             ;;
         *)
             echo -e "${BLUE}🍳 Recipe Book Deployment Script${NC}"

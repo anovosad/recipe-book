@@ -37,6 +37,8 @@ func InitDB() {
 		dbPath = "./recipes.db"
 	}
 
+	log.Print("Opening database at:", dbPath)
+
 	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)

@@ -33,6 +33,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -tags netgo \
     -o main .
 
+# Create necessary directories during the build stage
+RUN mkdir -p /app/data
+
 # Final stage - use distroless for security
 FROM gcr.io/distroless/static-debian12:nonroot
 
@@ -42,15 +45,13 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/main .
 
-# Copy templates and static files
+# Copy templates, static files, and pre-created directories
 COPY --from=builder /app/templates/ ./templates/
 COPY --from=builder /app/static/ ./static/
+COPY --from=builder --chown=nonroot:nonroot /app/data/ ./data/
 
-# Create necessary directories with proper permissions
+# Use non-root user
 USER nonroot:nonroot
-
-# Create data directory (will be mounted as volume)
-RUN mkdir -p /data
 
 # Expose port
 EXPOSE 8080
