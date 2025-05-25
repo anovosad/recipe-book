@@ -53,13 +53,10 @@
                 <a href="/ingredients" class="nav-link">
                     <i class="fas fa-leaf"></i> Ingredients
                 </a>
+                <a href="/tags" class="nav-link">
+                    <i class="fas fa-tags"></i> Tags
+                </a>
                 {{if .IsLoggedIn}}
-                    <a href="/recipe/new" class="nav-link">
-                        <i class="fas fa-plus"></i> Add Recipe
-                    </a>
-                    <a href="/ingredients/new" class="nav-link">
-                        <i class="fas fa-plus-circle"></i> Add Ingredient
-                    </a>
                     <div class="user-menu">
                         <span class="username">
                             <i class="fas fa-user"></i> {{.User.Username}}
