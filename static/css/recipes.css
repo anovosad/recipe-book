@@ -340,10 +340,6 @@
     margin-bottom: 0 !important;
 }
 
-.instructions-content br:first-child {
-    display: none !important;
-}
-
 .recipe-navigation {
     text-align: center;
     padding-top: 2rem;

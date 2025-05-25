@@ -395,24 +395,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Alternative approach - if the above doesn't work, try this more direct method
-document.addEventListener('DOMContentLoaded', function() {
-    const instructionsElements = document.querySelectorAll('.instructions-content');
-    instructionsElements.forEach(function(element) {
-        // Check if we need to add spacing between numbered steps
-        let html = element.innerHTML;
-        
-        // Add extra spacing after lines that end with a period and are followed by a number
-        // This catches patterns like "...step." followed by "2. Next step"
-        html = html.replace(/(\.\s*)<br\s*\/?>\s*(\d+\.)/gi, '$1<br><br>$2');
-        
-        // Remove leading breaks and whitespace
-        html = html.replace(/^(\s|<br\s*\/?>\s*)+/i, '');
-        
-        element.innerHTML = html;
-    });
-});
-
 function showIngredientUsageError(data) {
     const modal = createModal();
     modal.innerHTML = `
