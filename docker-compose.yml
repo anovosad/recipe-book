@@ -1,22 +1,112 @@
+# File: docker-compose.yml (Updated with Security)
 version: '3.8'
 
 services:
+  # Nginx reverse proxy for additional security
+  nginx:
+    image: nginx:alpine
+    container_name: recipe-book-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      - recipe-app
+    restart: unless-stopped
+    networks:
+      - recipe-network
+
+  # Main application
   recipe-app:
     build: .
-    ports:
-      - "8080:8080"
+    container_name: recipe-book-app
+    expose:
+      - "8080"
     volumes:
       - recipe_data:/data
+      - recipe_uploads:/app/uploads
     environment:
       - DB_PATH=/data/recipes.db
+      - ENVIRONMENT=production
+      - TRUSTED_PROXIES=nginx
     restart: unless-stopped
+    networks:
+      - recipe-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/recipes"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/search?q=test"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    # Security constraints
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Redis for rate limiting (optional - for distributed setups)
+  # redis:
+  #   image: redis:alpine
+  #   container_name: recipe-book-redis
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --save 900 1 --save 300 10 --save 60 10000 --maxmemory 128mb --maxmemory-policy allkeys-lru
+  #   restart: unless-stopped
+  #   networks:
+  #     - recipe-network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+  # Fail2ban for additional IP blocking (optional)
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: recipe-book-fail2ban
+    volumes:
+      - nginx_logs:/var/log/nginx:ro
+      - ./fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+      - ./fail2ban/filter.d:/etc/fail2ban/filter.d:ro
+    environment:
+      - TZ=UTC
+      - F2B_LOG_LEVEL=INFO
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
 
 volumes:
   recipe_data:
     driver: local
+  recipe_uploads:
+    driver: local
+  nginx_cache:
+    driver: local
+  nginx_logs:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  recipe-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

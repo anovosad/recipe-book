@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"recipe-book/models"
+	"recipe-book/utils"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -14,21 +16,151 @@ import (
 
 var DB *sql.DB
 
+var (
+	stmtGetUser          *sql.Stmt
+	stmtCreateUser       *sql.Stmt
+	stmtGetRecipeByID    *sql.Stmt
+	stmtSearchRecipes    *sql.Stmt
+	stmtCreateRecipe     *sql.Stmt
+	stmtUpdateRecipe     *sql.Stmt
+	stmtDeleteRecipe     *sql.Stmt
+	stmtCreateIngredient *sql.Stmt
+	stmtDeleteIngredient *sql.Stmt
+	stmtCreateTag        *sql.Stmt
+	stmtDeleteTag        *sql.Stmt
+)
+
 func InitDB() {
 	var err error
-	DB, err = sql.Open("sqlite", "./recipes.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "./recipes.db"
+	}
+
+	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
 
+	// Set connection pool settings for security
+	DB.SetMaxOpenConns(25)
+	DB.SetMaxIdleConns(25)
+	DB.SetConnMaxLifetime(0)
+
+	// Enable foreign keys and other security settings
+	_, err = DB.Exec(`
+		PRAGMA foreign_keys = ON;
+		PRAGMA journal_mode = WAL;
+		PRAGMA synchronous = NORMAL;
+		PRAGMA cache_size = 1000;
+		PRAGMA temp_store = memory;
+		PRAGMA mmap_size = 268435456;
+	`)
+	if err != nil {
+		log.Fatal("Failed to set database pragmas:", err)
+	}
+
 	migrateDatabase()
 	createTables()
+	prepareStatements()
 	insertDefaultIngredients()
 	insertDefaultTags()
 	os.MkdirAll("./uploads", 0755)
 	insertDefaultRecipes()
 
-	fmt.Println("✅ Database initialized successfully")
+	fmt.Println("✅ Database initialized successfully with security enhancements")
+}
+
+func prepareStatements() {
+	var err error
+
+	// User-related statements
+	stmtGetUser, err = DB.Prepare("SELECT id, username, email, password FROM users WHERE username = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtGetUser:", err)
+	}
+
+	stmtCreateUser, err = DB.Prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtCreateUser:", err)
+	}
+
+	// Recipe-related statements
+	stmtGetRecipeByID, err = DB.Prepare(`
+		SELECT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
+		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		FROM recipes r
+		JOIN users u ON r.created_by = u.id
+		WHERE r.id = ?
+	`)
+	if err != nil {
+		log.Fatal("Failed to prepare stmtGetRecipeByID:", err)
+	}
+
+	stmtSearchRecipes, err = DB.Prepare(`
+		SELECT DISTINCT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
+		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		FROM recipes r
+		JOIN users u ON r.created_by = u.id
+		LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+		LEFT JOIN ingredients i ON ri.ingredient_id = i.id
+		LEFT JOIN recipe_tags rt ON r.id = rt.recipe_id
+		LEFT JOIN tags t ON rt.tag_id = t.id
+		WHERE r.title LIKE ? 
+		   OR r.description LIKE ? 
+		   OR r.instructions LIKE ?
+		   OR i.name LIKE ?
+		   OR t.name LIKE ?
+		ORDER BY 
+		   CASE WHEN r.title LIKE ? THEN 0 ELSE 1 END,
+		   r.created_at DESC
+	`)
+	if err != nil {
+		log.Fatal("Failed to prepare stmtSearchRecipes:", err)
+	}
+
+	stmtCreateRecipe, err = DB.Prepare(`
+		INSERT INTO recipes (title, description, instructions, prep_time, cook_time, servings, serving_unit, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		log.Fatal("Failed to prepare stmtCreateRecipe:", err)
+	}
+
+	stmtUpdateRecipe, err = DB.Prepare(`
+		UPDATE recipes SET title = ?, description = ?, instructions = ?, 
+		prep_time = ?, cook_time = ?, servings = ?, serving_unit = ? WHERE id = ? AND created_by = ?
+	`)
+	if err != nil {
+		log.Fatal("Failed to prepare stmtUpdateRecipe:", err)
+	}
+
+	stmtDeleteRecipe, err = DB.Prepare("DELETE FROM recipes WHERE id = ? AND created_by = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtDeleteRecipe:", err)
+	}
+
+	// Ingredient statements
+	stmtCreateIngredient, err = DB.Prepare("INSERT INTO ingredients (name) VALUES (?)")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtCreateIngredient:", err)
+	}
+
+	stmtDeleteIngredient, err = DB.Prepare("DELETE FROM ingredients WHERE id = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtDeleteIngredient:", err)
+	}
+
+	// Tag statements
+	stmtCreateTag, err = DB.Prepare("INSERT INTO tags (name, color) VALUES (?, ?)")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtCreateTag:", err)
+	}
+
+	stmtDeleteTag, err = DB.Prepare("DELETE FROM tags WHERE id = ?")
+	if err != nil {
+		log.Fatal("Failed to prepare stmtDeleteTag:", err)
+	}
 }
 
 func migrateDatabase() {
@@ -46,46 +178,46 @@ func createTables() {
 	createTables := `
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		username TEXT UNIQUE NOT NULL,
-		email TEXT UNIQUE NOT NULL,
-		password TEXT NOT NULL,
+		username TEXT UNIQUE NOT NULL CHECK(length(username) >= 3 AND length(username) <= 30),
+		email TEXT UNIQUE NOT NULL CHECK(length(email) <= 254),
+		password TEXT NOT NULL CHECK(length(password) >= 6),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	
 	CREATE TABLE IF NOT EXISTS ingredients (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT UNIQUE NOT NULL
+		name TEXT UNIQUE NOT NULL CHECK(length(name) >= 1 AND length(name) <= 100)
 	);
 
 	CREATE TABLE IF NOT EXISTS tags (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT UNIQUE NOT NULL,
-		color TEXT DEFAULT '#ff6b6b',
+		name TEXT UNIQUE NOT NULL CHECK(length(name) >= 1 AND length(name) <= 50),
+		color TEXT DEFAULT '#ff6b6b' CHECK(length(color) = 7 AND color LIKE '#%'),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	
 	CREATE TABLE IF NOT EXISTS recipes (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		title TEXT NOT NULL,
-		description TEXT,
-		instructions TEXT NOT NULL,
-		prep_time INTEGER,
-		cook_time INTEGER,
-		servings INTEGER,
-		serving_unit TEXT DEFAULT 'people',
-		created_by INTEGER,
+		title TEXT NOT NULL CHECK(length(title) >= 1 AND length(title) <= 200),
+		description TEXT CHECK(length(description) <= 1000),
+		instructions TEXT NOT NULL CHECK(length(instructions) >= 1 AND length(instructions) <= 10000),
+		prep_time INTEGER CHECK(prep_time >= 0 AND prep_time <= 1440),
+		cook_time INTEGER CHECK(cook_time >= 0 AND cook_time <= 1440),
+		servings INTEGER CHECK(servings >= 1 AND servings <= 100),
+		serving_unit TEXT DEFAULT 'people' CHECK(length(serving_unit) <= 20),
+		created_by INTEGER NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (created_by) REFERENCES users (id)
+		FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
 	);
 	
 	CREATE TABLE IF NOT EXISTS recipe_ingredients (
 		recipe_id INTEGER,
 		ingredient_id INTEGER,
-		quantity REAL NOT NULL,
-		unit TEXT NOT NULL,
+		quantity REAL NOT NULL CHECK(quantity > 0 AND quantity <= 10000),
+		unit TEXT NOT NULL CHECK(length(unit) >= 1 AND length(unit) <= 20),
 		PRIMARY KEY (recipe_id, ingredient_id),
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
-		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id)
+		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
 	);
 
 	CREATE TABLE IF NOT EXISTS recipe_tags (
@@ -99,24 +231,30 @@ func createTables() {
 	CREATE TABLE IF NOT EXISTS recipe_images (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		recipe_id INTEGER NOT NULL,
-		filename TEXT NOT NULL,
-		caption TEXT,
+		filename TEXT NOT NULL CHECK(length(filename) <= 255),
+		caption TEXT CHECK(length(caption) <= 200),
 		display_order INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE
-	);`
+	);
+
+	-- Create indexes for better performance and security
+	CREATE INDEX IF NOT EXISTS idx_recipes_created_by ON recipes(created_by);
+	CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title);
+	CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
+	CREATE INDEX IF NOT EXISTS idx_recipe_tags_recipe_id ON recipe_tags(recipe_id);
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`
 
 	_, err := DB.Exec(createTables)
 	if err != nil {
 		log.Fatal("Failed to create tables:", err)
 	}
 
-	// Migrate existing recipes to have serving_unit
 	migrateServingUnits()
 }
 
 func migrateServingUnits() {
-	// Check if serving_unit column exists
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('recipes') WHERE name='serving_unit'").Scan(&count)
 	if err != nil || count == 0 {
@@ -139,7 +277,10 @@ func insertDefaultIngredients() {
 	}
 
 	for _, name := range defaultIngredients {
-		DB.Exec("INSERT OR IGNORE INTO ingredients (name) VALUES (?)", name)
+		// Validate each ingredient name before inserting
+		if validation := utils.ValidateIngredientName(name); validation.Valid {
+			DB.Exec("INSERT OR IGNORE INTO ingredients (name) VALUES (?)", name)
+		}
 	}
 }
 
@@ -166,7 +307,10 @@ func insertDefaultTags() {
 	}
 
 	for _, tag := range defaultTags {
-		DB.Exec("INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)", tag.Name, tag.Color)
+		// Validate each tag before inserting
+		if validation := utils.ValidateTagName(tag.Name); validation.Valid {
+			DB.Exec("INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)", tag.Name, tag.Color)
+		}
 	}
 }
 
@@ -391,6 +535,79 @@ func insertDefaultRecipes() {
 	fmt.Println("🎉 Default recipes loaded successfully!")
 }
 
+// Secure user creation with prepared statements
+func CreateUserSecure(username, email, hashedPassword string) error {
+	// Validate inputs
+	if validation := utils.ValidateUsername(username); !validation.Valid {
+		return fmt.Errorf("invalid username: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateEmail(email); !validation.Valid {
+		return fmt.Errorf("invalid email: %s", validation.Message)
+	}
+
+	_, err := stmtCreateUser.Exec(username, email, hashedPassword)
+	return err
+}
+
+// Secure user lookup with prepared statements
+func GetUserByUsernameSecure(username string) (*models.User, string, error) {
+	// Validate username
+	if validation := utils.ValidateUsername(username); !validation.Valid {
+		return nil, "", fmt.Errorf("invalid username format")
+	}
+
+	var user models.User
+	var hashedPassword string
+
+	err := stmtGetUser.QueryRow(username).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return &user, hashedPassword, nil
+}
+
+// Secure recipe creation
+func CreateRecipeSecure(title, description, instructions string, prepTime, cookTime, servings int, servingUnit string, userID int) (int64, error) {
+	// Validate all inputs
+	if validation := utils.ValidateRecipeTitle(title); !validation.Valid {
+		return 0, fmt.Errorf("invalid title: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateRecipeDescription(description); !validation.Valid {
+		return 0, fmt.Errorf("invalid description: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateRecipeInstructions(instructions); !validation.Valid {
+		return 0, fmt.Errorf("invalid instructions: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateServingUnit(servingUnit); !validation.Valid {
+		return 0, fmt.Errorf("invalid serving unit: %s", validation.Message)
+	}
+
+	// Validate numeric inputs
+	if validation := utils.ValidateNumericInput(prepTime, 0, 1440, "Prep time"); !validation.Valid {
+		return 0, fmt.Errorf("invalid prep time: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateNumericInput(cookTime, 0, 1440, "Cook time"); !validation.Valid {
+		return 0, fmt.Errorf("invalid cook time: %s", validation.Message)
+	}
+
+	if validation := utils.ValidateNumericInput(servings, 1, 100, "Servings"); !validation.Valid {
+		return 0, fmt.Errorf("invalid servings: %s", validation.Message)
+	}
+
+	result, err := stmtCreateRecipe.Exec(title, description, instructions, prepTime, cookTime, servings, servingUnit, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	return result.LastInsertId()
+}
+
 // Database query functions
 func GetAllRecipes() ([]models.Recipe, error) {
 	rows, err := DB.Query(`
@@ -446,26 +663,15 @@ func GetRecipeByID(id int) (*models.Recipe, error) {
 	return &recipe, nil
 }
 
+// Secure recipe search
 func SearchRecipes(query string) ([]models.Recipe, error) {
-	rows, err := DB.Query(`
-		SELECT DISTINCT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
-		FROM recipes r
-		JOIN users u ON r.created_by = u.id
-		LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-		LEFT JOIN ingredients i ON ri.ingredient_id = i.id
-		LEFT JOIN recipe_tags rt ON r.id = rt.recipe_id
-		LEFT JOIN tags t ON rt.tag_id = t.id
-		WHERE r.title LIKE ? 
-		   OR r.description LIKE ? 
-		   OR r.instructions LIKE ?
-		   OR i.name LIKE ?
-		   OR t.name LIKE ?
-		ORDER BY 
-		   CASE WHEN r.title LIKE ? THEN 0 ELSE 1 END,
-		   r.created_at DESC
-	`, "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%", "%"+query+"%")
+	// Validate search query
+	if validation := utils.ValidateSearchQuery(query); !validation.Valid {
+		return nil, fmt.Errorf("invalid search query: %s", validation.Message)
+	}
 
+	searchPattern := "%" + query + "%"
+	rows, err := stmtSearchRecipes.Query(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
 	if err != nil {
 		return nil, err
 	}
@@ -495,6 +701,113 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 	}
 
 	return recipes, nil
+}
+
+// Secure ingredient creation
+func CreateIngredientSecure(name string) error {
+	// Validate ingredient name
+	if validation := utils.ValidateIngredientName(name); !validation.Valid {
+		return fmt.Errorf("invalid ingredient name: %s", validation.Message)
+	}
+
+	_, err := stmtCreateIngredient.Exec(name)
+	return err
+}
+
+// Secure tag creation
+func CreateTagSecure(name, color string) error {
+	// Validate tag name
+	if validation := utils.ValidateTagName(name); !validation.Valid {
+		return fmt.Errorf("invalid tag name: %s", validation.Message)
+	}
+
+	// Basic color validation
+	if color == "" || len(color) != 7 || !strings.HasPrefix(color, "#") {
+		color = "#ff6b6b"
+	}
+
+	_, err := stmtCreateTag.Exec(name, color)
+	return err
+}
+
+// Secure recipe deletion (with ownership check)
+func DeleteRecipeSecure(recipeID, userID int) error {
+	if !utils.IsValidID(recipeID) || !utils.IsValidID(userID) {
+		return fmt.Errorf("invalid recipe or user ID")
+	}
+
+	result, err := stmtDeleteRecipe.Exec(recipeID, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("recipe not found or access denied")
+	}
+
+	return nil
+}
+
+// Secure ingredient deletion (with usage check)
+func DeleteIngredientSecure(ingredientID int) error {
+	if !utils.IsValidID(ingredientID) {
+		return fmt.Errorf("invalid ingredient ID")
+	}
+
+	// Check if ingredient is used in any recipes
+	var recipeCount int
+	err := DB.QueryRow("SELECT COUNT(*) FROM recipe_ingredients WHERE ingredient_id = ?", ingredientID).Scan(&recipeCount)
+	if err != nil {
+		return err
+	}
+
+	if recipeCount > 0 {
+		return fmt.Errorf("ingredient is used in %d recipe(s) and cannot be deleted", recipeCount)
+	}
+
+	_, err = stmtDeleteIngredient.Exec(ingredientID)
+	return err
+}
+
+// Get recipe by ID with ownership validation
+func GetRecipeByIDSecure(id int) (*models.Recipe, error) {
+	if !utils.IsValidID(id) {
+		return nil, fmt.Errorf("invalid recipe ID")
+	}
+
+	var recipe models.Recipe
+	err := stmtGetRecipeByID.QueryRow(id).Scan(&recipe.ID, &recipe.Title, &recipe.Description,
+		&recipe.Instructions, &recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit,
+		&recipe.CreatedBy, &recipe.CreatedAt, &recipe.AuthorName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	recipe.Ingredients = GetRecipeIngredients(recipe.ID)
+	recipe.Images = GetRecipeImages(recipe.ID)
+	recipe.Tags = GetRecipeTags(recipe.ID)
+	return &recipe, nil
+}
+
+// Check if user owns recipe
+func UserOwnsRecipe(recipeID, userID int) (bool, error) {
+	if !utils.IsValidID(recipeID) || !utils.IsValidID(userID) {
+		return false, fmt.Errorf("invalid recipe or user ID")
+	}
+
+	var createdBy int
+	err := DB.QueryRow("SELECT created_by FROM recipes WHERE id = ?", recipeID).Scan(&createdBy)
+	if err != nil {
+		return false, err
+	}
+
+	return createdBy == userID, nil
 }
 
 func GetRecipesByTag(tagID int) ([]models.Recipe, error) {

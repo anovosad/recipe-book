@@ -464,3 +464,364 @@ For issues or questions:
 1. Check this README for common solutions
 2. Review the code comments for technical details
 3. Create an issue with detailed information about your problem
+
+# Recipe Book Application - Security Enhanced
+
+A secure, modern recipe management web application with comprehensive protection against DDOS attacks, SQL injection, and other security threats. Built with Go backend, server-side rendered HTML templates, and enterprise-grade security middleware.
+
+## 🔒 Security Features
+
+### Rate Limiting & DDOS Protection
+- **Login Attempts**: 5 attempts per 15 minutes per IP
+- **Registration**: 3 registrations per hour per IP  
+- **Search Requests**: 30 per minute per IP
+- **General Requests**: 100 per minute per IP
+- **Automatic IP blocking** for repeated violations (30-minute blocks)
+- **Nginx-level rate limiting** as additional protection layer
+
+### SQL Injection Protection
+- **Prepared statements** for all database operations
+- **Input validation** using comprehensive regex patterns
+- **Parameter sanitization** for all user inputs
+- **Database constraints** to prevent invalid data
+
+### Input Validation & Sanitization
+- **Username**: 3-30 chars, alphanumeric + underscore only
+- **Email**: Proper email format validation
+- **Passwords**: Minimum 6 chars with letter + number requirement
+- **Recipe content**: Length limits and dangerous character filtering
+- **File uploads**: Type validation, size limits (5MB), filename sanitization
+
+### Security Headers & Protection
+- **HSTS** (HTTP Strict Transport Security)
+- **X-Frame-Options**: DENY (prevents clickjacking)
+- **X-Content-Type-Options**: nosniff  
+- **X-XSS-Protection**: enabled with blocking
+- **Content Security Policy** with strict rules
+- **Referrer Policy**: strict-origin-when-cross-origin
+
+### Authentication & Authorization
+- **JWT tokens** with HTTP-only cookies
+- **Bcrypt password hashing** with proper cost factor
+- **Session management** with secure token generation
+- **User ownership validation** for all operations
+
+### Infrastructure Security
+- **Non-root containers** with distroless base images
+- **Resource limits** (CPU: 2 cores, Memory: 1GB)
+- **Read-only filesystem** where possible
+- **Security-first Docker configuration**
+- **Fail2ban integration** for automated IP blocking
+- **Comprehensive logging** of security events
+
+## 🚀 Quick Deployment
+
+### Prerequisites
+- Docker & Docker Compose
+- OpenSSL (for SSL certificate generation)
+- 2GB+ RAM recommended
+- Domain name (optional, works with localhost)
+
+### One-Command Deployment
+```bash
+# Clone the repository
+git clone <repository-url>
+cd recipe-book
+
+# Make deployment script executable
+chmod +x deploy.sh
+
+# Run complete setup and deployment
+./deploy.sh setup
+./deploy.sh deploy
+```
+
+### Manual Deployment Steps
+```bash
+# 1. Setup environment
+./deploy.sh setup
+
+# 2. Deploy application  
+./deploy.sh deploy
+
+# 3. Check status
+./deploy.sh status
+
+# 4. View logs
+./deploy.sh logs
+```
+
+## 📋 Deployment Script Commands
+
+```bash
+./deploy.sh setup     # Initial setup (configs, SSL, etc.)
+./deploy.sh deploy    # Deploy/redeploy application
+./deploy.sh logs      # Show application logs
+./deploy.sh backup    # Create backup
+./deploy.sh restore   # Restore from backup
+./deploy.sh update    # Update application
+./deploy.sh security  # Run security audit
+./deploy.sh monitor   # Monitor resources
+./deploy.sh health    # Check application health
+./deploy.sh stop      # Stop all services
+./deploy.sh restart   # Restart services
+./deploy.sh status    # Show service status
+```
+
+## 🏗️ Architecture
+
+### Service Stack
+```
+┌─────────────────┐
+│   Nginx Proxy   │ ← Rate limiting, SSL termination, security headers
+├─────────────────┤
+│   Recipe App    │ ← Go application with security middleware
+├─────────────────┤
+│   SQLite DB     │ ← Database with constraints and prepared statements
+├─────────────────┤
+│   Fail2ban      │ ← Automatic IP blocking based on patterns
+└─────────────────┘
+```
+
+### Security Middleware Stack
+```
+Request → Security Headers → Rate Limiting → SQL Injection Protection → Input Validation → Application
+```
+
+## ⚙️ Configuration
+
+### Environment Variables
+```bash
+# .env file (auto-generated)
+DOMAIN=your-domain.com
+EMAIL=admin@your-domain.com
+ENVIRONMENT=production
+DB_PATH=/data/recipes.db
+JWT_SECRET=<randomly-generated-32-char-hex>
+TRUSTED_PROXIES=nginx
+```
+
+### Rate Limiting Configuration
+Customize in `middleware/security.go`:
+```go
+// Login: 5 attempts per 15 minutes
+LoginRate:    rate.Every(3 * time.Minute),
+LoginBurst:   5,
+
+// Registration: 3 per hour  
+RegisterRate:   rate.Every(20 * time.Minute),
+RegisterBurst:  3,
+
+// Search: 30 per minute
+SearchRate:   rate.Every(2 * time.Second),
+SearchBurst:  30,
+
+// General: 100 per minute
+GeneralRate:   rate.Every(600 * time.Millisecond),
+GeneralBurst:  100,
+```
+
+### Nginx Rate Limiting
+Additional protection at the proxy level:
+```nginx
+limit_req_zone $binary_remote_addr zone=login:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=register:10m rate=3r/h;
+limit_req_zone $binary_remote_addr zone=search:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=general:10m rate=100r/m;
+```
+
+## 🔐 SSL/TLS Configuration
+
+### Development (Self-Signed)
+The deployment script automatically generates self-signed certificates for development:
+```bash
+# Generated automatically
+nginx/ssl/cert.pem
+nginx/ssl/key.pem
+```
+
+### Production (Let's Encrypt)
+For production, replace with proper certificates:
+```bash
+# Install certbot
+sudo apt install certbot python3-certbot-nginx
+
+# Get certificates
+sudo certbot --nginx -d your-domain.com
+
+# Copy to nginx directory
+sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem nginx/ssl/cert.pem
+sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem nginx/ssl/key.pem
+
+# Restart services
+./deploy.sh restart
+```
+
+## 📊 Monitoring & Maintenance
+
+### Real-time Monitoring
+```bash
+# Resource monitoring
+./deploy.sh monitor
+
+# Application logs
+./deploy.sh logs
+
+# Health check
+./deploy.sh health
+```
+
+### Security Monitoring
+```bash
+# Security audit
+./deploy.sh security
+
+# Check for blocked IPs
+docker-compose exec fail2ban fail2ban-client status
+
+# View security logs
+docker-compose logs nginx | grep -E "(429|403|blocked)"
+```
+
+### Backup & Restore
+```bash
+# Create backup
+./deploy.sh backup
+
+# Restore from backup
+./deploy.sh restore backups/20231215_143022
+```
+
+## 🛡️ Security Best Practices
+
+### Default Credentials
+⚠️ **Important**: Change default admin credentials immediately:
+- Username: `admin`
+- Password: `admin123`
+
+### Regular Maintenance
+1. **Update dependencies** regularly
+2. **Monitor logs** for suspicious activity
+3. **Backup data** before updates
+4. **Review security settings** periodically
+5. **Update SSL certificates** before expiry
+
+### Production Checklist
+- [ ] Change default admin password
+- [ ] Use proper SSL certificates (not self-signed)
+- [ ] Set up proper domain name
+- [ ] Configure email notifications for Fail2ban
+- [ ] Set up log rotation
+- [ ] Configure automated backups
+- [ ] Monitor resource usage
+- [ ] Review and customize rate limits for your use case
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**Rate Limit Exceeded**
+```bash
+# Check current rate limits
+docker-compose logs nginx | grep "429"
+
+# Temporarily adjust limits in nginx config
+# Then restart: ./deploy.sh restart
+```
+
+**Database Locked**
+```bash
+# Check for multiple connections
+docker-compose exec recipe-app ps aux
+
+# Restart application
+./deploy.sh restart
+```
+
+**SSL Certificate Issues**
+```bash
+# Regenerate self-signed certificates
+rm nginx/ssl/*.pem
+./deploy.sh setup
+
+# Check certificate validity
+openssl x509 -in nginx/ssl/cert.pem -text -noout
+```
+
+**High Memory Usage**
+```bash
+# Monitor resources
+./deploy.sh monitor
+
+# Check for memory leaks in logs
+./deploy.sh logs | grep -i "memory\|leak\|oom"
+```
+
+### Security Incident Response
+
+**Suspected Attack**
+```bash
+# Check blocked IPs
+docker-compose exec fail2ban fail2ban-client status recipe-book-login
+
+# Review security logs
+docker-compose logs nginx | grep -E "(429|403)" | tail -100
+
+# Manual IP blocking
+docker-compose exec fail2ban fail2ban-client set recipe-book-login banip <IP>
+```
+
+**Database Compromise**
+```bash
+# Immediate actions:
+1. ./deploy.sh stop          # Stop all services
+2. ./deploy.sh backup        # Backup current state
+3. Review logs for suspicious activity
+4. Change all passwords
+5. Update JWT secret in .env
+6. ./deploy.sh deploy        # Redeploy with new secrets
+```
+
+## 🧪 Testing Security
+
+### Load Testing
+```bash
+# Install apache bench
+sudo apt install apache2-utils
+
+# Test rate limiting
+ab -n 100 -c 10 https://localhost/api/search?q=test
+
+# Should see 429 responses after burst limit
+```
+
+### SQL Injection Testing
+```bash
+# These should all be blocked:
+curl "https://localhost/api/search?q='; DROP TABLE users; --"
+curl "https://localhost/api/search?q=1' OR '1'='1"
+curl "https://localhost/api/search?q=<script>alert('xss')</script>"
+```
+
+## 📚 Additional Resources
+
+- [Go Security Checklist](https://github.com/Checkmarx/Go-SCP)
+- [Docker Security Best Practices](https://docs.docker.com/engine/security/)
+- [Nginx Security Headers](https://securityheaders.com/)
+- [OWASP Top 10](https://owasp.org/www-project-top-ten/)
+
+## 🤝 Contributing
+
+Security contributions are especially welcome! Please:
+1. Report security issues privately
+2. Follow secure coding practices
+3. Add tests for security features
+4. Update documentation
+
+## 📄 License
+
+This project is open source and available under the MIT License.
+
+---
+
+**⚠️ Security Notice**: This application includes comprehensive security measures, but security is an ongoing process. Regularly update dependencies, monitor logs, and follow security best practices for your deployment environment.
