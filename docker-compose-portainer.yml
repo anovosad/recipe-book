@@ -18,7 +18,7 @@ services:
       - "${HTTPS_PORT:-443}:443"
     volumes:
       # Nginx configuration
-      - nginx_config:/etc/nginx:ro
+      - ${CONFIG_PATH:-.}/nginx:/etc/nginx:ro
       # SSL certificates
       # - ssl_certificates:/etc/nginx/ssl:ro
       # Logs for monitoring
@@ -157,8 +157,8 @@ services:
       # Nginx logs for monitoring
       - nginx_logs:/var/log/nginx:ro
       # Fail2ban configuration
-      - fail2ban_config:/etc/fail2ban/jail.d:ro
-      - fail2ban_filters:/etc/fail2ban/filter.d:ro
+      - ${CONFIG_PATH:-.}/fail2ban/jail.d:/etc/fail2ban/jail.d:ro
+      - ${CONFIG_PATH:-.}/fail2ban/filter.d:/etc/fail2ban/filter.d:ro
       # Persistent ban database
       - fail2ban_data:/var/lib/fail2ban
     environment:
@@ -269,45 +269,37 @@ volumes:
       - "com.recipe-book.backup=true"
 
   # Configuration
-  nginx_config:
-    name: recipe-book-nginx-config
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${CONFIG_PATH:-./config}/nginx
+  # nginx_config:
+  #   name: recipe-book-nginx-config
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${CONFIG_PATH:-./config}/nginx
+  
+  # ssl_certificates:
+  #   name: recipe-book-ssl
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${SSL_PATH:-./ssl}
 
-  nginx_main_config:
-    name: recipe-book-nginx-main-config
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${CONFIG_PATH:-./config}/nginx/nginx.conf
+  # fail2ban_config:
+  #   name: recipe-book-fail2ban-config
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${CONFIG_PATH:-./config}/fail2ban/jail.d
 
-  ssl_certificates:
-    name: recipe-book-ssl
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${SSL_PATH:-./ssl}
-
-  fail2ban_config:
-    name: recipe-book-fail2ban-config
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${CONFIG_PATH:-./config}/fail2ban/jail.d
-
-  fail2ban_filters:
-    name: recipe-book-fail2ban-filters
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ${CONFIG_PATH:-./config}/fail2ban/filter.d
+  # fail2ban_filters:
+  #   name: recipe-book-fail2ban-filters
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${CONFIG_PATH:-./config}/fail2ban/filter.d
 
   # Persistent Data
   nginx_logs:
