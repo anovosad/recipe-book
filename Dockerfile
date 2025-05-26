@@ -39,15 +39,13 @@ RUN mkdir -p /app/data
 RUN mkdir -p /app/uploads
 
 # Final stage - use distroless for security
-FROM busybox:latest as busybox
 FROM gcr.io/distroless/static-debian12:nonroot-$TARGETARCH
 
-# Set working directory 
+# Set working directory
 WORKDIR /app
 
 # Copy binary from builder stage
 COPY --from=builder /app/main .
-COPY --from=busybox /bin/busybox /bin/busybox
 
 # Copy templates, static files, and pre-created directories
 COPY --from=builder /app/templates/ ./templates/

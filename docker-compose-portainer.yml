@@ -97,11 +97,11 @@ services:
       - "com.recipe-book.description=Main Recipe Book application"
       - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
-      test: ["CMD", "/bin/busybox", "pgrep", "main"]
+      test: ["/app/main", "--health-check"]
       interval: 30s
-      timeout: 15s
+      timeout: 10s
       retries: 3
-      start_period: 45s
+      start_period: 15s
     # Resource limits for production
     deploy:
       resources:

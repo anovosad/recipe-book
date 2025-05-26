@@ -1,10 +1,10 @@
-// File: main.go (Updated with Security)
 package main
 
 import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"recipe-book/database"
 	"recipe-book/handlers"
 	"recipe-book/middleware"
@@ -14,6 +14,12 @@ import (
 )
 
 func main() {
+	// Check for health check flag
+	if len(os.Args) > 1 && os.Args[1] == "--health-check" {
+		healthCheck()
+		return
+	}
+
 	// Initialize components
 	database.InitDB()
 	utils.LoadTemplates()
@@ -31,6 +37,9 @@ func main() {
 	r.Use(securityManager.AddSecurityContext())
 	r.Use(middleware.SQLInjectionProtection())
 	r.Use(securityManager.GeneralRateLimit(securityConfig))
+
+	// Health check endpoint
+	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
 
 	// Page routes with specific security middleware
 	r.HandleFunc("/", handlers.HomeHandler).Methods("GET")
@@ -103,4 +112,30 @@ func main() {
 	fmt.Println("📖 Open http://localhost:8080 in your browser")
 
 	log.Fatal(http.ListenAndServe(":8080", r))
+}
+
+// Health check function for Docker health checks
+func healthCheck() {
+	resp, err := http.Get("http://localhost:8080/health")
+	if err != nil {
+		fmt.Printf("Health check failed: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fmt.Printf("Health check failed with status: %d\n", resp.StatusCode)
+		os.Exit(1)
+	}
+
+	fmt.Println("Health check passed")
+	os.Exit(0)
+}
+
+// Health check handler
+func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	// Basic health check - you can add database connectivity check here
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy","service":"recipe-book"}`))
 }
