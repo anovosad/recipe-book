@@ -18,10 +18,9 @@ services:
       - "${HTTPS_PORT:-443}:443"
     volumes:
       # Nginx configuration
-      - nginx_config:/etc/nginx/conf.d:ro
-      - nginx_main_config:/etc/nginx/nginx.conf:ro
+      - nginx_config:/etc/nginx:ro
       # SSL certificates
-      - ssl_certificates:/etc/nginx/ssl:ro
+      # - ssl_certificates:/etc/nginx/ssl:ro
       # Logs for monitoring
       - nginx_logs:/var/log/nginx
       # Cache for performance
@@ -276,7 +275,7 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ${CONFIG_PATH:-./config}/nginx/conf.d
+      device: ${CONFIG_PATH:-./config}/nginx
 
   nginx_main_config:
     name: recipe-book-nginx-main-config
