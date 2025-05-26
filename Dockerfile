@@ -35,6 +35,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 
 # Create necessary directories during the build stage
 RUN mkdir -p /app/data
+RUN mkdir -p /app/uploads
 
 # Final stage - use distroless for security
 FROM gcr.io/distroless/static-debian12:nonroot
@@ -48,7 +49,8 @@ COPY --from=builder /app/main .
 # Copy templates, static files, and pre-created directories
 COPY --from=builder /app/templates/ ./templates/
 COPY --from=builder /app/static/ ./static/
-COPY --from=builder --chown=nonroot:nonroot /app/data/ ./data/
+COPY --from=builder --chown=nonroot:nonroot --chmod=644 /app/data/ ./data/
+COPY --from=builder --chown=nonroot:nonroot --chmod=644 /app/uploads/ ./uploads/
 
 # Use non-root user
 USER nonroot:nonroot
@@ -57,7 +59,7 @@ USER nonroot:nonroot
 EXPOSE 8080
 
 # Set environment variables
-ENV DB_PATH=/data/recipes.db
+ENV DB_PATH=/app/data/recipes.db
 ENV GIN_MODE=release
 ENV ENVIRONMENT=production
 

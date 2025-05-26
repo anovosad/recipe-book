@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"recipe-book/models"
 	"recipe-book/utils"
 	"strings"
@@ -38,6 +39,26 @@ func InitDB() {
 	}
 
 	log.Print("Opening database at:", dbPath)
+
+	// Ensure the directory exists and is writable
+	dbDir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dbDir, 0755); err != nil {
+		log.Printf("Warning: Could not create database directory %s: %v", dbDir, err)
+	}
+
+	// Check if we can write to the directory
+	testFile := filepath.Join(dbDir, ".write_test")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		log.Printf("Error: Cannot write to database directory %s: %v", dbDir, err)
+		log.Printf("Database directory permissions:")
+		if info, err := os.Stat(dbDir); err == nil {
+			log.Printf("Directory: %s, Mode: %v", dbDir, info.Mode())
+		}
+		log.Fatal("Database directory is not writable")
+	} else {
+		os.Remove(testFile) // Clean up test file
+		log.Printf("✅ Database directory %s is writable", dbDir)
+	}
 
 	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {

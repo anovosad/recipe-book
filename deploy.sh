@@ -124,9 +124,30 @@ upstream recipe_app {
 
 # Redirect HTTP to HTTPS
 server {
-    listen 80;
-    server_name _;
-    return 301 https://$server_name$request_uri;
+    listen 80 default_server;
+    server_name localhost 127.0.0.1;
+
+    # Serve the application over HTTP
+    location / {
+        limit_req zone=general burst=50 nodelay;
+        proxy_pass http://recipe_app;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeout settings
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # Health check
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
 }
 
 server {

@@ -28,10 +28,10 @@ services:
     expose:
       - "8080"
     volumes:
-      - recipe_data:/data
+      - recipe_data:/app/data
       - recipe_uploads:/app/uploads
     environment:
-      - DB_PATH=/data/recipes.db
+      - DB_PATH=/app/data/recipes.db
       - ENVIRONMENT=production
       - TRUSTED_PROXIES=nginx
     restart: unless-stopped
