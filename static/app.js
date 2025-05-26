@@ -25,49 +25,24 @@ function deleteRecipe(id) {
 
 function deleteIngredient(id, name) {
     if (confirm(`Are you sure you want to delete "${name}"?`)) {
-        // Show loading state
-        const deleteButton = document.querySelector(`button[onclick="deleteIngredient(${id}, '${name}')"]`);
-        if (deleteButton) {
-            const originalText = deleteButton.innerHTML;
-            deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            deleteButton.disabled = true;
-            
-            // Restore button state function
-            const restoreButton = () => {
-                deleteButton.innerHTML = originalText;
-                deleteButton.disabled = false;
-            };
-            
-            fetch(`/api/ingredients/${id}`, {
-                method: 'DELETE'
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json().then(data => {
-                        showSuccess(data.message || 'Ingredient deleted successfully');
-                        // Remove the ingredient card from the page
-                        const ingredientCard = deleteButton.closest('.ingredient-card');
-                        if (ingredientCard) {
-                            ingredientCard.style.opacity = '0';
-                            ingredientCard.style.transform = 'translateY(-20px)';
-                            setTimeout(() => ingredientCard.remove(), 300);
-                        }
-                    });
-                } else if (response.status === 409) {
-                    // Ingredient is used in recipes
-                    return response.json().then(data => {
-                        restoreButton();
-                        showIngredientUsageError(data);
-                    });
-                } else {
-                    throw new Error('Failed to delete ingredient');
-                }
-            })
-            .catch(error => {
-                restoreButton();
-                showError('Error deleting ingredient: ' + error.message);
-            });
-        }
+        fetch(`/api/ingredients/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => {
+            if (response.ok) {
+                location.reload();
+            } else if (response.status === 409) {
+                // Ingredient is used in recipes
+                return response.json().then(data => {
+                    showIngredientUsageError(data);
+                });
+            } else {
+                throw new Error('Failed to delete ingredient');
+            }
+        })
+        .catch(error => {
+            showError('Error deleting ingredient: ' + error.message);
+        });
     }
 }
 
