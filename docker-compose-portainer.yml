@@ -1,0 +1,444 @@
+# Recipe Book - Portainer-Optimized Docker Compose Configuration
+# This configuration is designed for easy deployment via Portainer
+# with proper environment variable management and stack organization
+
+version: '3.8'
+
+# ============================================
+# SERVICES CONFIGURATION
+# ============================================
+services:
+  # Nginx Reverse Proxy & Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: recipe-book-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      # Nginx configuration
+      - nginx_config:/etc/nginx/conf.d:ro
+      - nginx_main_config:/etc/nginx/nginx.conf:ro
+      # SSL certificates
+      - ssl_certificates:/etc/nginx/ssl:ro
+      # Logs for monitoring
+      - nginx_logs:/var/log/nginx
+      # Cache for performance
+      - nginx_cache:/var/cache/nginx
+    environment:
+      - TZ=${TIMEZONE:-UTC}
+    depends_on:
+      recipe-app:
+        condition: service_healthy
+    networks:
+      - recipe-network
+    labels:
+      # Portainer labels for better management
+      - "io.portainer.accesscontrol.teams=recipe-book"
+      - "com.recipe-book.service=proxy"
+      - "com.recipe-book.description=Nginx reverse proxy and SSL termination"
+      # Health check labels
+      - "com.centurylinklabs.watchtower.enable=true"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Main Recipe Book Application
+  recipe-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        - VERSION=${APP_VERSION:-latest}
+    image: recipe-book:${APP_VERSION:-latest}
+    container_name: recipe-book-app
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      # Persistent data storage
+      - recipe_data:/app/data
+      - recipe_uploads:/app/uploads
+      # Logs for monitoring
+      - app_logs:/app/logs
+    environment:
+      # Application Configuration
+      - DB_PATH=${DB_PATH:-/app/data/recipes.db}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - GIN_MODE=${GIN_MODE:-release}
+      
+      # Security Configuration
+      - JWT_SECRET=${JWT_SECRET}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-nginx}
+      
+      # Database Configuration
+      - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-25}
+      - DB_IDLE_CONNECTIONS=${DB_IDLE_CONNECTIONS:-5}
+      
+      # Upload Configuration
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-5242880}
+      - UPLOAD_PATH=${UPLOAD_PATH:-/app/uploads}
+      
+      # Timezone
+      - TZ=${TIMEZONE:-UTC}
+      
+      # Logging Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_FILE=${LOG_FILE:-/app/logs/app.log}
+    networks:
+      - recipe-network
+    labels:
+      - "io.portainer.accesscontrol.teams=recipe-book"
+      - "com.recipe-book.service=backend"
+      - "com.recipe-book.description=Main Recipe Book application"
+      - "com.centurylinklabs.watchtower.enable=true"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/search?q=health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 45s
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '${APP_CPU_LIMIT:-2.0}'
+          memory: ${APP_MEMORY_LIMIT:-1024M}
+        reservations:
+          cpus: '${APP_CPU_RESERVATION:-0.5}'
+          memory: ${APP_MEMORY_RESERVATION:-256M}
+    # Security settings
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+
+  # Redis Cache (Optional - Uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: recipe-book-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis_data:/data
+  #     - redis_config:/usr/local/etc/redis/redis.conf:ro
+  #   environment:
+  #     - TZ=${TIMEZONE:-UTC}
+  #   command: >
+  #     redis-server
+  #     --maxmemory ${REDIS_MAX_MEMORY:-128mb}
+  #     --maxmemory-policy allkeys-lru
+  #     --save 900 1
+  #     --save 300 10
+  #     --save 60 10000
+  #     --appendonly yes
+  #   networks:
+  #     - recipe-network
+  #   labels:
+  #     - "io.portainer.accesscontrol.teams=recipe-book"
+  #     - "com.recipe-book.service=cache"
+  #     - "com.centurylinklabs.watchtower.enable=true"
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+  # Fail2ban Security Service (Optional)
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: recipe-book-fail2ban
+    restart: unless-stopped
+    volumes:
+      # Nginx logs for monitoring
+      - nginx_logs:/var/log/nginx:ro
+      # Fail2ban configuration
+      - fail2ban_config:/etc/fail2ban/jail.d:ro
+      - fail2ban_filters:/etc/fail2ban/filter.d:ro
+      # Persistent ban database
+      - fail2ban_data:/var/lib/fail2ban
+    environment:
+      - TZ=${TIMEZONE:-UTC}
+      - F2B_LOG_LEVEL=${F2B_LOG_LEVEL:-INFO}
+      - F2B_DB_PURGE_AGE=${F2B_DB_PURGE_AGE:-1d}
+    # Host network mode required for IP blocking
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    labels:
+      - "io.portainer.accesscontrol.teams=recipe-book"
+      - "com.recipe-book.service=security"
+      - "com.recipe-book.description=Fail2ban intrusion prevention"
+      - "com.centurylinklabs.watchtower.enable=false"
+    profiles:
+      - security
+
+  # Watchtower for Automatic Updates (Optional)
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   container_name: recipe-book-watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - TZ=${TIMEZONE:-UTC}
+  #     - WATCHTOWER_CLEANUP=true
+  #     - WATCHTOWER_POLL_INTERVAL=${WATCHTOWER_INTERVAL:-21600}
+  #     - WATCHTOWER_INCLUDE_STOPPED=true
+  #     - WATCHTOWER_LABEL_ENABLE=true
+  #   labels:
+  #     - "io.portainer.accesscontrol.teams=recipe-book"
+  #     - "com.recipe-book.service=updater"
+  #     - "com.centurylinklabs.watchtower.enable=false"
+  #   profiles:
+  #     - auto-update
+
+  # Backup Service (Optional)
+  # backup:
+  #   image: alpine:latest
+  #   container_name: recipe-book-backup
+  #   restart: "no"
+  #   volumes:
+  #     - recipe_data:/data/app:ro
+  #     - recipe_uploads:/data/uploads:ro
+  #     - backups:/backups
+  #   environment:
+  #     - TZ=${TIMEZONE:-UTC}
+  #     - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+  #   command: >
+  #     sh -c "
+  #       apk add --no-cache tar gzip &&
+  #       cd /data &&
+  #       tar -czf /backups/recipe-book-backup-$$(date +%Y%m%d-%H%M%S).tar.gz . &&
+  #       find /backups -name '*.tar.gz' -mtime +$$BACKUP_RETENTION_DAYS -delete &&
+  #       echo 'Backup completed successfully'
+  #     "
+  #   labels:
+  #     - "io.portainer.accesscontrol.teams=recipe-book"
+  #     - "com.recipe-book.service=backup"
+  #     - "com.centurylinklabs.watchtower.enable=false"
+  #   profiles:
+  #     - backup
+
+# ============================================
+# NETWORKS CONFIGURATION
+# ============================================
+networks:
+  recipe-network:
+    name: recipe-book-network
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.20.0.0/16}
+          gateway: ${NETWORK_GATEWAY:-172.20.0.1}
+    labels:
+      - "com.recipe-book.network=main"
+      - "com.recipe-book.description=Internal network for Recipe Book services"
+
+# ============================================
+# VOLUMES CONFIGURATION
+# ============================================
+volumes:
+  # Application Data
+  recipe_data:
+    name: recipe-book-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}
+    labels:
+      - "com.recipe-book.volume=data"
+      - "com.recipe-book.backup=true"
+
+  recipe_uploads:
+    name: recipe-book-uploads
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${UPLOADS_PATH:-./uploads}
+    labels:
+      - "com.recipe-book.volume=uploads"
+      - "com.recipe-book.backup=true"
+
+  # Configuration
+  nginx_config:
+    name: recipe-book-nginx-config
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CONFIG_PATH:-./config}/nginx/conf.d
+
+  nginx_main_config:
+    name: recipe-book-nginx-main-config
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CONFIG_PATH:-./config}/nginx/nginx.conf
+
+  ssl_certificates:
+    name: recipe-book-ssl
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${SSL_PATH:-./ssl}
+
+  fail2ban_config:
+    name: recipe-book-fail2ban-config
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CONFIG_PATH:-./config}/fail2ban/jail.d
+
+  fail2ban_filters:
+    name: recipe-book-fail2ban-filters
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CONFIG_PATH:-./config}/fail2ban/filter.d
+
+  # Persistent Data
+  nginx_logs:
+    name: recipe-book-nginx-logs
+    driver: local
+    labels:
+      - "com.recipe-book.volume=logs"
+
+  nginx_cache:
+    name: recipe-book-nginx-cache
+    driver: local
+
+  app_logs:
+    name: recipe-book-app-logs
+    driver: local
+    labels:
+      - "com.recipe-book.volume=logs"
+
+  fail2ban_data:
+    name: recipe-book-fail2ban-data
+    driver: local
+
+  # Redis (if enabled)
+  # redis_data:
+  #   name: recipe-book-redis-data
+  #   driver: local
+  #   labels:
+  #     - "com.recipe-book.volume=cache"
+
+  # redis_config:
+  #   name: recipe-book-redis-config
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${CONFIG_PATH:-./config}/redis
+
+  # Backups
+  # backups:
+  #   name: recipe-book-backups
+  #   driver: local
+  #   driver_opts:
+  #     type: none
+  #     o: bind
+  #     device: ${BACKUP_PATH:-./backups}
+  #   labels:
+  #     - "com.recipe-book.volume=backups"
+
+# ============================================
+# CONFIGURATION NOTES FOR PORTAINER
+# ============================================
+
+# Environment Variables (Set these in Portainer):
+# 
+# REQUIRED:
+# - JWT_SECRET: Random 32+ character string for JWT signing
+# - DOMAIN: Your domain name (e.g., recipes.example.com)
+# 
+# OPTIONAL:
+# - HTTP_PORT: HTTP port (default: 80)
+# - HTTPS_PORT: HTTPS port (default: 443) 
+# - ENVIRONMENT: production/development (default: production)
+# - TIMEZONE: System timezone (default: UTC)
+# - APP_VERSION: Application version tag (default: latest)
+# 
+# PATHS (customize for your setup):
+# - DATA_PATH: Path for database storage (default: ./data)
+# - UPLOADS_PATH: Path for uploaded files (default: ./uploads)
+# - CONFIG_PATH: Path for configuration files (default: ./config)
+# - SSL_PATH: Path for SSL certificates (default: ./ssl)
+# - BACKUP_PATH: Path for backups (default: ./backups)
+# 
+# RESOURCE LIMITS:
+# - APP_CPU_LIMIT: CPU limit for app (default: 2.0)
+# - APP_MEMORY_LIMIT: Memory limit for app (default: 1024M)
+# - APP_CPU_RESERVATION: CPU reservation (default: 0.5)
+# - APP_MEMORY_RESERVATION: Memory reservation (default: 256M)
+# 
+# PROFILES (enable optional services):
+# - security: Enable fail2ban
+# - auto-update: Enable watchtower
+# - backup: Enable backup service
+#
+# To use profiles in Portainer, add them to the "Profiles" field:
+# Example: security,auto-update
+
+# DEPLOYMENT INSTRUCTIONS:
+# 
+# 1. Create required directories on your host:
+#    mkdir -p data uploads config/nginx/conf.d config/fail2ban/{jail.d,filter.d} ssl backups
+# 
+# 2. Copy configuration files to config directories:
+#    - nginx.conf → config/nginx/
+#    - nginx site configs → config/nginx/conf.d/
+#    - fail2ban configs → config/fail2ban/
+# 
+# 3. Generate SSL certificates and place in ssl/ directory
+# 
+# 4. Set environment variables in Portainer stack
+# 
+# 5. Deploy the stack
+# 
+# 6. Monitor logs and health checks in Portainer
+
+# MONITORING AND MAINTENANCE:
+#
+# Health Checks:
+# - All services include health checks visible in Portainer
+# - Nginx: HTTP health endpoint
+# - App: API health endpoint
+# - Redis: Redis ping command
+#
+# Logs:
+# - View logs directly in Portainer container view
+# - Persistent logs stored in volumes for external monitoring
+#
+# Updates:
+# - Enable watchtower profile for automatic updates
+# - Manual updates via Portainer stack recreation
+#
+# Backups:
+# - Run backup service manually via Portainer
+# - Schedule backups using Portainer edge jobs
+# - Backup retention configurable via BACKUP_RETENTION_DAYS
+
+# SECURITY CONSIDERATIONS:
+#
+# - All services run with security-opt: no-new-privileges
+# - Non-root containers where possible
+# - Resource limits prevent DoS
+# - Fail2ban provides intrusion prevention
+# - JWT secrets must be properly configured
+# - SSL certificates should be from trusted CA in production
