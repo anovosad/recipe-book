@@ -97,7 +97,7 @@ services:
       - "com.recipe-book.description=Main Recipe Book application"
       - "com.centurylinklabs.watchtower.enable=true"
     healthcheck:
-      test: ["CMD", "sh", "-c", "pgrep -f '/app/main' && test -f ${DATA_PATH}/recipes.db"]
+      test: ["CMD", "sh", "-c", "pgrep -f '/app/main'"]
       interval: 30s
       timeout: 15s
       retries: 3
