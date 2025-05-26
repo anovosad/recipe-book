@@ -527,6 +527,84 @@ function deleteIngredientWithLoading(id, name, button) {
     }
 }
 
+document.addEventListener('DOMContentLoaded', function() {
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const navLinks = document.getElementById('navLinks');
+    const navOverlay = document.getElementById('navOverlay');
+    const body = document.body;
+
+    if (!mobileMenuToggle || !navLinks || !navOverlay) return;
+
+    function toggleMobileMenu() {
+        const isOpen = navLinks.classList.contains('mobile-open');
+        
+        if (isOpen) {
+            closeMobileMenu();
+        } else {
+            openMobileMenu();
+        }
+    }
+
+    function openMobileMenu() {
+        navLinks.classList.add('mobile-open');
+        mobileMenuToggle.classList.add('active');
+        navOverlay.classList.add('active');
+        body.classList.add('menu-open');
+        mobileMenuToggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMobileMenu() {
+        navLinks.classList.remove('mobile-open');
+        mobileMenuToggle.classList.remove('active');
+        navOverlay.classList.remove('active');
+        body.classList.remove('menu-open');
+        mobileMenuToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    // Event listeners
+    mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+    navOverlay.addEventListener('click', closeMobileMenu);
+
+    // Close menu when clicking on a nav link (mobile)
+    navLinks.addEventListener('click', (e) => {
+        if ((e.target.classList.contains('nav-link') || e.target.closest('.nav-link')) && window.innerWidth <= 768) {
+            setTimeout(closeMobileMenu, 150); // Small delay for better UX
+        }
+    });
+
+    // Close menu on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && navLinks.classList.contains('mobile-open')) {
+            closeMobileMenu();
+        }
+    });
+
+    // Close menu on window resize if it gets too wide
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768 && navLinks.classList.contains('mobile-open')) {
+            closeMobileMenu();
+        }
+    });
+
+    // Prevent scroll on touch devices when menu is open
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (body.classList.contains('menu-open')) {
+            const touchY = e.touches[0].clientY;
+            const touchYDelta = touchY - touchStartY;
+            
+            // Only prevent scroll if not scrolling within the nav menu
+            if (!e.target.closest('.nav-links')) {
+                e.preventDefault();
+            }
+        }
+    }, { passive: false });
+});
+
 // Debug helper - uncomment to see what's actually in the instructions
 /*
 document.addEventListener('DOMContentLoaded', function() {

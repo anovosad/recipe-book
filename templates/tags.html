@@ -67,39 +67,53 @@ function deleteTag(id, name) {
     <link href="/static/style.css" rel="stylesheet">
 </head>
 <body>
+    <div class="nav-overlay" id="navOverlay"></div>
+
     <nav class="navbar">
         <div class="nav-content">
             <div class="logo">
                 <a href="/recipes"><i class="fas fa-utensils"></i> Recipe Book</a>
             </div>
-            <div class="nav-links">
+            
+            <!-- Mobile menu toggle button -->
+            <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle navigation menu" aria-expanded="false">
+                <div class="hamburger-icon">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </button>
+            
+            <!-- Navigation links -->
+            <div class="nav-links" id="navLinks">
                 <a href="/recipes" class="nav-link">
-                    <i class="fas fa-list"></i> Recipes
+                    <i class="fas fa-list"></i> <span>Recipes</span>
                 </a>
                 <a href="/ingredients" class="nav-link">
-                    <i class="fas fa-leaf"></i> Ingredients
+                    <i class="fas fa-leaf"></i> <span>Ingredients</span>
                 </a>
                 <a href="/tags" class="nav-link">
-                    <i class="fas fa-tags"></i> Tags
+                    <i class="fas fa-tags"></i> <span>Tags</span>
                 </a>
+                
                 {{if .IsLoggedIn}}
                     <div class="user-menu">
-                        <span class="username">
-                            <i class="fas fa-user"></i> {{.User.Username}}
-                        </span>
-                        <form action="/api/logout" method="POST" style="display: inline;">
+                        <div class="username">
+                            <i class="fas fa-user"></i> <span>{{.User.Username}}</span>
+                        </div>
+                        <form action="/api/logout" method="POST">
                             <button type="submit" class="btn btn-secondary">
-                                <i class="fas fa-sign-out-alt"></i> Logout
+                                <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
                             </button>
                         </form>
                     </div>
                 {{else}}
                     <div class="auth-buttons">
                         <a href="/login" class="btn btn-secondary">
-                            <i class="fas fa-sign-in-alt"></i> Login
+                            <i class="fas fa-sign-in-alt"></i> <span>Login</span>
                         </a>
                         <a href="/register" class="btn btn-primary">
-                            <i class="fas fa-user-plus"></i> Register
+                            <i class="fas fa-user-plus"></i> <span>Register</span>
                         </a>
                     </div>
                 {{end}}
