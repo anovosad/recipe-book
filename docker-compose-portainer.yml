@@ -50,7 +50,7 @@ services:
   recipe-app:
     build:
       context: .
-      dockerfile: Dockerfile.arm64
+      dockerfile: Dockerfile
       args:
         - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
         - VERSION=${APP_VERSION:-latest}

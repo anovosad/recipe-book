@@ -1,5 +1,6 @@
 # File: Dockerfile (Security Enhanced)
 # Build stage
+
 FROM golang:1.24.3-alpine AS builder
 
 # Install security updates and necessary packages
@@ -27,7 +28,7 @@ RUN chown -R builder:builder /app
 USER builder
 
 # Build the application with security flags
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build \
     -a -installsuffix cgo \
     -ldflags '-w -s -extldflags "-static"' \
     -tags netgo \
@@ -38,7 +39,7 @@ RUN mkdir -p /app/data
 RUN mkdir -p /app/uploads
 
 # Final stage - use distroless for security
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot-$TARGETARCH
 
 # Set working directory
 WORKDIR /app
