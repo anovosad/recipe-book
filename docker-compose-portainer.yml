@@ -96,19 +96,13 @@ services:
       - "com.recipe-book.service=backend"
       - "com.recipe-book.description=Main Recipe Book application"
       - "com.centurylinklabs.watchtower.enable=true"
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "/app/main"]
-      interval: 30s
-      timeout: 15s
-      retries: 3
-      start_period: 45s
     # Resource limits for production
     deploy:
       resources:
         limits:
           cpus: '${APP_CPU_LIMIT:-2.0}'
           memory: ${APP_MEMORY_LIMIT:-256M}
-        reservations:
+        reservations: 
           cpus: '${APP_CPU_RESERVATION:-0.5}'
           memory: ${APP_MEMORY_RESERVATION:-64M}
     # Security settings
