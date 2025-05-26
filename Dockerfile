@@ -50,8 +50,8 @@ COPY --from=builder /app/main .
 # Copy templates, static files, and pre-created directories
 COPY --from=builder /app/templates/ ./templates/
 COPY --from=builder /app/static/ ./static/
-COPY --from=builder --chown=nonroot:nonroot --chmod=644 /app/data/ ./data/
-COPY --from=builder --chown=nonroot:nonroot --chmod=644 /app/uploads/ ./uploads/
+COPY --from=builder --chown=nonroot:nonroot --chmod=755 /app/data/ ./data/
+COPY --from=builder --chown=nonroot:nonroot --chmod=755 /app/uploads/ ./uploads/
 
 # Use non-root user
 USER nonroot:nonroot
