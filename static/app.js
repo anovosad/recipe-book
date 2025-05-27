@@ -1,49 +1,206 @@
 // Recipe management functions
-function deleteRecipe(id) {
-    if (confirm('Are you sure you want to delete this recipe? This action cannot be undone.')) {
-        fetch(`/api/recipes/${id}`, {
+async function deleteRecipe(id) {
+    if (!confirm('Are you sure you want to delete this recipe? This action cannot be undone.')) {
+        return false;
+    }
+
+    // Find delete button for loading state
+    const deleteButton = document.querySelector(`[onclick*="deleteRecipe(${id})"], [data-recipe-id="${id}"] .delete-btn`);
+    let removeLoading = null;
+    
+    if (deleteButton) {
+        const originalText = deleteButton.innerHTML;
+        deleteButton.disabled = true;
+        deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        
+        removeLoading = () => {
+            deleteButton.disabled = false;
+            deleteButton.innerHTML = originalText;
+        };
+    }
+
+    try {
+        const response = await fetch(`/api/recipes/${id}`, {
             method: 'DELETE'
-        })
-        .then(response => {
-            if (response.ok) {
-                // If we're on the recipe detail page, redirect to recipes list
-                if (window.location.pathname.includes('/recipe/')) {
-                    window.location.href = '/recipes';
-                } else {
-                    // Otherwise, reload the current page
-                    location.reload();
-                }
-            } else {
-                alert('Failed to delete recipe. Please try again.');
-            }
-        })
-        .catch(error => {
-            alert('Error deleting recipe: ' + error.message);
         });
+
+        const data = await response.json();
+
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            
+            // If we're on the recipe detail page, redirect to recipes list
+            if (window.location.pathname.includes('/recipe/')) {
+                setTimeout(() => {
+                    window.location.href = '/recipes';
+                }, 1000);
+            } else {
+                // Remove recipe card from the current page or reload
+                const recipeCard = document.querySelector(`[data-recipe-id="${id}"], .recipe-card:has([onclick*="deleteRecipe(${id})"])`);
+                if (recipeCard) {
+                    recipeCard.style.opacity = '0';
+                    recipeCard.style.transform = 'translateY(-20px)';
+                    setTimeout(() => recipeCard.remove(), 300);
+                } else {
+                    setTimeout(() => location.reload(), 1000);
+                }
+            }
+            return true;
+        } else {
+            RecipeBook.showNotification(data.error || 'Failed to delete recipe', 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('Delete recipe error:', error);
+        RecipeBook.showNotification('Failed to delete recipe. Please try again.', 'error');
+        return false;
+    } finally {
+        if (removeLoading) removeLoading();
     }
 }
 
-function deleteIngredient(id, name) {
-    if (confirm(`Are you sure you want to delete "${name}"?`)) {
-        fetch(`/api/ingredients/${id}`, {
-            method: 'DELETE'
-        })
-        .then(response => {
-            if (response.ok) {
-                location.reload();
-            } else if (response.status === 409) {
-                // Ingredient is used in recipes
-                return response.json().then(data => {
-                    showIngredientUsageError(data);
-                });
-            } else {
-                throw new Error('Failed to delete ingredient');
-            }
-        })
-        .catch(error => {
-            showError('Error deleting ingredient: ' + error.message);
-        });
+async function deleteIngredient(id, name) {
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+        return false;
     }
+
+    // Find delete button for loading state
+    const deleteButton = document.querySelector(`[onclick*="deleteIngredient(${id}"], .btn-delete[data-ingredient-id="${id}"]`);
+    let removeLoading = null;
+    
+    if (deleteButton) {
+        const originalText = deleteButton.innerHTML;
+        deleteButton.disabled = true;
+        deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+        
+        removeLoading = () => {
+            deleteButton.disabled = false;
+            deleteButton.innerHTML = originalText;
+        };
+    }
+
+    try {
+        const response = await fetch(`/api/ingredients/${id}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+            return true;
+        } else if (response.status === 409 && data.usedInRecipes) {
+            // Show detailed usage error modal
+            showIngredientUsageError(data);
+            return false;
+        } else {
+            RecipeBook.showNotification(data.error || 'Failed to delete ingredient', 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('Delete ingredient error:', error);
+        RecipeBook.showNotification('Failed to delete ingredient. Please try again.', 'error');
+        return false;
+    } finally {
+        if (removeLoading) removeLoading();
+    }
+}
+
+async function deleteTag(id, name) {
+    if (!confirm(`Are you sure you want to delete "${name}"? This will remove it from all recipes.`)) {
+        return false;
+    }
+
+    // Find delete button for loading state
+    const deleteButton = document.querySelector(`[onclick*="deleteTag(${id}"], .btn-delete[data-tag-id="${id}"]`);
+    let removeLoading = null;
+    
+    if (deleteButton) {
+        const originalText = deleteButton.innerHTML;
+        deleteButton.disabled = true;
+        deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        
+        removeLoading = () => {
+            deleteButton.disabled = false;
+            deleteButton.innerHTML = originalText;
+        };
+    }
+
+    try {
+        const response = await fetch(`/api/tags/${id}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+            return true;
+        } else {
+            RecipeBook.showNotification(data.error || 'Failed to delete tag', 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('Delete tag error:', error);
+        RecipeBook.showNotification('Failed to delete tag. Please try again.', 'error');
+        return false;
+    } finally {
+        if (removeLoading) removeLoading();
+    }
+}
+
+async function logout() {
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            setTimeout(() => {
+                window.location.href = data.redirect || '/recipes';
+            }, 1000);
+        } else {
+            RecipeBook.showNotification(data.error || 'Logout failed', 'error');
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+        RecipeBook.showNotification('Logout failed. Please try again.', 'error');
+    }
+}
+
+async function performSearch(query) {
+    if (!query || query.trim().length < 2) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        const data = await response.json();
+
+        if (data.success) {
+            // Handle search results
+            displaySearchResults(data.results, data.query);
+            return data.results;
+        } else {
+            RecipeBook.showNotification(data.error || 'Search failed', 'error');
+            return [];
+        }
+    } catch (error) {
+        console.error('Search error:', error);
+        RecipeBook.showNotification('Search failed. Please try again.', 'error');
+        return [];
+    }
+}
+
+function displaySearchResults(results, query) {
+    // This would be implemented if you want dynamic search results
+    // For now, we rely on page refresh with query parameters
+    console.log(`Search results for "${query}":`, results);
 }
 
 // Search functionality
@@ -99,13 +256,13 @@ function validateRecipeForm(form) {
     const instructions = form.querySelector('#instructions');
     
     if (!title.value.trim()) {
-        alert('Recipe title is required.');
+        RecipeBook.showNotification('Recipe title is required.', 'error');
         title.focus();
         return false;
     }
     
     if (!instructions.value.trim()) {
-        alert('Cooking instructions are required.');
+        RecipeBook.showNotification('Cooking instructions are required.', 'error');
         instructions.focus();
         return false;
     }
@@ -124,7 +281,7 @@ function validateRecipeForm(form) {
     });
     
     if (!hasValidIngredient) {
-        alert('Please add at least one ingredient with a valid quantity.');
+        RecipeBook.showNotification('Please add at least one ingredient with a valid quantity.', 'error');
         return false;
     }
     
@@ -603,6 +760,130 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }, { passive: false });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle logout form submissions
+    const logoutForms = document.querySelectorAll('form[action*="/logout"]');
+    logoutForms.forEach(form => {
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await logout();
+        });
+    });
+    
+    // Handle search forms with enter key
+    const searchInputs = document.querySelectorAll('.search-input');
+    searchInputs.forEach(input => {
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const form = e.target.closest('form');
+                if (form) {
+                    form.submit(); // Use regular form submission for search
+                }
+            }
+        });
+    });
+    
+    // Auto-hide alerts after 5 seconds
+    const alerts = document.querySelectorAll('.alert');
+    alerts.forEach(alert => {
+        setTimeout(() => {
+            if (alert.parentNode) {
+                alert.style.opacity = '0';
+                alert.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    if (alert.parentNode) {
+                        alert.remove();
+                    }
+                }, 300);
+            }
+        }, 5000);
+    });
+    
+    // Enhanced tag filter interactions with loading states
+    const tagFilters = document.querySelectorAll('.tag-filter, .recipe-tag');
+    tagFilters.forEach(filter => {
+        filter.addEventListener('click', function(e) {
+            // Show loading state for navigation
+            const originalContent = this.innerHTML;
+            this.style.opacity = '0.7';
+            const loadingContent = '<i class="fas fa-spinner fa-spin"></i> ' + this.textContent.trim();
+            
+            // Only show loading if this is a navigation link
+            if (this.tagName === 'A') {
+                this.innerHTML = loadingContent;
+                
+                // Restore content if navigation fails
+                setTimeout(() => {
+                    this.innerHTML = originalContent;
+                    this.style.opacity = '1';
+                }, 2000);
+            }
+        });
+    });
+});
+
+// Mobile menu functionality (preserved from original)
+document.addEventListener('DOMContentLoaded', function() {
+    const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+    const navLinks = document.getElementById('navLinks');
+    const navOverlay = document.getElementById('navOverlay');
+    const body = document.body;
+
+    if (!mobileMenuToggle || !navLinks || !navOverlay) return;
+
+    function toggleMobileMenu() {
+        const isOpen = navLinks.classList.contains('mobile-open');
+        
+        if (isOpen) {
+            closeMobileMenu();
+        } else {
+            openMobileMenu();
+        }
+    }
+
+    function openMobileMenu() {
+        navLinks.classList.add('mobile-open');
+        mobileMenuToggle.classList.add('active');
+        navOverlay.classList.add('active');
+        body.classList.add('menu-open');
+        mobileMenuToggle.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMobileMenu() {
+        navLinks.classList.remove('mobile-open');
+        mobileMenuToggle.classList.remove('active');
+        navOverlay.classList.remove('active');
+        body.classList.remove('menu-open');
+        mobileMenuToggle.setAttribute('aria-expanded', 'false');
+    }
+
+    // Event listeners
+    mobileMenuToggle.addEventListener('click', toggleMobileMenu);
+    navOverlay.addEventListener('click', closeMobileMenu);
+
+    // Close menu when clicking on a nav link (mobile)
+    navLinks.addEventListener('click', (e) => {
+        if ((e.target.classList.contains('nav-link') || e.target.closest('.nav-link')) && window.innerWidth <= 768) {
+            setTimeout(closeMobileMenu, 150);
+        }
+    });
+
+    // Close menu on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && navLinks.classList.contains('mobile-open')) {
+            closeMobileMenu();
+        }
+    });
+
+    // Close menu on window resize if it gets too wide
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768 && navLinks.classList.contains('mobile-open')) {
+            closeMobileMenu();
+        }
+    });
 });
 
 // Debug helper - uncomment to see what's actually in the instructions

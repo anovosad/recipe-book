@@ -4,11 +4,16 @@
         <h1><i class="fas fa-tag"></i> New Tag</h1>
     </div>
     
-    <form action="/api/tags" method="POST" class="tag-form">
+    <form id="tagForm" class="tag-form">
         <div class="form-section">
             <div class="form-group">
                 <label for="name">Tag Name *</label>
                 <input type="text" id="name" name="name" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="color">Tag Color</label>
+                <input type="color" id="color" name="color" class="form-control" value="#ff6b6b">
             </div>
         </div>
         
@@ -22,6 +27,46 @@
         </div>
     </form>
 </div>
+
+<script>
+document.getElementById('tagForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    try {
+        const formData = new FormData(this);
+        const response = await fetch('/api/tags', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            // Redirect after success
+            setTimeout(() => {
+                window.location.href = data.redirect || '/tags';
+            }, 1000);
+        } else {
+            RecipeBook.showNotification(data.error || 'Failed to save tag', 'error');
+        }
+    } catch (error) {
+        console.error('Tag save error:', error);
+        RecipeBook.showNotification('Failed to save tag. Please try again.', 'error');
+    } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+</script>
 {{end}}
 
 <!DOCTYPE html>

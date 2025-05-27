@@ -4,7 +4,7 @@
         <h1><i class="fas fa-plus-circle"></i> New Ingredient</h1>
     </div>
     
-    <form action="/api/ingredients" method="POST" class="ingredient-form">
+    <form id="ingredientForm" class="ingredient-form">
         <div class="form-section">
             <div class="form-group">
                 <label for="name">Ingredient Name *</label>
@@ -22,8 +22,47 @@
         </div>
     </form>
 </div>
-{{end}}
 
+<script>
+document.getElementById('ingredientForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    try {
+        const formData = new FormData(this);
+        const response = await fetch('/api/ingredients', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            // Redirect after success
+            setTimeout(() => {
+                window.location.href = data.redirect || '/ingredients';
+            }, 1000);
+        } else {
+            RecipeBook.showNotification(data.error || 'Failed to save ingredient', 'error');
+        }
+    } catch (error) {
+        console.error('Ingredient save error:', error);
+        RecipeBook.showNotification('Failed to save ingredient. Please try again.', 'error');
+    } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+</script>
+{{end}}
 <!DOCTYPE html>
 <html lang="en">
 <head>

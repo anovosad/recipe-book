@@ -3,7 +3,7 @@
     <div class="auth-card">
         <h2><i class="fas fa-user-plus"></i> Register</h2>
         
-        <form action="/api/register" method="POST" class="auth-form">
+        <form id="registerForm" class="auth-form">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" class="form-control" required>
@@ -29,6 +29,46 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+    
+    try {
+        const formData = new FormData(this);
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            // Redirect to login after success
+            setTimeout(() => {
+                window.location.href = '/login?message=' + encodeURIComponent(data.message);
+            }, 1500);
+        } else {
+            RecipeBook.showNotification(data.error || 'Registration failed', 'error');
+        }
+    } catch (error) {
+        console.error('Registration error:', error);
+        RecipeBook.showNotification('Registration failed. Please try again.', 'error');
+    } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+</script>
 {{end}}
 
 <!DOCTYPE html>

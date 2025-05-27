@@ -38,6 +38,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     
     try {
         const formData = new FormData(this);
+        for (var x of formData) console.log(x);
         const response = await fetch('/api/login', {
             method: 'POST',
             body: formData
@@ -146,6 +147,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         {{template "login-content" .}}
     </div>
 
+    <script src="/static/js/core.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

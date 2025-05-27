@@ -394,6 +394,13 @@ func NewTagPageHandler(w http.ResponseWriter, r *http.Request) {
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
+	err := r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		utils.LogSecurityEvent("FORM_PARSE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
+		return
+	}
+
 	username := strings.TrimSpace(r.FormValue("username"))
 	email := strings.TrimSpace(r.FormValue("email"))
 	password := r.FormValue("password")
@@ -442,6 +449,13 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
+
+	err := r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		utils.LogSecurityEvent("FORM_PARSE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
+		return
+	}
 
 	username := strings.TrimSpace(r.FormValue("username"))
 	password := r.FormValue("password")
@@ -1087,6 +1101,14 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientIP := getClientIP(r)
+
+	err = r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		utils.LogSecurityEvent("FORM_PARSE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
+		return
+	}
+
 	name := strings.TrimSpace(r.FormValue("name"))
 
 	// Validate ingredient name
@@ -1200,6 +1222,14 @@ func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clientIP := getClientIP(r)
+
+	err = r.ParseMultipartForm(32 << 20) // 32MB max
+	if err != nil {
+		utils.LogSecurityEvent("FORM_PARSE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
+		return
+	}
+
 	name := strings.TrimSpace(r.FormValue("name"))
 	color := strings.TrimSpace(r.FormValue("color"))
 
