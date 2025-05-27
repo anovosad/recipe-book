@@ -3,7 +3,7 @@
     <div class="auth-card">
         <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
         
-        <form action="/api/login" method="POST" class="auth-form">
+        <form id="loginForm" class="auth-form">
             <div class="form-group">
                 <label for="username">Username</label>
                 <input type="text" id="username" name="username" class="form-control" required>
@@ -24,6 +24,46 @@
         </div>
     </div>
 </div>
+
+<script>
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+    
+    try {
+        const formData = new FormData(this);
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            RecipeBook.showNotification(data.message, 'success');
+            // Redirect after success
+            setTimeout(() => {
+                window.location.href = data.redirect || '/recipes';
+            }, 1000);
+        } else {
+            RecipeBook.showNotification(data.error || 'Login failed', 'error');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        RecipeBook.showNotification('Login failed. Please try again.', 'error');
+    } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+    }
+});
+</script>
 {{end}}
 
 <!DOCTYPE html>
@@ -70,11 +110,9 @@
                         <div class="username">
                             <i class="fas fa-user"></i> <span>{{.User.Username}}</span>
                         </div>
-                        <form action="/api/logout" method="POST">
-                            <button type="submit" class="btn btn-secondary">
-                                <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-secondary" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+                        </button>
                     </div>
                 {{else}}
                     <div class="auth-buttons">

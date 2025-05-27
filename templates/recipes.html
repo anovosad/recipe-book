@@ -182,11 +182,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="username">
                             <i class="fas fa-user"></i> <span>{{.User.Username}}</span>
                         </div>
-                        <form action="/api/logout" method="POST">
-                            <button type="submit" class="btn btn-secondary">
-                                <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
-                            </button>
-                        </form>
+                        <button type="button" class="btn btn-secondary" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i> <span>Logout</span>
+                        </button>
                     </div>
                 {{else}}
                     <div class="auth-buttons">

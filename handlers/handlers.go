@@ -1,4 +1,4 @@
-// File: handlers/handlers.go (Complete Security Enhanced Version)
+// File: handlers/handlers.go (API Handlers Updated to Return JSON)
 package handlers
 
 import (
@@ -44,20 +44,22 @@ func getClientIP(r *http.Request) string {
 	return ip
 }
 
-// Helper function to validate and respond with errors
+// Helper function to validate and respond with JSON errors
 func validateAndRespond(w http.ResponseWriter, r *http.Request, validations ...utils.ValidationResult) bool {
 	for _, validation := range validations {
 		if !validation.Valid {
 			clientIP := getClientIP(r)
 			utils.LogSecurityEvent("VALIDATION_FAILED", clientIP, validation.Message)
-			http.Error(w, validation.Message, http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": validation.Message})
 			return false
 		}
 	}
 	return true
 }
 
-// Helper function to render template with error handling
+// Helper function to render template with error handling (for page handlers only)
 func renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data models.PageData) {
 	if err := utils.Templates.ExecuteTemplate(w, templateName, data); err != nil {
 		clientIP := getClientIP(r)
@@ -66,7 +68,33 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, templateName string,
 	}
 }
 
-// Page Handlers
+// Helper function to send JSON response
+func sendJSONResponse(w http.ResponseWriter, statusCode int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
+}
+
+// Helper function to send JSON error response
+func sendJSONError(w http.ResponseWriter, statusCode int, message string) {
+	sendJSONResponse(w, statusCode, map[string]string{"error": message})
+}
+
+// Helper function to send JSON success response
+func sendJSONSuccess(w http.ResponseWriter, message string, data interface{}) {
+	response := map[string]interface{}{
+		"success": true,
+		"message": message,
+	}
+	if data != nil {
+		response["data"] = data
+	}
+	sendJSONResponse(w, http.StatusOK, response)
+}
+
+// Page Handlers (these still return HTML)
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/recipes", http.StatusSeeOther)
 }
@@ -361,7 +389,7 @@ func NewTagPageHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, r, "tag-form.html", data)
 }
 
-// API Handlers with Security Enhancements
+// API Handlers (these now return JSON only)
 
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
@@ -377,21 +405,18 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !usernameValidation.Valid {
 		utils.LogSecurityEvent("INVALID_REGISTRATION_USERNAME", clientIP, username)
-		data := models.PageData{Title: "Register", Error: usernameValidation.Message}
-		renderTemplate(w, r, "register.html", data)
+		sendJSONError(w, http.StatusBadRequest, usernameValidation.Message)
 		return
 	}
 
 	if !emailValidation.Valid {
 		utils.LogSecurityEvent("INVALID_REGISTRATION_EMAIL", clientIP, email)
-		data := models.PageData{Title: "Register", Error: emailValidation.Message}
-		renderTemplate(w, r, "register.html", data)
+		sendJSONError(w, http.StatusBadRequest, emailValidation.Message)
 		return
 	}
 
 	if !passwordValidation.Valid {
-		data := models.PageData{Title: "Register", Error: passwordValidation.Message}
-		renderTemplate(w, r, "register.html", data)
+		sendJSONError(w, http.StatusBadRequest, passwordValidation.Message)
 		return
 	}
 
@@ -399,8 +424,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		utils.LogSecurityEvent("PASSWORD_HASH_ERROR", clientIP, err.Error())
-		data := models.PageData{Title: "Register", Error: "Error processing password"}
-		renderTemplate(w, r, "register.html", data)
+		sendJSONError(w, http.StatusInternalServerError, "Error processing password")
 		return
 	}
 
@@ -408,13 +432,12 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	err = database.CreateUserSecure(username, email, string(hashedPassword))
 	if err != nil {
 		utils.LogSecurityEvent("REGISTRATION_FAILED", clientIP, fmt.Sprintf("Username: %s, Email: %s, Error: %v", username, email, err))
-		data := models.PageData{Title: "Register", Error: "Username or email already exists"}
-		renderTemplate(w, r, "register.html", data)
+		sendJSONError(w, http.StatusConflict, "Username or email already exists")
 		return
 	}
 
 	utils.LogSecurityEvent("USER_REGISTERED", clientIP, fmt.Sprintf("Username: %s, Email: %s", username, email))
-	http.Redirect(w, r, "/login?message=Registration successful! Please log in.", http.StatusSeeOther)
+	sendJSONSuccess(w, "Registration successful! Please log in.", nil)
 }
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
@@ -426,8 +449,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	// Basic validation
 	if username == "" || password == "" {
 		utils.LogSecurityEvent("LOGIN_EMPTY_FIELDS", clientIP, fmt.Sprintf("Username: %s", username))
-		data := models.PageData{Title: "Login", Error: "Username and password are required"}
-		renderTemplate(w, r, "login.html", data)
+		sendJSONError(w, http.StatusBadRequest, "Username and password are required")
 		return
 	}
 
@@ -435,8 +457,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	usernameValidation := utils.ValidateUsername(username)
 	if !usernameValidation.Valid {
 		utils.LogSecurityEvent("LOGIN_INVALID_USERNAME", clientIP, username)
-		data := models.PageData{Title: "Login", Error: "Invalid credentials"}
-		renderTemplate(w, r, "login.html", data)
+		sendJSONError(w, http.StatusBadRequest, "Invalid credentials")
 		return
 	}
 
@@ -444,16 +465,14 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	user, hashedPassword, err := database.GetUserByUsernameSecure(username)
 	if err != nil {
 		utils.LogSecurityEvent("LOGIN_USER_NOT_FOUND", clientIP, username)
-		data := models.PageData{Title: "Login", Error: "Invalid credentials"}
-		renderTemplate(w, r, "login.html", data)
+		sendJSONError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password)); err != nil {
 		utils.LogSecurityEvent("LOGIN_WRONG_PASSWORD", clientIP, username)
-		data := models.PageData{Title: "Login", Error: "Invalid credentials"}
-		renderTemplate(w, r, "login.html", data)
+		sendJSONError(w, http.StatusUnauthorized, "Invalid credentials")
 		return
 	}
 
@@ -461,15 +480,24 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	tokenString, err := auth.CreateToken(user)
 	if err != nil {
 		utils.LogSecurityEvent("TOKEN_CREATION_ERROR", clientIP, err.Error())
-		data := models.PageData{Title: "Login", Error: "Error creating session"}
-		renderTemplate(w, r, "login.html", data)
+		sendJSONError(w, http.StatusInternalServerError, "Error creating session")
 		return
 	}
 
 	// Set secure cookie
 	auth.SetAuthCookie(w, tokenString)
 	utils.LogSecurityEvent("LOGIN_SUCCESS", clientIP, username)
-	http.Redirect(w, r, "/recipes", http.StatusSeeOther)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "Login successful",
+		"user": map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
+		},
+		"redirect": "/recipes",
+	})
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -483,13 +511,17 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	auth.ClearAuthCookie(w)
-	http.Redirect(w, r, "/recipes", http.StatusSeeOther)
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"message":  "Logged out successfully",
+		"redirect": "/recipes",
+	})
 }
 
 func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -498,7 +530,7 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	err = r.ParseMultipartForm(32 << 20) // 32MB max
 	if err != nil {
 		utils.LogSecurityEvent("FORM_PARSE_ERROR", clientIP, err.Error())
-		http.Error(w, "Error parsing form", http.StatusBadRequest)
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
 		return
 	}
 
@@ -514,32 +546,27 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	instrValidation := utils.ValidateRecipeInstructions(instructions)
 	servingUnitValidation := utils.ValidateServingUnit(servingUnit)
 
-	if !titleValidation.Valid || !descValidation.Valid || !instrValidation.Valid || !servingUnitValidation.Valid {
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
+	if !titleValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, titleValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, titleValidation.Message)
+		return
+	}
 
-		var errorMsg string
-		if !titleValidation.Valid {
-			errorMsg = titleValidation.Message
-		} else if !descValidation.Valid {
-			errorMsg = descValidation.Message
-		} else if !instrValidation.Valid {
-			errorMsg = instrValidation.Message
-		} else {
-			errorMsg = servingUnitValidation.Message
-		}
+	if !descValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, descValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, descValidation.Message)
+		return
+	}
 
-		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, errorMsg)
+	if !instrValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, instrValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, instrValidation.Message)
+		return
+	}
 
-		data := models.PageData{
-			Title:       "New Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       errorMsg,
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+	if !servingUnitValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, servingUnitValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, servingUnitValidation.Message)
 		return
 	}
 
@@ -552,28 +579,18 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	cookTimeValidation := utils.ValidateNumericInput(cookTime, 0, 1440, "Cook time")
 	servingsValidation := utils.ValidateNumericInput(servings, 1, 100, "Servings")
 
-	if !prepTimeValidation.Valid || !cookTimeValidation.Valid || !servingsValidation.Valid {
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
+	if !prepTimeValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, prepTimeValidation.Message)
+		return
+	}
 
-		var errorMsg string
-		if !prepTimeValidation.Valid {
-			errorMsg = prepTimeValidation.Message
-		} else if !cookTimeValidation.Valid {
-			errorMsg = cookTimeValidation.Message
-		} else {
-			errorMsg = servingsValidation.Message
-		}
+	if !cookTimeValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, cookTimeValidation.Message)
+		return
+	}
 
-		data := models.PageData{
-			Title:       "New Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       errorMsg,
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+	if !servingsValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, servingsValidation.Message)
 		return
 	}
 
@@ -585,17 +602,7 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	recipeID, err := database.CreateRecipeSecure(title, description, instructions, prepTime, cookTime, servings, servingUnit, user.ID)
 	if err != nil {
 		utils.LogSecurityEvent("RECIPE_INSERT_ERROR", clientIP, err.Error())
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
-		data := models.PageData{
-			Title:       "New Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       "Error creating recipe",
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+		sendJSONError(w, http.StatusInternalServerError, "Error creating recipe")
 		return
 	}
 
@@ -693,7 +700,13 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.LogSecurityEvent("RECIPE_CREATED", clientIP, fmt.Sprintf("RecipeID:%d, Title:%s, User:%s", recipeID, title, user.Username))
-	http.Redirect(w, r, fmt.Sprintf("/recipe/%d", recipeID), http.StatusSeeOther)
+
+	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success":   true,
+		"message":   "Recipe created successfully",
+		"recipe_id": recipeID,
+		"redirect":  fmt.Sprintf("/recipe/%d", recipeID),
+	})
 }
 
 func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *models.User, recipeID int) {
@@ -703,14 +716,14 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	owns, err := database.UserOwnsRecipe(recipeID, user.ID)
 	if err != nil || !owns {
 		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_EDIT_ATTEMPT", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, recipeID))
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
 	err = r.ParseMultipartForm(32 << 20) // 32MB max
 	if err != nil {
 		utils.LogSecurityEvent("EDIT_FORM_PARSE_ERROR", clientIP, err.Error())
-		http.Error(w, "Error parsing form", http.StatusBadRequest)
+		sendJSONError(w, http.StatusBadRequest, "Error parsing form")
 		return
 	}
 
@@ -726,34 +739,27 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	instrValidation := utils.ValidateRecipeInstructions(instructions)
 	servingUnitValidation := utils.ValidateServingUnit(servingUnit)
 
-	if !titleValidation.Valid || !descValidation.Valid || !instrValidation.Valid || !servingUnitValidation.Valid {
-		recipe, _ := database.GetRecipeByIDSecure(recipeID)
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
+	if !titleValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, titleValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, titleValidation.Message)
+		return
+	}
 
-		var errorMsg string
-		if !titleValidation.Valid {
-			errorMsg = titleValidation.Message
-		} else if !descValidation.Valid {
-			errorMsg = descValidation.Message
-		} else if !instrValidation.Valid {
-			errorMsg = instrValidation.Message
-		} else {
-			errorMsg = servingUnitValidation.Message
-		}
+	if !descValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, descValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, descValidation.Message)
+		return
+	}
 
-		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, errorMsg)
+	if !instrValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, instrValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, instrValidation.Message)
+		return
+	}
 
-		data := models.PageData{
-			Title:       "Edit Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Recipe:      recipe,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       errorMsg,
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+	if !servingUnitValidation.Valid {
+		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, servingUnitValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, servingUnitValidation.Message)
 		return
 	}
 
@@ -766,30 +772,18 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	cookTimeValidation := utils.ValidateNumericInput(cookTime, 0, 1440, "Cook time")
 	servingsValidation := utils.ValidateNumericInput(servings, 1, 100, "Servings")
 
-	if !prepTimeValidation.Valid || !cookTimeValidation.Valid || !servingsValidation.Valid {
-		recipe, _ := database.GetRecipeByIDSecure(recipeID)
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
+	if !prepTimeValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, prepTimeValidation.Message)
+		return
+	}
 
-		var errorMsg string
-		if !prepTimeValidation.Valid {
-			errorMsg = prepTimeValidation.Message
-		} else if !cookTimeValidation.Valid {
-			errorMsg = cookTimeValidation.Message
-		} else {
-			errorMsg = servingsValidation.Message
-		}
+	if !cookTimeValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, cookTimeValidation.Message)
+		return
+	}
 
-		data := models.PageData{
-			Title:       "Edit Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Recipe:      recipe,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       errorMsg,
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+	if !servingsValidation.Valid {
+		sendJSONError(w, http.StatusBadRequest, servingsValidation.Message)
 		return
 	}
 
@@ -805,19 +799,7 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 
 	if err != nil {
 		utils.LogSecurityEvent("RECIPE_UPDATE_ERROR", clientIP, err.Error())
-		recipe, _ := database.GetRecipeByIDSecure(recipeID)
-		ingredients, _ := database.GetAllIngredients()
-		tags, _ := database.GetAllTags()
-		data := models.PageData{
-			Title:       "Edit Recipe",
-			User:        user,
-			IsLoggedIn:  true,
-			Recipe:      recipe,
-			Ingredients: ingredients,
-			Tags:        tags,
-			Error:       "Error updating recipe",
-		}
-		renderTemplate(w, r, "recipe-form.html", data)
+		sendJSONError(w, http.StatusInternalServerError, "Error updating recipe")
 		return
 	}
 
@@ -920,14 +902,18 @@ func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *mo
 	}
 
 	utils.LogSecurityEvent("RECIPE_UPDATED", clientIP, fmt.Sprintf("RecipeID:%d, Title:%s, User:%s", recipeID, title, user.Username))
-	http.Redirect(w, r, fmt.Sprintf("/recipe/%d", recipeID), http.StatusSeeOther)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success":  true,
+		"message":  "Recipe updated successfully",
+		"redirect": fmt.Sprintf("/recipe/%d", recipeID),
+	})
 }
 
 func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -938,8 +924,7 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(path)
 	if err != nil || !utils.IsValidID(id) {
 		utils.LogSecurityEvent("INVALID_RECIPE_ID_API", clientIP, path)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid recipe ID"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
 		return
 	}
 
@@ -947,16 +932,14 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	owns, err := database.UserOwnsRecipe(id, user.ID)
 	if err != nil || !owns {
 		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_UPDATE_API", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
+		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
 	var recipe models.Recipe
 	if err := json.NewDecoder(r.Body).Decode(&recipe); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_RECIPE_UPDATE", clientIP, err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
 	}
 
@@ -968,29 +951,25 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !titleValidation.Valid {
 		utils.LogSecurityEvent("INVALID_RECIPE_TITLE_API", clientIP, recipe.Title)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": titleValidation.Message})
+		sendJSONError(w, http.StatusBadRequest, titleValidation.Message)
 		return
 	}
 
 	if !descValidation.Valid {
 		utils.LogSecurityEvent("INVALID_RECIPE_DESC_API", clientIP, recipe.Description)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": descValidation.Message})
+		sendJSONError(w, http.StatusBadRequest, descValidation.Message)
 		return
 	}
 
 	if !instrValidation.Valid {
 		utils.LogSecurityEvent("INVALID_RECIPE_INSTR_API", clientIP, recipe.Instructions)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": instrValidation.Message})
+		sendJSONError(w, http.StatusBadRequest, instrValidation.Message)
 		return
 	}
 
 	if !servingUnitValidation.Valid {
 		utils.LogSecurityEvent("INVALID_SERVING_UNIT_API", clientIP, recipe.ServingUnit)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": servingUnitValidation.Message})
+		sendJSONError(w, http.StatusBadRequest, servingUnitValidation.Message)
 		return
 	}
 
@@ -999,19 +978,21 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	cookTimeValidation := utils.ValidateNumericInput(recipe.CookTime, 0, 1440, "Cook time")
 	servingsValidation := utils.ValidateNumericInput(recipe.Servings, 1, 100, "Servings")
 
-	if !prepTimeValidation.Valid || !cookTimeValidation.Valid || !servingsValidation.Valid {
-		var errorMsg string
-		if !prepTimeValidation.Valid {
-			errorMsg = prepTimeValidation.Message
-		} else if !cookTimeValidation.Valid {
-			errorMsg = cookTimeValidation.Message
-		} else {
-			errorMsg = servingsValidation.Message
-		}
+	if !prepTimeValidation.Valid {
+		utils.LogSecurityEvent("INVALID_RECIPE_NUMERIC_API", clientIP, prepTimeValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, prepTimeValidation.Message)
+		return
+	}
 
-		utils.LogSecurityEvent("INVALID_RECIPE_NUMERIC_API", clientIP, errorMsg)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": errorMsg})
+	if !cookTimeValidation.Valid {
+		utils.LogSecurityEvent("INVALID_RECIPE_NUMERIC_API", clientIP, cookTimeValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, cookTimeValidation.Message)
+		return
+	}
+
+	if !servingsValidation.Valid {
+		utils.LogSecurityEvent("INVALID_RECIPE_NUMERIC_API", clientIP, servingsValidation.Message)
+		sendJSONError(w, http.StatusBadRequest, servingsValidation.Message)
 		return
 	}
 
@@ -1024,8 +1005,7 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		utils.LogSecurityEvent("RECIPE_UPDATE_API_ERROR", clientIP, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to update recipe"})
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update recipe")
 		return
 	}
 
@@ -1050,15 +1030,13 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.LogSecurityEvent("RECIPE_UPDATED_API", clientIP, fmt.Sprintf("RecipeID:%d, User:%s", id, user.Username))
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Recipe updated successfully"})
+	sendJSONSuccess(w, "Recipe updated successfully", nil)
 }
 
 func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1069,8 +1047,7 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(path)
 	if err != nil || !utils.IsValidID(id) {
 		utils.LogSecurityEvent("INVALID_RECIPE_ID_DELETE", clientIP, path)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid recipe ID"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
 		return
 	}
 
@@ -1082,12 +1059,10 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
 			utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_DELETE", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
-			w.WriteHeader(http.StatusForbidden)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Recipe not found or access denied"})
+			sendJSONError(w, http.StatusForbidden, "Recipe not found or access denied")
 		} else {
 			utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete recipe"})
+			sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
 		}
 		return
 	}
@@ -1101,14 +1076,13 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.LogSecurityEvent("RECIPE_DELETED", clientIP, fmt.Sprintf("RecipeID:%d, User:%s", id, user.Username))
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Recipe deleted successfully"})
+	sendJSONSuccess(w, "Recipe deleted successfully", nil)
 }
 
 func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1119,13 +1093,7 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	nameValidation := utils.ValidateIngredientName(name)
 	if !nameValidation.Valid {
 		utils.LogSecurityEvent("INGREDIENT_VALIDATION_FAILED", clientIP, fmt.Sprintf("Name: %s, Error: %s", name, nameValidation.Message))
-		data := models.PageData{
-			Title:      "New Ingredient",
-			User:       user,
-			IsLoggedIn: true,
-			Error:      nameValidation.Message,
-		}
-		renderTemplate(w, r, "ingredient-form.html", data)
+		sendJSONError(w, http.StatusBadRequest, nameValidation.Message)
 		return
 	}
 
@@ -1133,25 +1101,24 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	err = database.CreateIngredientSecure(name)
 	if err != nil {
 		utils.LogSecurityEvent("INGREDIENT_INSERT_ERROR", clientIP, fmt.Sprintf("Name: %s, Error: %v", name, err))
-		data := models.PageData{
-			Title:      "New Ingredient",
-			User:       user,
-			IsLoggedIn: true,
-			Error:      "Ingredient already exists or database error",
-		}
-		renderTemplate(w, r, "ingredient-form.html", data)
+		sendJSONError(w, http.StatusConflict, "Ingredient already exists or database error")
 		return
 	}
 
 	utils.LogSecurityEvent("INGREDIENT_CREATED", clientIP, fmt.Sprintf("Name: %s, User: %s", name, user.Username))
-	http.Redirect(w, r, "/ingredients", http.StatusSeeOther)
+
+	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success":  true,
+		"message":  "Ingredient created successfully",
+		"name":     name,
+		"redirect": "/ingredients",
+	})
 }
 
 func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1162,8 +1129,7 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(path)
 	if err != nil || !utils.IsValidID(id) {
 		utils.LogSecurityEvent("INVALID_INGREDIENT_ID_DELETE", clientIP, path)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid ingredient ID"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid ingredient ID")
 		return
 	}
 
@@ -1208,8 +1174,7 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 
 			utils.LogSecurityEvent("INGREDIENT_DELETE_BLOCKED", clientIP, fmt.Sprintf("Name: %s, UsedIn: %d recipes", ingredientName, recipeCount))
 
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			sendJSONResponse(w, http.StatusConflict, map[string]interface{}{
 				"error":         errorMsg,
 				"usedInRecipes": true,
 				"recipeCount":   recipeCount,
@@ -1218,21 +1183,19 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			utils.LogSecurityEvent("INGREDIENT_DELETE_ERROR", clientIP, err.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete ingredient"})
+			sendJSONError(w, http.StatusInternalServerError, "Failed to delete ingredient")
 			return
 		}
 	}
 
 	utils.LogSecurityEvent("INGREDIENT_DELETED", clientIP, fmt.Sprintf("ID: %d, Name: %s, User: %s", id, ingredientName, user.Username))
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Ingredient deleted successfully"})
+	sendJSONSuccess(w, "Ingredient deleted successfully", nil)
 }
 
 func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1248,13 +1211,7 @@ func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	nameValidation := utils.ValidateTagName(name)
 	if !nameValidation.Valid {
 		utils.LogSecurityEvent("TAG_VALIDATION_FAILED", clientIP, fmt.Sprintf("Name: %s, Error: %s", name, nameValidation.Message))
-		data := models.PageData{
-			Title:      "New Tag",
-			User:       user,
-			IsLoggedIn: true,
-			Error:      nameValidation.Message,
-		}
-		renderTemplate(w, r, "tag-form.html", data)
+		sendJSONError(w, http.StatusBadRequest, nameValidation.Message)
 		return
 	}
 
@@ -1267,25 +1224,25 @@ func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	err = database.CreateTagSecure(name, color)
 	if err != nil {
 		utils.LogSecurityEvent("TAG_INSERT_ERROR", clientIP, fmt.Sprintf("Name: %s, Error: %v", name, err))
-		data := models.PageData{
-			Title:      "New Tag",
-			User:       user,
-			IsLoggedIn: true,
-			Error:      "Tag already exists or database error",
-		}
-		renderTemplate(w, r, "tag-form.html", data)
+		sendJSONError(w, http.StatusConflict, "Tag already exists or database error")
 		return
 	}
 
 	utils.LogSecurityEvent("TAG_CREATED", clientIP, fmt.Sprintf("Name: %s, Color: %s, User: %s", name, color, user.Username))
-	http.Redirect(w, r, "/tags", http.StatusSeeOther)
+
+	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success":  true,
+		"message":  "Tag created successfully",
+		"name":     name,
+		"color":    color,
+		"redirect": "/tags",
+	})
 }
 
 func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1296,8 +1253,7 @@ func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(path)
 	if err != nil || !utils.IsValidID(id) {
 		utils.LogSecurityEvent("INVALID_TAG_ID_DELETE", clientIP, path)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid tag ID"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid tag ID")
 		return
 	}
 
@@ -1309,21 +1265,18 @@ func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("DELETE FROM tags WHERE id = ?", id)
 	if err != nil {
 		utils.LogSecurityEvent("TAG_DELETE_ERROR", clientIP, fmt.Sprintf("ID: %d, Error: %v", id, err))
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete tag"})
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete tag")
 		return
 	}
 
 	utils.LogSecurityEvent("TAG_DELETED", clientIP, fmt.Sprintf("ID: %d, Name: %s, User: %s", id, tagName, user.Username))
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Tag deleted successfully"})
+	sendJSONSuccess(w, "Tag deleted successfully", nil)
 }
 
 func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
 
@@ -1334,8 +1287,7 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 	imageID, err := strconv.Atoi(path)
 	if err != nil || !utils.IsValidID(imageID) {
 		utils.LogSecurityEvent("INVALID_IMAGE_ID_DELETE", clientIP, path)
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid image ID"})
+		sendJSONError(w, http.StatusBadRequest, "Invalid image ID")
 		return
 	}
 
@@ -1351,15 +1303,13 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		utils.LogSecurityEvent("IMAGE_NOT_FOUND", clientIP, fmt.Sprintf("ImageID: %d", imageID))
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Image not found"})
+		sendJSONError(w, http.StatusNotFound, "Image not found")
 		return
 	}
 
 	if createdBy != user.ID {
 		utils.LogSecurityEvent("UNAUTHORIZED_IMAGE_DELETE", clientIP, fmt.Sprintf("UserID: %d, ImageID: %d, Owner: %d", user.ID, imageID, createdBy))
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Forbidden"})
+		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
@@ -1374,14 +1324,12 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec("DELETE FROM recipe_images WHERE id = ?", imageID)
 	if err != nil {
 		utils.LogSecurityEvent("IMAGE_DB_DELETE_ERROR", clientIP, err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to delete image"})
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete image")
 		return
 	}
 
 	utils.LogSecurityEvent("IMAGE_DELETED", clientIP, fmt.Sprintf("ImageID: %d, Filename: %s, User: %s", imageID, filename, user.Username))
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Image deleted successfully"})
+	sendJSONSuccess(w, "Image deleted successfully", nil)
 }
 
 func SearchHandler(w http.ResponseWriter, r *http.Request) {
@@ -1392,14 +1340,12 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 	searchValidation := utils.ValidateSearchQuery(query)
 	if !searchValidation.Valid {
 		utils.LogSecurityEvent("SEARCH_VALIDATION_FAILED", clientIP, fmt.Sprintf("Query: %s, Error: %s", query, searchValidation.Message))
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": searchValidation.Message})
+		sendJSONError(w, http.StatusBadRequest, searchValidation.Message)
 		return
 	}
 
 	if query == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Search query is required"})
+		sendJSONError(w, http.StatusBadRequest, "Search query is required")
 		return
 	}
 
@@ -1407,12 +1353,16 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 	recipes, err := database.SearchRecipes(query)
 	if err != nil {
 		utils.LogSecurityEvent("SEARCH_ERROR", clientIP, fmt.Sprintf("Query: %s, Error: %v", query, err))
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Search failed"})
+		sendJSONError(w, http.StatusInternalServerError, "Search failed")
 		return
 	}
 
 	utils.LogSecurityEvent("SEARCH_PERFORMED", clientIP, fmt.Sprintf("Query: %s, Results: %d", query, len(recipes)))
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(recipes)
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success": true,
+		"query":   query,
+		"results": recipes,
+		"count":   len(recipes),
+	})
 }
