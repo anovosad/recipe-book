@@ -1,4 +1,4 @@
-/* components.css - Reusable components with no duplicates */
+/* components.css - Reusable components */
 
 /* Button System */
 .btn {
@@ -53,16 +53,19 @@
     border: none;
     color: #ff4757;
     cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 4px;
-    font-size: 0.8rem;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.9rem;
     transition: all 0.2s ease;
     flex-shrink: 0;
+    opacity: 0.7;
 }
 
 .btn-delete:hover {
     background: rgba(255, 71, 87, 0.1);
     color: #ff3742;
+    opacity: 1;
+    transform: scale(1.05);
 }
 
 /* Navigation */
@@ -122,6 +125,9 @@
 .username {
     color: #ff6b6b;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .auth-buttons {
@@ -138,6 +144,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    transition: all 0.3s ease;
 }
 
 .alert-success {
@@ -168,13 +175,13 @@
 }
 
 .card.compact {
-    border-radius: 8px;
-    padding: 0.75rem;
+    border-radius: 10px;
+    padding: 1rem;
 }
 
 .card.compact:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(31, 38, 135, 0.25);
+    box-shadow: 0 6px 20px rgba(31, 38, 135, 0.25);
 }
 
 /* Page Headers */
@@ -270,188 +277,9 @@
     gap: 0.75rem;
 }
 
-/* View Toggle */
+/* Header Actions */
 .header-actions {
     display: flex;
     align-items: center;
     gap: 15px;
-}
-
-.view-toggle {
-    display: flex;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 25px;
-    padding: 4px;
-    border: 2px solid rgba(255, 107, 107, 0.2);
-}
-
-.view-btn {
-    background: transparent;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 20px;
-    color: #666;
-    transition: all 0.3s ease;
-    min-width: 40px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.view-btn:hover {
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
-}
-
-.view-btn.active {
-    background: linear-gradient(45deg, #ff6b6b, #ff8e53);
-    color: white;
-    box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
-}
-
-/* Ingredients Grid Layout */
-.ingredients-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 1rem;
-}
-
-.ingredients-grid.compact {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 0.75rem;
-}
-
-/* Ingredient Card Styles */
-.ingredient-card {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 15px;
-    padding: 1.5rem;
-    transition: all 0.3s ease;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 4px 15px rgba(31, 38, 135, 0.2);
-}
-
-.ingredient-card:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(31, 38, 135, 0.3);
-}
-
-.ingredient-card.compact {
-    border-radius: 10px;
-    padding: 1rem;
-}
-
-.ingredient-card.compact:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(31, 38, 135, 0.25);
-}
-
-/* Ingredient Content Layout */
-.ingredient-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-}
-
-.ingredient-name {
-    color: #333;
-    font-size: 1rem;
-    font-weight: 600;
-    flex-grow: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.ingredient-card.compact .ingredient-name {
-    font-size: 0.95rem;
-    font-weight: 500;
-}
-
-/* Delete Button Styling */
-.ingredient-card .btn-delete {
-    background: none;
-    border: none;
-    color: #ff4757;
-    cursor: pointer;
-    padding: 6px 8px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-    opacity: 0.7;
-}
-
-.ingredient-card .btn-delete:hover {
-    background: rgba(255, 71, 87, 0.1);
-    color: #ff3742;
-    opacity: 1;
-    transform: scale(1.05);
-}
-
-.ingredient-card:hover .btn-delete {
-    opacity: 1;
-}
-
-/* Responsive Design for Ingredients */
-@media (max-width: 768px) {
-    .ingredients-grid {
-        grid-template-columns: 1fr;
-        gap: 0.75rem;
-    }
-    
-    .ingredients-grid.compact {
-        grid-template-columns: 1fr;
-        gap: 0.5rem;
-    }
-    
-    .ingredient-card {
-        padding: 1rem;
-    }
-    
-    .ingredient-card.compact {
-        padding: 0.75rem;
-    }
-    
-    .ingredient-content {
-        gap: 8px;
-    }
-    
-    .ingredient-name {
-        font-size: 0.95rem;
-    }
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-    .ingredients-grid {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    }
-    
-    .ingredients-grid.compact {
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    }
-}
-
-@media (min-width: 1200px) {
-    .ingredients-grid {
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 1.25rem;
-    }
-    
-    .ingredients-grid.compact {
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 1rem;
-    }
-    
-    .ingredient-card {
-        padding: 1.75rem;
-    }
-    
-    .ingredient-name {
-        font-size: 1.1rem;
-    }
 }

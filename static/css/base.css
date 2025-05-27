@@ -28,7 +28,6 @@ input[type="number"],
 input[type="email"],
 input[type="password"],
 input[type="file"],
-input[type="color"],
 select,
 textarea {
     box-sizing: border-box;
@@ -65,8 +64,6 @@ textarea:focus {
 .mt-2 { margin-top: 1rem; }
 .mt-3 { margin-top: 1.5rem; }
 
-/* Add these utility classes to base.css */
-
 /* Additional Utilities */
 .hidden {
     display: none !important;
@@ -94,32 +91,4 @@ textarea:focus {
 
 .instructions-textarea {
     min-height: 360px !important;
-}
-
-/* Content specific styling */
-.ingredient-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-}
-
-.ingredient-name {
-    color: #333;
-    font-size: 0.95rem;
-    font-weight: 500;
-    flex-grow: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Alternating row colors */
-.recipe-item-compact:nth-child(even) {
-    background: rgba(255, 107, 107, 0.02);
-}
-
-.recipe-item-compact:nth-child(even):hover {
-    background: rgba(255, 107, 107, 0.08);
 }
