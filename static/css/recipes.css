@@ -80,6 +80,7 @@
     flex-direction: column;
     gap: 1rem;
     cursor: pointer;
+    min-height: 280px;
 }
 
 .recipe-card:hover {
@@ -121,6 +122,8 @@
     gap: 10px;
     flex-shrink: 0;
     align-items: flex-start;
+    margin-top: auto;
+    padding-top: 0.5rem;
 }
 
 /* Single Recipe View */
