@@ -119,48 +119,59 @@
             </div>
             <div id="ingredients-container">
                 {{if .Recipe}}
-                    {{range $index, $ingredient := .Recipe.Ingredients}}
-                        <div class="ingredient-row" data-ingredient-id="{{$ingredient.IngredientID}}" data-quantity="{{$ingredient.Quantity}}" data-unit="{{$ingredient.Unit}}">
-                            <select name="ingredient_{{$index}}" class="form-control ingredient-select" required>
-                                <option value="">Select ingredient...</option>
-                                {{range $.Ingredients}}
-                                    <option value="{{.ID}}">{{.Name}}</option>
-                                {{end}}
-                            </select>
-                            <input type="number" name="quantity_{{$index}}" class="form-control quantity-input" 
-                                   placeholder="Quantity" step="0.1" min="0" value="{{$ingredient.Quantity}}" required>
-                            <select name="unit_{{$index}}" class="form-control unit-select" required>
-                                <option value="">Unit...</option>
-                                <optgroup label="Volume">
-                                    <option value="tsp">Teaspoon</option>
-                                    <option value="tbsp">Tablespoon</option>
-                                    <option value="cup">Cup</option>
-                                    <option value="ml">Milliliter</option>
-                                    <option value="l">Liter</option>
-                                    <option value="fl oz">Fluid Ounce</option>
-                                </optgroup>
-                                <optgroup label="Weight">
-                                    <option value="g">Gram</option>
-                                    <option value="kg">Kilogram</option>
-                                    <option value="oz">Ounce</option>
-                                    <option value="lb">Pound</option>
-                                </optgroup>
-                                <optgroup label="Count">
-                                    <option value="piece">Piece</option>
-                                    <option value="clove">Clove</option>
-                                    <option value="slice">Slice</option>
-                                    <option value="can">Can</option>
-                                </optgroup>
-                                <optgroup label="Other">
-                                    <option value="pinch">Pinch</option>
-                                    <option value="dash">Dash</option>
-                                    <option value="to taste">To taste</option>
-                                </optgroup>
-                            </select>
-                            <button type="button" class="btn btn-danger btn-sm remove-ingredient">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
+                    {{if .Recipe.Ingredients}}
+                        {{range .Recipe.Ingredients}}
+                            <div class="ingredient-row">
+                                <input type="hidden" name="existing_ingredient_id[]" value="{{.IngredientID}}">
+                                <input type="hidden" name="existing_quantity[]" value="{{.Quantity}}">
+                                <input type="hidden" name="existing_unit[]" value="{{.Unit}}">
+                                
+                                <select name="ingredient_select[]" class="form-control ingredient-select" required>
+                                    <option value="">Select ingredient...</option>
+                                    {{$currentIngredientID := .IngredientID}}
+                                    {{range $.Ingredients}}
+                                        <option value="{{.ID}}" {{if eq .ID $currentIngredientID}}selected{{end}}>{{.Name}}</option>
+                                    {{end}}
+                                </select>
+                                
+                                <input type="number" name="quantity_input[]" class="form-control quantity-input" 
+                                       placeholder="Quantity" step="0.1" min="0" value="{{.Quantity}}" required>
+                                
+                                <select name="unit_select[]" class="form-control unit-select" required>
+                                    <option value="">Unit...</option>
+                                    {{$currentUnit := .Unit}}
+                                    <optgroup label="Volume">
+                                        <option value="tsp" {{if eq $currentUnit "tsp"}}selected{{end}}>Teaspoon</option>
+                                        <option value="tbsp" {{if eq $currentUnit "tbsp"}}selected{{end}}>Tablespoon</option>
+                                        <option value="cup" {{if eq $currentUnit "cup"}}selected{{end}}>Cup</option>
+                                        <option value="ml" {{if eq $currentUnit "ml"}}selected{{end}}>Milliliter</option>
+                                        <option value="l" {{if eq $currentUnit "l"}}selected{{end}}>Liter</option>
+                                        <option value="fl oz" {{if eq $currentUnit "fl oz"}}selected{{end}}>Fluid Ounce</option>
+                                    </optgroup>
+                                    <optgroup label="Weight">
+                                        <option value="g" {{if eq $currentUnit "g"}}selected{{end}}>Gram</option>
+                                        <option value="kg" {{if eq $currentUnit "kg"}}selected{{end}}>Kilogram</option>
+                                        <option value="oz" {{if eq $currentUnit "oz"}}selected{{end}}>Ounce</option>
+                                        <option value="lb" {{if eq $currentUnit "lb"}}selected{{end}}>Pound</option>
+                                    </optgroup>
+                                    <optgroup label="Count">
+                                        <option value="piece" {{if eq $currentUnit "piece"}}selected{{end}}>Piece</option>
+                                        <option value="clove" {{if eq $currentUnit "clove"}}selected{{end}}>Clove</option>
+                                        <option value="slice" {{if eq $currentUnit "slice"}}selected{{end}}>Slice</option>
+                                        <option value="can" {{if eq $currentUnit "can"}}selected{{end}}>Can</option>
+                                    </optgroup>
+                                    <optgroup label="Other">
+                                        <option value="pinch" {{if eq $currentUnit "pinch"}}selected{{end}}>Pinch</option>
+                                        <option value="dash" {{if eq $currentUnit "dash"}}selected{{end}}>Dash</option>
+                                        <option value="to taste" {{if eq $currentUnit "to taste"}}selected{{end}}>To taste</option>
+                                    </optgroup>
+                                </select>
+                                
+                                <button type="button" class="btn btn-danger btn-sm remove-ingredient">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        {{end}}
                     {{end}}
                 {{end}}
             </div>
@@ -248,7 +259,7 @@
 </div>
 
 <script>
-    let ingredientCounter = {{if .Recipe}}{{len .Recipe.Ingredients}}{{else}}0{{end}};
+    let ingredientCounter = 0;
     let allIngredients = [
         {{range .Ingredients}}
             {id: {{.ID}}, name: "{{.Name}}"},
@@ -258,25 +269,18 @@
     const recipeId = {{if .Recipe}}{{.Recipe.ID}}{{else}}null{{end}};
     
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize form
         initializeRecipeForm();
-        
-        // Initialize existing ingredient rows for edit mode
-        if (isEditMode) {
-            initializeExistingIngredientRows();
-        }
-        
-        // Initialize tag buttons
         initializeTagButtons();
-        
-        // Set serving unit value
         setServingUnitValue();
-        
-        // Initialize image deletion buttons
         initializeImageDeletion();
-        
-        // Initialize image upload preview
         initializeImageUpload();
+        
+        // Initialize existing ingredient rows
+        document.querySelectorAll('.ingredient-row .remove-ingredient').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.closest('.ingredient-row').remove();
+            });
+        });
     });
     
     function initializeRecipeForm() {
@@ -288,7 +292,6 @@
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
             
-            // Show loading state
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             
@@ -304,59 +307,25 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    RecipeBook.showNotification(data.message, 'success');
-                    // Redirect after success
+                    alert(data.message);
                     setTimeout(() => {
                         window.location.href = data.redirect;
                     }, 1000);
                 } else {
-                    RecipeBook.showNotification(data.error || 'Failed to save recipe', 'error');
+                    alert(data.error || 'Failed to save recipe');
                 }
             } catch (error) {
                 console.error('Recipe save error:', error);
-                RecipeBook.showNotification('Failed to save recipe. Please try again.', 'error');
+                alert('Failed to save recipe. Please try again.');
             } finally {
-                // Reset button state
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
             }
         });
         
-        // Add ingredient button
         document.getElementById('add-ingredient').addEventListener('click', addIngredientRow);
-        
-        // Add new ingredient modal
         document.getElementById('add-new-ingredient-btn').addEventListener('click', openIngredientModal);
         document.getElementById('new-ingredient-form').addEventListener('submit', createNewIngredient);
-    }
-    
-    function initializeExistingIngredientRows() {
-        document.querySelectorAll('.ingredient-row').forEach(row => {
-            const ingredientId = row.dataset.ingredientId;
-            const unit = row.dataset.unit;
-            
-            if (ingredientId) {
-                const ingredientSelect = row.querySelector('.ingredient-select');
-                if (ingredientSelect) {
-                    ingredientSelect.value = ingredientId;
-                }
-            }
-            
-            if (unit) {
-                const unitSelect = row.querySelector('.unit-select');
-                if (unitSelect) {
-                    unitSelect.value = unit;
-                }
-            }
-            
-            // Bind remove button
-            const removeBtn = row.querySelector('.remove-ingredient');
-            if (removeBtn) {
-                removeBtn.addEventListener('click', function() {
-                    row.remove();
-                });
-            }
-        });
     }
     
     function initializeTagButtons() {
@@ -364,12 +333,10 @@
             const tagId = button.dataset.tagId;
             const checkbox = document.getElementById('tag_' + tagId);
             
-            // Set initial state based on checkbox (for edit mode)
             if (checkbox && checkbox.checked) {
                 button.classList.add('active');
             }
             
-            // Add click handler
             button.addEventListener('click', function() {
                 if (checkbox) {
                     checkbox.checked = !checkbox.checked;
@@ -403,18 +370,16 @@
                             method: 'DELETE'
                         });
                         
-                        const data = await response.json();
-                        
-                        if (data.success) {
+                        if (response.ok) {
                             imageItem.style.opacity = '0';
                             setTimeout(() => imageItem.remove(), 300);
-                            RecipeBook.showNotification(data.message, 'success');
+                            alert('Image deleted successfully');
                         } else {
-                            RecipeBook.showNotification(data.error || 'Failed to delete image', 'error');
+                            alert('Failed to delete image');
                         }
                     } catch (error) {
                         console.error('Image deletion error:', error);
-                        RecipeBook.showNotification('Failed to delete image', 'error');
+                        alert('Failed to delete image');
                     } finally {
                         this.disabled = false;
                         this.innerHTML = originalText;
@@ -474,13 +439,12 @@
         const name = nameInput.value.trim();
         
         if (!name) {
-            RecipeBook.showNotification('Ingredient name is required', 'error');
+            alert('Ingredient name is required');
             return;
         }
         
-        // Check if ingredient already exists
         if (allIngredients.some(ing => ing.name.toLowerCase() === name.toLowerCase())) {
-            RecipeBook.showNotification('This ingredient already exists', 'error');
+            alert('This ingredient already exists');
             return;
         }
         
@@ -501,23 +465,17 @@
             const data = await response.json();
             
             if (data.success) {
-                // Add to local array
                 const newId = Math.max(...allIngredients.map(i => i.id), 0) + 1;
                 allIngredients.push({id: newId, name: name});
-                
-                // Update all ingredient selects
                 updateIngredientSelects();
-                
-                // Close modal
                 closeIngredientModal();
-                
-                RecipeBook.showNotification(data.message, 'success');
+                alert(data.message);
             } else {
-                RecipeBook.showNotification(data.error || 'Failed to create ingredient', 'error');
+                alert(data.error || 'Failed to create ingredient');
             }
         } catch (error) {
             console.error('Ingredient creation error:', error);
-            RecipeBook.showNotification('Failed to create ingredient', 'error');
+            alert('Failed to create ingredient');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
@@ -528,11 +486,7 @@
         const selects = document.querySelectorAll('.ingredient-select');
         selects.forEach(select => {
             const currentValue = select.value;
-            
-            // Clear options
             select.innerHTML = '<option value="">Select ingredient...</option>';
-            
-            // Add all ingredients
             allIngredients.forEach(ingredient => {
                 const option = document.createElement('option');
                 option.value = ingredient.id;
@@ -556,12 +510,12 @@
         });
         
         row.innerHTML = `
-            <select name="ingredient_${ingredientCounter}" class="form-control ingredient-select" required>
+            <select name="new_ingredient_id[]" class="form-control ingredient-select" required>
                 ${ingredientOptions}
             </select>
-            <input type="number" name="quantity_${ingredientCounter}" class="form-control quantity-input" 
+            <input type="number" name="new_quantity[]" class="form-control quantity-input" 
                    placeholder="Quantity" step="0.1" min="0" required>
-            <select name="unit_${ingredientCounter}" class="form-control unit-select" required>
+            <select name="new_unit[]" class="form-control unit-select" required>
                 <option value="">Unit...</option>
                 <optgroup label="Volume">
                     <option value="tsp">Teaspoon</option>
@@ -595,9 +549,7 @@
         `;
         
         container.appendChild(row);
-        ingredientCounter++;
         
-        // Add event listener to remove button
         row.querySelector('.remove-ingredient').addEventListener('click', function() {
             row.remove();
         });
@@ -605,12 +557,11 @@
     
     function removeImagePreview(button) {
         button.closest('.image-preview-item').remove();
-        // Reset file input to update the file list
         const fileInput = document.getElementById('recipe_images');
         fileInput.value = '';
     }
     
-    // Close modal when clicking outside or pressing escape
+    // Close modal events
     document.getElementById('ingredient-modal').addEventListener('click', function(e) {
         if (e.target === this) {
             closeIngredientModal();

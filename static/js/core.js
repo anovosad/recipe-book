@@ -121,7 +121,7 @@ const RecipeBook = {
     // ============================================
 
     /**
-     * Make API request with enhanced error handling
+     * Make API request with enhanced error handling and JSON support
      */
     async apiRequest(url, options = {}) {
         const defaultOptions = {
@@ -134,7 +134,7 @@ const RecipeBook = {
 
         const config = { ...defaultOptions, ...options };
 
-        // Don't set Content-Type for FormData
+        // Don't set Content-Type for FormData (for file uploads)
         if (config.body instanceof FormData) {
             delete config.headers['Content-Type'];
         }
@@ -178,7 +178,57 @@ const RecipeBook = {
     },
 
     /**
-     * Submit form via JSON API
+     * Submit form data as JSON
+     */
+    async submitFormAsJSON(form, options = {}) {
+        const method = options.method || form.method || 'POST';
+        const url = options.url || form.action || window.location.href;
+
+        // Collect form data
+        const formData = this.collectFormData(form);
+
+        try {
+            const response = await this.apiRequest(url, {
+                method,
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+
+            this.emit('form:submit:success', { form, response });
+            return response;
+        } catch (error) {
+            this.emit('form:submit:error', { form, error });
+            throw error;
+        }
+    },
+
+    /**
+     * Collect form data as a JavaScript object
+     */
+    collectFormData(form) {
+        const formData = new FormData(form);
+        const data = {};
+        
+        for (const [key, value] of formData.entries()) {
+            if (data[key]) {
+                // Handle multiple values (like checkboxes)
+                if (Array.isArray(data[key])) {
+                    data[key].push(value);
+                } else {
+                    data[key] = [data[key], value];
+                }
+            } else {
+                data[key] = value;
+            }
+        }
+        
+        return data;
+    },
+
+    /**
+     * Submit form via FormData (for file uploads)
      */
     async submitForm(form, options = {}) {
         const formData = new FormData(form);
@@ -554,8 +604,9 @@ const RecipeBook = {
      * Initialize mobile menu
      */
     initializeMobileMenu() {
-        const toggleButton = document.querySelector('.mobile-menu-toggle');
-        const navLinks = document.querySelector('.nav-links');
+        const toggleButton = document.getElementById('mobileMenuToggle');
+        const navLinks = document.getElementById('navLinks');
+        const navOverlay = document.getElementById('navOverlay');
         
         if (!toggleButton || !navLinks) return;
 
@@ -564,10 +615,15 @@ const RecipeBook = {
             this.toggleMobileMenu();
         });
 
-        // Close menu when clicking outside
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.navbar') && navLinks.classList.contains('mobile-open')) {
-                this.closeMobileMenu();
+        // Close menu when clicking on overlay
+        if (navOverlay) {
+            navOverlay.addEventListener('click', () => this.closeMobileMenu());
+        }
+
+        // Close menu when clicking on nav links
+        navLinks.addEventListener('click', (e) => {
+            if (e.target.classList.contains('nav-link') && window.innerWidth <= 768) {
+                setTimeout(() => this.closeMobileMenu(), 150);
             }
         });
 
@@ -577,13 +633,20 @@ const RecipeBook = {
                 this.closeMobileMenu();
             }
         });
+
+        // Close menu on resize if screen gets larger
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768 && navLinks.classList.contains('mobile-open')) {
+                this.closeMobileMenu();
+            }
+        });
     },
 
     /**
      * Toggle mobile menu
      */
     toggleMobileMenu() {
-        const navLinks = document.querySelector('.nav-links');
+        const navLinks = document.getElementById('navLinks');
         const isOpen = navLinks.classList.contains('mobile-open');
         
         if (isOpen) {
@@ -597,12 +660,15 @@ const RecipeBook = {
      * Open mobile menu
      */
     openMobileMenu() {
-        const navLinks = document.querySelector('.nav-links');
-        const toggleButton = document.querySelector('.mobile-menu-toggle');
+        const navLinks = document.getElementById('navLinks');
+        const toggleButton = document.getElementById('mobileMenuToggle');
+        const navOverlay = document.getElementById('navOverlay');
         
         navLinks.classList.add('mobile-open');
-        toggleButton?.classList.add('active');
-        document.body.style.overflow = 'hidden';
+        toggleButton.classList.add('active');
+        if (navOverlay) navOverlay.classList.add('active');
+        document.body.classList.add('menu-open');
+        toggleButton.setAttribute('aria-expanded', 'true');
         
         this.emit('mobile-menu:open');
     },
@@ -611,12 +677,15 @@ const RecipeBook = {
      * Close mobile menu
      */
     closeMobileMenu() {
-        const navLinks = document.querySelector('.nav-links');
-        const toggleButton = document.querySelector('.mobile-menu-toggle');
+        const navLinks = document.getElementById('navLinks');
+        const toggleButton = document.getElementById('mobileMenuToggle');
+        const navOverlay = document.getElementById('navOverlay');
         
         navLinks.classList.remove('mobile-open');
-        toggleButton?.classList.remove('active');
-        document.body.style.overflow = '';
+        toggleButton.classList.remove('active');
+        if (navOverlay) navOverlay.classList.remove('active');
+        document.body.classList.remove('menu-open');
+        toggleButton.setAttribute('aria-expanded', 'false');
         
         this.emit('mobile-menu:close');
     },
@@ -1087,6 +1156,33 @@ class APIError extends Error {
         this.name = 'APIError';
         this.status = status;
         this.data = data;
+    }
+}
+
+// ============================================
+// LOGOUT FUNCTION (Updated for JSON API)
+// ============================================
+
+/**
+ * Enhanced logout function using JSON API
+ */
+async function logout() {
+    try {
+        const response = await RecipeBook.apiRequest('/api/logout', {
+            method: 'POST'
+        });
+
+        if (response.success) {
+            RecipeBook.showNotification(response.message, 'success');
+            setTimeout(() => {
+                window.location.href = response.redirect || '/recipes';
+            }, 1000);
+        } else {
+            RecipeBook.showNotification(response.error || 'Logout failed', 'error');
+        }
+    } catch (error) {
+        console.error('Logout error:', error);
+        RecipeBook.showNotification('Logout failed. Please try again.', 'error');
     }
 }
 

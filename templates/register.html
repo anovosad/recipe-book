@@ -42,10 +42,19 @@ document.getElementById('registerForm').addEventListener('submit', async functio
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
     
     try {
-        const formData = new FormData(this);
+        // Collect form data as JSON
+        const registerData = {
+            username: this.querySelector('#username').value.trim(),
+            email: this.querySelector('#email').value.trim(),
+            password: this.querySelector('#password').value
+        };
+        
         const response = await fetch('/api/register', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(registerData)
         });
         
         const data = await response.json();

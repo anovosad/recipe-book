@@ -40,10 +40,18 @@ document.getElementById('tagForm').addEventListener('submit', async function(e) 
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     
     try {
-        const formData = new FormData(this);
+        // Collect form data as JSON
+        const tagData = {
+            name: this.querySelector('#name').value.trim(),
+            color: this.querySelector('#color').value || '#ff6b6b'
+        };
+        
         const response = await fetch('/api/tags', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(tagData)
         });
         
         const data = await response.json();

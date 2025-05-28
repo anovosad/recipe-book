@@ -35,10 +35,17 @@ document.getElementById('ingredientForm').addEventListener('submit', async funct
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     
     try {
-        const formData = new FormData(this);
+        // Collect form data as JSON
+        const ingredientData = {
+            name: this.querySelector('#name').value.trim()
+        };
+        
         const response = await fetch('/api/ingredients', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(ingredientData)
         });
         
         const data = await response.json();
@@ -63,6 +70,7 @@ document.getElementById('ingredientForm').addEventListener('submit', async funct
 });
 </script>
 {{end}}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>

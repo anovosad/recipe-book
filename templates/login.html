@@ -37,11 +37,18 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
     
     try {
-        const formData = new FormData(this);
-        for (var x of formData) console.log(x);
+        // Collect form data as JSON
+        const loginData = {
+            username: this.querySelector('#username').value.trim(),
+            password: this.querySelector('#password').value
+        };
+        
         const response = await fetch('/api/login', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(loginData)
         });
         
         const data = await response.json();
