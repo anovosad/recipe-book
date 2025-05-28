@@ -7,6 +7,20 @@ import (
 	"fmt"
 )
 
+func recipeUrl(data *models.PageData) string {
+	if data.Recipe != nil {
+		return "/recipe/" + strconv.Itoa(data.Recipe.ID)
+	}
+	return "/recipes"
+}
+
+func ternary(condition bool, trueValue, falseValue string) string {
+	if condition {
+		return trueValue
+	}
+	return falseValue
+}
+
 templ RecipeForm(data *models.PageData) {
 	@Base(data.Title, data) {
 		<div class="form-container">
@@ -27,7 +41,7 @@ templ RecipeForm(data *models.PageData) {
 				@RecipeTagsSection(data.Recipe, data.Tags)
 				@RecipeInstructionsSection(data.Recipe)
 				<div class="form-actions">
-					<a href={ templ.URL(if data.Recipe != nil { "/recipe/" + strconv.Itoa(data.Recipe.ID) } else { "/recipes" }) } class="btn btn-secondary">
+					<a href={ templ.URL(recipeUrl(data)) } class="btn btn-secondary">
 						<i class="fas fa-times"></i> Cancel
 					</a>
 					<button type="submit" class="btn btn-primary">
@@ -86,12 +100,12 @@ templ RecipeBasicInfoSection(recipe *models.Recipe) {
 		<div class="form-group">
 			<label for="title">Recipe Title *</label>
 			<input type="text" id="title" name="title" class="form-control" 
-				   value={ if recipe != nil { recipe.Title } else { "" } } required/>
+				   value={ ternary(recipe != nil, recipe.Title, "") } required/>
 		</div>
 		<div class="form-group">
 			<label for="description">Description</label>
 			<textarea id="description" name="description" class="form-control" rows="3" 
-					  placeholder="Brief description of your recipe">{ if recipe != nil { recipe.Description } else { "" } }</textarea>
+					  placeholder="Brief description of your recipe">{ ternary(recipe != nil, recipe.Description, "") }</textarea>
 		</div>
 	</div>
 }
@@ -103,22 +117,22 @@ templ RecipeDetailsSection(recipe *models.Recipe) {
 			<div class="form-group">
 				<label for="prep_time">Prep Time (minutes)</label>
 				<input type="number" id="prep_time" name="prep_time" class="form-control" 
-					   value={ if recipe != nil { strconv.Itoa(recipe.PrepTime) } else { "" } } min="0"/>
+					   value={ ternary(recipe != nil, strconv.Itoa(recipe.PrepTime), "" ) } min="0"/>
 			</div>
 			<div class="form-group">
 				<label for="cook_time">Cook Time (minutes)</label>
 				<input type="number" id="cook_time" name="cook_time" class="form-control" 
-					   value={ if recipe != nil { strconv.Itoa(recipe.CookTime) } else { "" } } min="0"/>
+					   value={ ternary(recipe != nil, strconv.Itoa(recipe.CookTime), "" ) } min="0"/>
 			</div>
 			<div class="form-group">
 				<label for="servings">Servings</label>
 				<input type="number" id="servings" name="servings" class="form-control" 
-					   value={ if recipe != nil { strconv.Itoa(recipe.Servings) } else { "" } } min="1"/>
+					   value={ ternary(recipe != nil, strconv.Itoa(recipe.Servings), "" ) } min="1"/>
 			</div>
 			<div class="form-group">
 				<label for="serving_unit">Serving Unit</label>
-				<select id="serving_unit" name="serving_unit" class="form-control" data-value={ if recipe != nil { recipe.ServingUnit } else { "people" } }>
-					@ServingUnitOptions(if recipe != nil { recipe.ServingUnit } else { "people" })
+				<select id="serving_unit" name="serving_unit" class="form-control" data-value={ ternary(recipe != nil, recipe.ServingUnit, "people" ) }>
+					@ServingUnitOptions(ternary(recipe != nil, recipe.ServingUnit, "people" ))
 				</select>
 			</div>
 		</div>
@@ -238,7 +252,7 @@ templ RecipeInstructionsSection(recipe *models.Recipe) {
 		<div class="form-group">
 			<label for="instructions">Cooking Instructions *</label>
 			<textarea id="instructions" name="instructions" class="form-control instructions-textarea" rows="22" 
-					  placeholder="Step-by-step cooking instructions" required>{ if recipe != nil { recipe.Instructions } else { "" } }</textarea>
+					  placeholder="Step-by-step cooking instructions" required>{ ternary(recipe != nil, recipe.Instructions, "" ) }</textarea>
 		</div>
 	</div>
 }

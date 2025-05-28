@@ -20,7 +20,7 @@ templ Recipe(data *models.PageData) {
 						<a href={ templ.URL("/recipe/" + strconv.Itoa(data.Recipe.ID) + "/edit") } class="btn btn-primary">
 							<i class="fas fa-edit"></i> Edit Recipe
 						</a>
-						<button onclick={ "deleteRecipe(" + strconv.Itoa(data.Recipe.ID) + ")" } class="btn btn-danger">
+						<button onclick={ templ.JSFuncCall("deleteRecipe", strconv.Itoa(data.Recipe.ID)) } class="btn btn-danger">
 							<i class="fas fa-trash"></i> Delete Recipe
 						</button>
 					</div>

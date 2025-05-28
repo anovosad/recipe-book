@@ -25,7 +25,7 @@ templ Ingredients(data *models.PageData) {
 								{ ingredient.Name }
 							</a>
 							if data.IsLoggedIn {
-								<button onclick={ "deleteIngredient(" + strconv.Itoa(ingredient.ID) + ", '" + ingredient.Name + "')" } class="btn-delete" title={ "Delete " + ingredient.Name }>
+								<button onclick={ templ.JSFuncCall("deleteIngredient", strconv.Itoa(ingredient.ID), ingredient.Name) } class="btn-delete" title={ "Delete " + ingredient.Name }>
 									<i class="fas fa-trash"></i>
 								</button>
 							}

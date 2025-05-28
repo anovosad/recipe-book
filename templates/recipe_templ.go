@@ -81,7 +81,7 @@ func Recipe(data *models.PageData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, "deleteRecipe("+strconv.Itoa(data.Recipe.ID)+")")
+				templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("deleteRecipe", strconv.Itoa(data.Recipe.ID)))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -89,7 +89,7 @@ func Recipe(data *models.PageData) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var5 templ.ComponentScript = "deleteRecipe(" + strconv.Itoa(data.Recipe.ID) + ")"
+				var templ_7745c5c3_Var5 templ.ComponentScript = templ.JSFuncCall("deleteRecipe", strconv.Itoa(data.Recipe.ID))
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5.Call)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err

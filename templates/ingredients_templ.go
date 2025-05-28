@@ -108,7 +108,7 @@ func Ingredients(data *models.PageData) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					if data.IsLoggedIn {
-						templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, "deleteIngredient("+strconv.Itoa(ingredient.ID)+", '"+ingredient.Name+"')")
+						templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("deleteIngredient", strconv.Itoa(ingredient.ID), ingredient.Name))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -116,7 +116,7 @@ func Ingredients(data *models.PageData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var6 templ.ComponentScript = "deleteIngredient(" + strconv.Itoa(ingredient.ID) + ", '" + ingredient.Name + "')"
+						var templ_7745c5c3_Var6 templ.ComponentScript = templ.JSFuncCall("deleteIngredient", strconv.Itoa(ingredient.ID), ingredient.Name)
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6.Call)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err

@@ -7,6 +7,13 @@ import (
 	"strconv"
 )
 
+func searchQueryFn(prefix string, query string) string {
+	if query != "" {
+		return fmt.Sprintf(prefix + "search=%s", query)
+	}
+	return ""
+}
+
 templ Recipes(data *models.PageData) {
 	@Base("Recipes", data) {
 		<div class="page-header">
@@ -39,7 +46,7 @@ templ Recipes(data *models.PageData) {
 					<div class="filter-header">
 						<h3><i class="fas fa-filter"></i> Filter by Tags</h3>
 						if data.ActiveTagID != 0 {
-							<a href={ templ.URL("/recipes" + if data.SearchQuery != "" { "?search=" + data.SearchQuery } else { "" }) } class="btn btn-secondary btn-sm clear-filters">
+							<a href={ templ.URL("/recipes" + searchQueryFn("?", data.SearchQuery)) } class="btn btn-secondary btn-sm clear-filters">
 								<i class="fas fa-times"></i> Clear Tag Filter
 							</a>
 						}
@@ -106,13 +113,13 @@ templ Recipes(data *models.PageData) {
 
 templ TagFilterButton(tag models.Tag, activeTagID int, searchQuery string) {
 	if tag.ID == activeTagID {
-		<a href={ templ.URL("/recipes" + if searchQuery != "" { "?search=" + searchQuery } else { "" }) } 
+		<a href={ templ.URL("/recipes" + searchQueryFn("?", searchQuery)) } 
 		   class="tag-filter active" 
 		   title={ "Currently filtering by " + tag.Name + " - click to remove filter" }>
 			{ tag.Name }
 		</a>
 	} else {
-		<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID) + if searchQuery != "" { "&search=" + searchQuery } else { "" }) } 
+		<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID) + searchQueryFn("&", searchQuery)) } 
 		   class="tag-filter" 
 		   title={ "Filter recipes by " + tag.Name }>
 			{ tag.Name }
@@ -142,7 +149,7 @@ templ RecipeCard(recipe models.Recipe, data *models.PageData) {
 				<a href={ templ.URL("/recipe/" + strconv.Itoa(recipe.ID) + "/edit") } class="btn btn-primary btn-sm">
 					<i class="fas fa-edit"></i> Edit
 				</a>
-				<button onclick={ "deleteRecipe(" + strconv.Itoa(recipe.ID) + ")" } class="btn btn-danger btn-sm">
+				<button onclick={ templ.JSFuncCall("deleteRecipe", strconv.Itoa(recipe.ID) ) } class="btn btn-danger btn-sm">
 					<i class="fas fa-trash"></i> Delete
 				</button>
 			</div>
@@ -152,13 +159,13 @@ templ RecipeCard(recipe models.Recipe, data *models.PageData) {
 
 templ RecipeTagButton(tag models.Tag, activeTagID int, searchQuery string) {
 	if tag.ID == activeTagID {
-		<a href={ templ.URL("/recipes" + if searchQuery != "" { "?search=" + searchQuery } else { "" }) } 
+		<a href={ templ.URL("/recipes" + searchQueryFn("?", searchQuery)) } 
 		   class="recipe-tag recipe-tag-active" 
 		   title={ "Remove " + tag.Name + " filter" }>
 			{ tag.Name }
 		</a>
 	} else {
-		<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID) + if searchQuery != "" { "&search=" + searchQuery } else { "" }) } 
+		<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID) + searchQueryFn("&", searchQuery)) } 
 		   class="recipe-tag" 
 		   title={ "Filter by " + tag.Name }>
 			{ tag.Name }

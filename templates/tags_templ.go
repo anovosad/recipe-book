@@ -108,7 +108,7 @@ func Tags(data *models.PageData) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					if data.IsLoggedIn {
-						templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, "deleteTag("+strconv.Itoa(tag.ID)+", '"+tag.Name+"')")
+						templ_7745c5c3_Err = templ.RenderScriptItems(ctx, templ_7745c5c3_Buffer, templ.JSFuncCall("deleteTag", strconv.Itoa(tag.ID), tag.Name))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -116,7 +116,7 @@ func Tags(data *models.PageData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var6 templ.ComponentScript = "deleteTag(" + strconv.Itoa(tag.ID) + ", '" + tag.Name + "')"
+						var templ_7745c5c3_Var6 templ.ComponentScript = templ.JSFuncCall("deleteTag", strconv.Itoa(tag.ID), tag.Name)
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6.Call)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err

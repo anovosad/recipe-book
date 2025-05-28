@@ -23,7 +23,7 @@ templ Tags(data *models.PageData) {
 						<div class="tag-content">
 							<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID)) } class="tag-name" title={ "View all " + tag.Name + " recipes" }>{ tag.Name }</a>
 							if data.IsLoggedIn {
-								<button onclick={ "deleteTag(" + strconv.Itoa(tag.ID) + ", '" + tag.Name + "')" } class="btn-delete" title={ "Delete " + tag.Name }>
+								<button onclick={ templ.JSFuncCall("deleteTag", strconv.Itoa(tag.ID), tag.Name) } class="btn-delete" title={ "Delete " + tag.Name }>
 									<i class="fas fa-trash"></i>
 								</button>
 							}
