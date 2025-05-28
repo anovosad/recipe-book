@@ -1,25 +1,23 @@
-// File: handlers/handlers.go (API Handlers Updated to Return JSON)
 package handlers
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"recipe-book/auth"
 	"recipe-book/database"
 	"recipe-book/models"
+	"recipe-book/templates"
 	"recipe-book/utils"
 	"strconv"
 	"strings"
 )
 
-// Page Handlers (these still return HTML)
-func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/recipes", http.StatusSeeOther)
-}
+// Updated page handlers to use templ templates
 
 func LoginPageHandler(w http.ResponseWriter, r *http.Request) {
-	data := models.PageData{Title: "Login"}
+	data := &models.PageData{
+		Title: "Login",
+	}
 
 	if message := r.URL.Query().Get("message"); message != "" {
 		// Sanitize message to prevent XSS
@@ -29,12 +27,25 @@ func LoginPageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	renderTemplate(w, r, "login.html", data)
+	// Render using templ
+	if err := templates.Login(data).Render(r.Context(), w); err != nil {
+		clientIP := getClientIP(r)
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func RegisterPageHandler(w http.ResponseWriter, r *http.Request) {
-	data := models.PageData{Title: "Register"}
-	renderTemplate(w, r, "register.html", data)
+	data := &models.PageData{
+		Title: "Register",
+	}
+
+	// Render using templ
+	if err := templates.Register(data).Render(r.Context(), w); err != nil {
+		clientIP := getClientIP(r)
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,18 +102,16 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("Error loading recipes: %v", err)
 		recipes = []models.Recipe{}
 	}
 
 	// Get all tags for the filter dropdown
 	tags, err := database.GetAllTags()
 	if err != nil {
-		log.Printf("Error loading tags: %v", err)
 		tags = []models.Tag{}
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:       "Recipes",
 		User:        user,
 		IsLoggedIn:  user != nil,
@@ -113,7 +122,11 @@ func RecipesPageHandler(w http.ResponseWriter, r *http.Request) {
 		ActiveTag:   activeTag,
 	}
 
-	renderTemplate(w, r, "recipes.html", data)
+	// Render using templ
+	if err := templates.Recipes(data).Render(r.Context(), w); err != nil {
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func RecipePageHandler(w http.ResponseWriter, r *http.Request) {
@@ -136,14 +149,18 @@ func RecipePageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:      recipe.Title,
 		User:       user,
 		IsLoggedIn: user != nil,
 		Recipe:     recipe,
 	}
 
-	renderTemplate(w, r, "recipe.html", data)
+	// Render using templ
+	if err := templates.Recipe(data).Render(r.Context(), w); err != nil {
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func NewRecipePageHandler(w http.ResponseWriter, r *http.Request) {
@@ -155,17 +172,15 @@ func NewRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 
 	ingredients, err := database.GetAllIngredients()
 	if err != nil {
-		log.Printf("Error loading ingredients: %v", err)
 		ingredients = []models.Ingredient{}
 	}
 
 	tags, err := database.GetAllTags()
 	if err != nil {
-		log.Printf("Error loading tags: %v", err)
 		tags = []models.Tag{}
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:       "New Recipe",
 		User:        user,
 		IsLoggedIn:  true,
@@ -173,7 +188,12 @@ func NewRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 		Tags:        tags,
 	}
 
-	renderTemplate(w, r, "recipe-form.html", data)
+	// Render using templ
+	if err := templates.RecipeForm(data).Render(r.Context(), w); err != nil {
+		clientIP := getClientIP(r)
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func EditRecipePageHandler(w http.ResponseWriter, r *http.Request) {
@@ -216,17 +236,15 @@ func EditRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 
 	ingredients, err := database.GetAllIngredients()
 	if err != nil {
-		log.Printf("Error loading ingredients: %v", err)
 		ingredients = []models.Ingredient{}
 	}
 
 	tags, err := database.GetAllTags()
 	if err != nil {
-		log.Printf("Error loading tags: %v", err)
 		tags = []models.Tag{}
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:       "Edit Recipe",
 		User:        user,
 		IsLoggedIn:  true,
@@ -235,7 +253,11 @@ func EditRecipePageHandler(w http.ResponseWriter, r *http.Request) {
 		Tags:        tags,
 	}
 
-	renderTemplate(w, r, "recipe-form.html", data)
+	// Render using templ
+	if err := templates.RecipeForm(data).Render(r.Context(), w); err != nil {
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 func IngredientsPageHandler(w http.ResponseWriter, r *http.Request) {
@@ -243,34 +265,22 @@ func IngredientsPageHandler(w http.ResponseWriter, r *http.Request) {
 
 	ingredients, err := database.GetAllIngredients()
 	if err != nil {
-		log.Printf("Error loading ingredients: %v", err)
 		ingredients = []models.Ingredient{}
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:       "Ingredients",
 		User:        user,
 		IsLoggedIn:  user != nil,
 		Ingredients: ingredients,
 	}
 
-	renderTemplate(w, r, "ingredients.html", data)
-}
-
-func NewIngredientPageHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := auth.GetUserFromToken(r)
-	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
+	// Render using templ
+	if err := templates.Ingredients(data).Render(r.Context(), w); err != nil {
+		clientIP := getClientIP(r)
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-
-	data := models.PageData{
-		Title:      "New Ingredient",
-		User:       user,
-		IsLoggedIn: true,
-	}
-
-	renderTemplate(w, r, "ingredient-form.html", data)
 }
 
 func TagsPageHandler(w http.ResponseWriter, r *http.Request) {
@@ -278,32 +288,20 @@ func TagsPageHandler(w http.ResponseWriter, r *http.Request) {
 
 	tags, err := database.GetAllTags()
 	if err != nil {
-		log.Printf("Error loading tags: %v", err)
 		tags = []models.Tag{}
 	}
 
-	data := models.PageData{
+	data := &models.PageData{
 		Title:      "Tags",
 		User:       user,
 		IsLoggedIn: user != nil,
 		Tags:       tags,
 	}
 
-	renderTemplate(w, r, "tags.html", data)
-}
-
-func NewTagPageHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := auth.GetUserFromToken(r)
-	if err != nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
-		return
+	// Render using templ
+	if err := templates.Tags(data).Render(r.Context(), w); err != nil {
+		clientIP := getClientIP(r)
+		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, err.Error())
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-
-	data := models.PageData{
-		Title:      "New Tag",
-		User:       user,
-		IsLoggedIn: true,
-	}
-
-	renderTemplate(w, r, "tag-form.html", data)
 }

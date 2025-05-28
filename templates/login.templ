@@ -1,0 +1,77 @@
+// templates/login.templ
+package templates
+
+import "recipe-book/models"
+
+templ Login(data *models.PageData) {
+	@Base("Login", data) {
+		<div class="auth-container">
+			<div class="auth-card">
+				<h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+				<form id="loginForm" class="auth-form">
+					<div class="form-group">
+						<label for="username">Username</label>
+						<input type="text" id="username" name="username" class="form-control" required/>
+					</div>
+					<div class="form-group">
+						<label for="password">Password</label>
+						<input type="password" id="password" name="password" class="form-control" required/>
+					</div>
+					<button type="submit" class="btn btn-primary btn-full">
+						<i class="fas fa-sign-in-alt"></i> Login
+					</button>
+				</form>
+				<div class="auth-links">
+					<p>Don't have an account? <a href="/register">Register here</a></p>
+				</div>
+			</div>
+		</div>
+		<script>
+			document.getElementById('loginForm').addEventListener('submit', async function(e) {
+				e.preventDefault();
+				
+				const submitBtn = this.querySelector('button[type="submit"]');
+				const originalText = submitBtn.innerHTML;
+				
+				// Show loading state
+				submitBtn.disabled = true;
+				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+				
+				try {
+					// Collect form data as JSON
+					const loginData = {
+						username: this.querySelector('#username').value.trim(),
+						password: this.querySelector('#password').value
+					};
+					
+					const response = await fetch('/api/login', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(loginData)
+					});
+					
+					const data = await response.json();
+					
+					if (data.success) {
+						RecipeBook.showNotification(data.message, 'success');
+						// Redirect after success
+						setTimeout(() => {
+							window.location.href = data.redirect || '/recipes';
+						}, 1000);
+					} else {
+						RecipeBook.showNotification(data.error || 'Login failed', 'error');
+					}
+				} catch (error) {
+					console.error('Login error:', error);
+					RecipeBook.showNotification('Login failed. Please try again.', 'error');
+				} finally {
+					// Reset button state
+					submitBtn.disabled = false;
+					submitBtn.innerHTML = originalText;
+				}
+			});
+		</script>
+	}
+}

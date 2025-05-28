@@ -1,0 +1,216 @@
+// templates/tags.templ
+package templates
+
+import (
+	"recipe-book/models"
+	"strconv"
+)
+
+templ Tags(data *models.PageData) {
+	@Base("Tags", data) {
+		<div class="page-header compact">
+			<h1><i class="fas fa-tags"></i> Tags</h1>
+			if data.IsLoggedIn {
+				<button type="button" id="add-tag-btn" class="btn btn-primary btn-sm">
+					<i class="fas fa-plus"></i> Add Tag
+				</button>
+			}
+		</div>
+		if len(data.Tags) > 0 {
+			<div class="tags-grid compact">
+				for _, tag := range data.Tags {
+					<div class="tag-card compact">
+						<div class="tag-content">
+							<a href={ templ.URL("/recipes?tag=" + strconv.Itoa(tag.ID)) } class="tag-name" title={ "View all " + tag.Name + " recipes" }>{ tag.Name }</a>
+							if data.IsLoggedIn {
+								<button onclick={ "deleteTag(" + strconv.Itoa(tag.ID) + ", '" + tag.Name + "')" } class="btn-delete" title={ "Delete " + tag.Name }>
+									<i class="fas fa-trash"></i>
+								</button>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		} else {
+			<div class="empty-state compact">
+				<i class="fas fa-tags"></i>
+				<h3>No tags found</h3>
+				<p>
+					if data.IsLoggedIn {
+						Add some tags to organize your recipes!
+					} else {
+						Please log in to manage tags.
+					}
+				</p>
+				if data.IsLoggedIn {
+					<button type="button" id="add-first-tag-btn" class="btn btn-primary">
+						<i class="fas fa-plus"></i> Add Your First Tag
+					</button>
+				}
+			</div>
+		}
+		@TagFormModal()
+		@TagsScript()
+	}
+}
+
+templ TagFormModal() {
+	<div id="tag-form-modal" class="modal hidden">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3><i class="fas fa-tag"></i> New Tag</h3>
+				<button type="button" class="modal-close" onclick="closeTagFormModal()">
+					<i class="fas fa-times"></i>
+				</button>
+			</div>
+			<div class="modal-body">
+				<form id="tagFormModal" class="tag-form">
+					<div class="form-group">
+						<label for="tag-name">Tag Name *</label>
+						<input type="text" id="tag-name" name="name" class="form-control" required/>
+					</div>
+					<div class="form-group">
+						<label for="tag-color">Tag Color</label>
+						<input type="color" id="tag-color" name="color" class="form-control" value="#ff6b6b"/>
+					</div>
+					<div class="modal-actions">
+						<button type="button" class="btn btn-secondary" onclick="closeTagFormModal()">
+							<i class="fas fa-times"></i> Cancel
+						</button>
+						<button type="submit" class="btn btn-primary">
+							<i class="fas fa-save"></i> Save Tag
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+}
+
+templ TagsScript() {
+	<script>
+		document.addEventListener('DOMContentLoaded', function() {
+			const addBtn = document.getElementById('add-tag-btn');
+			const addFirstBtn = document.getElementById('add-first-tag-btn');
+			
+			if (addBtn) {
+				addBtn.addEventListener('click', openTagFormModal);
+			}
+			if (addFirstBtn) {
+				addFirstBtn.addEventListener('click', openTagFormModal);
+			}
+			
+			document.getElementById('tagFormModal').addEventListener('submit', async function(e) {
+				e.preventDefault();
+				
+				const submitBtn = this.querySelector('button[type="submit"]');
+				const originalText = submitBtn.innerHTML;
+				
+				// Show loading state
+				submitBtn.disabled = true;
+				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+				
+				try {
+					// Collect form data as JSON
+					const tagData = {
+						name: this.querySelector('#tag-name').value.trim(),
+						color: this.querySelector('#tag-color').value || '#ff6b6b'
+					};
+					
+					const response = await fetch('/api/tags', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(tagData)
+					});
+					
+					const data = await response.json();
+					
+					if (data.success) {
+						RecipeBook.showNotification(data.message, 'success');
+						closeTagFormModal();
+						// Reload page to show new tag
+						setTimeout(() => {
+							window.location.reload();
+						}, 1000);
+					} else {
+						RecipeBook.showNotification(data.error || 'Failed to save tag', 'error');
+					}
+				} catch (error) {
+					console.error('Tag save error:', error);
+					RecipeBook.showNotification('Failed to save tag. Please try again.', 'error');
+				} finally {
+					// Reset button state
+					submitBtn.disabled = false;
+					submitBtn.innerHTML = originalText;
+				}
+			});
+		});
+		
+		function openTagFormModal() {
+			const modal = document.getElementById('tag-form-modal');
+			modal.classList.remove('hidden');
+			modal.style.display = 'flex';
+			document.getElementById('tag-name').focus();
+		}
+		
+		function closeTagFormModal() {
+			const modal = document.getElementById('tag-form-modal');
+			modal.classList.add('hidden');
+			modal.style.display = 'none';
+			document.getElementById('tag-name').value = '';
+			document.getElementById('tag-color').value = '#ff6b6b';
+		}
+		
+		function deleteTag(id, name) {
+			if (confirm(`Are you sure you want to delete "${name}"? This will remove it from all recipes.`)) {
+				const button = document.querySelector(`[onclick*="deleteTag(${id}"]`);
+				const originalText = button ? button.innerHTML : '';
+				
+				if (button) {
+					button.disabled = true;
+					button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+				}
+				
+				fetch(`/api/tags/${id}`, {
+					method: 'DELETE'
+				})
+				.then(response => response.json())
+				.then(data => {
+					if (data.success) {
+						RecipeBook.showNotification(data.message, 'success');
+						setTimeout(() => location.reload(), 1000);
+					} else {
+						RecipeBook.showNotification(data.error || 'Failed to delete tag', 'error');
+						if (button) {
+							button.disabled = false;
+							button.innerHTML = originalText;
+						}
+					}
+				})
+				.catch(error => {
+					console.error('Delete tag error:', error);
+					RecipeBook.showNotification('Failed to delete tag. Please try again.', 'error');
+					if (button) {
+						button.disabled = false;
+						button.innerHTML = originalText;
+					}
+				});
+			}
+		}
+		
+		// Close modal events
+		document.getElementById('tag-form-modal').addEventListener('click', function(e) {
+			if (e.target === this) {
+				closeTagFormModal();
+			}
+		});
+		
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape' && !document.getElementById('tag-form-modal').classList.contains('hidden')) {
+				closeTagFormModal();
+			}
+		});
+	</script>
+}

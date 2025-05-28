@@ -1,0 +1,175 @@
+// templates/ingredients.templ
+package templates
+
+import (
+	"recipe-book/models"
+	"strconv"
+)
+
+templ Ingredients(data *models.PageData) {
+	@Base("Ingredients", data) {
+		<div class="page-header compact">
+			<h1><i class="fas fa-leaf"></i> Ingredients</h1>
+			if data.IsLoggedIn {
+				<button type="button" id="add-ingredient-btn" class="btn btn-primary btn-sm">
+					<i class="fas fa-plus"></i> Add Ingredient
+				</button>
+			}
+		</div>
+		if len(data.Ingredients) > 0 {
+			<div class="ingredients-grid compact">
+				for _, ingredient := range data.Ingredients {
+					<div class="ingredient-card compact">
+						<div class="ingredient-content">
+							<a href={ templ.URL("/recipes?search=" + ingredient.Name) } class="tag-name" title={ "Find recipes using " + ingredient.Name }>
+								{ ingredient.Name }
+							</a>
+							if data.IsLoggedIn {
+								<button onclick={ "deleteIngredient(" + strconv.Itoa(ingredient.ID) + ", '" + ingredient.Name + "')" } class="btn-delete" title={ "Delete " + ingredient.Name }>
+									<i class="fas fa-trash"></i>
+								</button>
+							}
+						</div>
+					</div>
+				}
+			</div>
+		} else {
+			<div class="empty-state compact">
+				<i class="fas fa-leaf"></i>
+				<h3>No ingredients found</h3>
+				<p>
+					if data.IsLoggedIn {
+						Add some ingredients to get started!
+					} else {
+						Please log in to manage ingredients.
+					}
+				</p>
+				if data.IsLoggedIn {
+					<button type="button" id="add-first-ingredient-btn" class="btn btn-primary">
+						<i class="fas fa-plus"></i> Add Your First Ingredient
+					</button>
+				}
+			</div>
+		}
+		@IngredientFormModal()
+		@IngredientsScript()
+	}
+}
+
+templ IngredientFormModal() {
+	<div id="ingredient-form-modal" class="modal hidden">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3><i class="fas fa-plus-circle"></i> New Ingredient</h3>
+				<button type="button" class="modal-close" onclick="closeIngredientFormModal()">
+					<i class="fas fa-times"></i>
+				</button>
+			</div>
+			<div class="modal-body">
+				<form id="ingredientFormModal" class="ingredient-form">
+					<div class="form-group">
+						<label for="ingredient-name">Ingredient Name *</label>
+						<input type="text" id="ingredient-name" name="name" class="form-control" required/>
+					</div>
+					<div class="modal-actions">
+						<button type="button" class="btn btn-secondary" onclick="closeIngredientFormModal()">
+							<i class="fas fa-times"></i> Cancel
+						</button>
+						<button type="submit" class="btn btn-primary">
+							<i class="fas fa-save"></i> Save Ingredient
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+}
+
+templ IngredientsScript() {
+	<script>
+		document.addEventListener('DOMContentLoaded', function() {
+			const addBtn = document.getElementById('add-ingredient-btn');
+			const addFirstBtn = document.getElementById('add-first-ingredient-btn');
+			
+			if (addBtn) {
+				addBtn.addEventListener('click', openIngredientFormModal);
+			}
+			if (addFirstBtn) {
+				addFirstBtn.addEventListener('click', openIngredientFormModal);
+			}
+			
+			document.getElementById('ingredientFormModal').addEventListener('submit', async function(e) {
+				e.preventDefault();
+				
+				const submitBtn = this.querySelector('button[type="submit"]');
+				const originalText = submitBtn.innerHTML;
+				
+				// Show loading state
+				submitBtn.disabled = true;
+				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+				
+				try {
+					// Collect form data as JSON
+					const ingredientData = {
+						name: this.querySelector('#ingredient-name').value.trim()
+					};
+					
+					const response = await fetch('/api/ingredients', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(ingredientData)
+					});
+					
+					const data = await response.json();
+					
+					if (data.success) {
+						RecipeBook.showNotification(data.message, 'success');
+						closeIngredientFormModal();
+						// Reload page to show new ingredient
+						setTimeout(() => {
+							window.location.reload();
+						}, 1000);
+					} else {
+						RecipeBook.showNotification(data.error || 'Failed to save ingredient', 'error');
+					}
+				} catch (error) {
+					console.error('Ingredient save error:', error);
+					RecipeBook.showNotification('Failed to save ingredient. Please try again.', 'error');
+				} finally {
+					// Reset button state
+					submitBtn.disabled = false;
+					submitBtn.innerHTML = originalText;
+				}
+			});
+		});
+		
+		function openIngredientFormModal() {
+			const modal = document.getElementById('ingredient-form-modal');
+			modal.classList.remove('hidden');
+			modal.style.display = 'flex';
+			document.getElementById('ingredient-name').focus();
+		}
+		
+		function closeIngredientFormModal() {
+			const modal = document.getElementById('ingredient-form-modal');
+			modal.classList.add('hidden');
+			modal.style.display = 'none';
+			document.getElementById('ingredient-name').value = '';
+		}
+		
+		// Close modal events
+		document.getElementById('ingredient-form-modal').addEventListener('click', function(e) {
+			if (e.target === this) {
+				closeIngredientFormModal();
+			}
+		});
+		
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape' && !document.getElementById('ingredient-form-modal').classList.contains('hidden')) {
+				closeIngredientFormModal();
+			}
+		});
+	</script>
+}

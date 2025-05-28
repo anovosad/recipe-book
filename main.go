@@ -8,7 +8,6 @@ import (
 	"recipe-book/database"
 	"recipe-book/handlers"
 	"recipe-book/middleware"
-	"recipe-book/utils"
 
 	"github.com/gorilla/mux"
 )
@@ -22,7 +21,6 @@ func main() {
 
 	// Initialize components
 	database.InitDB()
-	utils.LoadTemplates()
 
 	// Initialize security manager
 	securityConfig := middleware.DefaultRateLimitConfig()
@@ -58,11 +56,9 @@ func main() {
 	r.HandleFunc("/recipes", handlers.RecipesPageHandler).Methods("GET")
 	r.HandleFunc("/recipe/{id}", handlers.RecipePageHandler).Methods("GET")
 	r.HandleFunc("/ingredients", handlers.IngredientsPageHandler).Methods("GET")
-	r.HandleFunc("/ingredients/new", handlers.NewIngredientPageHandler).Methods("GET")
 
 	// Tag routes
 	r.HandleFunc("/tags", handlers.TagsPageHandler).Methods("GET")
-	r.HandleFunc("/tags/new", handlers.NewTagPageHandler).Methods("GET")
 
 	// API routes with specific rate limiting
 
