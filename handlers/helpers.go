@@ -2,12 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"recipe-book/models"
-	"recipe-book/utils"
 	"strings"
 )
 
@@ -34,15 +31,6 @@ func getClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ip
-}
-
-// Helper function to render template with error handling (for page handlers only)
-func renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data models.PageData) {
-	if err := utils.Templates.ExecuteTemplate(w, templateName, data); err != nil {
-		clientIP := getClientIP(r)
-		utils.LogSecurityEvent("TEMPLATE_ERROR", clientIP, fmt.Sprintf("Template: %s, Error: %v", templateName, err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
 }
 
 // Helper function to send JSON response
