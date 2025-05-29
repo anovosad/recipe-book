@@ -1,3 +1,4 @@
+
 // templates/login.templ
 package templates
 
@@ -8,7 +9,7 @@ templ Login(data *models.PageData) {
 		<div class="auth-container">
 			<div class="auth-card">
 				<h2><i class="fas fa-sign-in-alt"></i> Login</h2>
-				<form id="loginForm" class="auth-form">
+				<form id="loginForm" class="auth-form" data-api-endpoint="/api/login" data-redirect="/recipes">
 					<div class="form-group">
 						<label for="username">Username</label>
 						<input type="text" id="username" name="username" class="form-control" required/>
@@ -26,52 +27,50 @@ templ Login(data *models.PageData) {
 				</div>
 			</div>
 		</div>
-		<script>
-			document.getElementById('loginForm').addEventListener('submit', async function(e) {
+		@LoginScript()
+	}
+}
+
+// Minimal script that uses RecipeBook core functionality
+templ LoginScript() {
+	<script>
+		RecipeBook.on('app:initialized', function() {
+			const form = document.getElementById('loginForm');
+			if (!form) return;
+			
+			form.addEventListener('submit', async function(e) {
 				e.preventDefault();
 				
 				const submitBtn = this.querySelector('button[type="submit"]');
-				const originalText = submitBtn.innerHTML;
-				
-				// Show loading state
-				submitBtn.disabled = true;
-				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+				const removeLoading = RecipeBook.addLoadingState(submitBtn, 'Logging in...');
 				
 				try {
-					// Collect form data as JSON
 					const loginData = {
 						username: this.querySelector('#username').value.trim(),
 						password: this.querySelector('#password').value
 					};
 					
-					const response = await fetch('/api/login', {
+					const response = await RecipeBook.apiRequest('/api/login', {
 						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
+						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify(loginData)
 					});
 					
-					const data = await response.json();
-					
-					if (data.success) {
-						RecipeBook.showNotification(data.message, 'success');
-						// Redirect after success
+					if (response.success) {
+						RecipeBook.showNotification(response.message, 'success');
 						setTimeout(() => {
-							window.location.href = data.redirect || '/recipes';
+							window.location.href = response.redirect || '/recipes';
 						}, 1000);
 					} else {
-						RecipeBook.showNotification(data.error || 'Login failed', 'error');
+						RecipeBook.showNotification(response.error || 'Login failed', 'error');
 					}
 				} catch (error) {
 					console.error('Login error:', error);
 					RecipeBook.showNotification('Login failed. Please try again.', 'error');
 				} finally {
-					// Reset button state
-					submitBtn.disabled = false;
-					submitBtn.innerHTML = originalText;
+					removeLoading();
 				}
 			});
-		</script>
-	}
+		});
+	</script>
 }

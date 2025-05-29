@@ -1,4 +1,4 @@
-// templates/base.templ
+// templates/base.templ - Updated to remove duplicates
 package templates
 
 import "recipe-book/models"
@@ -31,6 +31,7 @@ templ Base(title string, data *models.PageData) {
 				}
 				{ children... }
 			</div>
+			<!-- Load scripts in correct order -->
 			<script src="/static/js/core.js"></script>
 			<script src="/static/app.js"></script>
 		</body>

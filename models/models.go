@@ -97,3 +97,20 @@ var ServingUnits = []struct {
 	{"muffins", "Muffins"},
 	{"pancakes", "Pancakes"},
 }
+
+type RecipeItem int
+
+const (
+	RecipeItemIngredients RecipeItem = iota
+	RecipeItemInstructions
+	RecipeItemImages
+	RecipeItemTags
+	RecipeItemAuthor
+	RecipeItemCreatedAt
+	RecipeItemServings
+	RecipeItemPrepTime
+	RecipeItemCookTime
+	RecipeItemServingUnit
+	RecipeItemTitle
+	RecipeItemDescription
+)

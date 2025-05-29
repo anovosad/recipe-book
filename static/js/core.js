@@ -1,7 +1,7 @@
-// static/js/core.js - Updated for JSON APIs
+// static/js/core.js - Updated Core RecipeBook Application
 
 /**
- * Updated Recipe Book Application Controller for JSON APIs
+ * Updated Recipe Book Application Controller
  */
 const RecipeBook = {
     // Application Configuration
@@ -43,7 +43,6 @@ const RecipeBook = {
         this.initializeServiceWorker();
         this.initializeSearch();
         this.initializeMobileMenu();
-        this.initializeTheme();
         this.setupErrorHandling();
 
         this.state.isInitialized = true;
@@ -101,7 +100,6 @@ const RecipeBook = {
      * Handle before unload
      */
     onBeforeUnload() {
-        // Clean up any ongoing operations
         this.state.loadingStates.clear();
         this.cleanup();
     },
@@ -117,11 +115,11 @@ const RecipeBook = {
     },
 
     // ============================================
-    // ENHANCED API REQUEST HANDLING
+    // API REQUEST HANDLING
     // ============================================
 
     /**
-     * Make API request with enhanced error handling and JSON support
+     * Make API request with enhanced error handling
      */
     async apiRequest(url, options = {}) {
         const defaultOptions = {
@@ -160,7 +158,6 @@ const RecipeBook = {
             }
 
             if (!response.ok) {
-                // Handle API error responses
                 const errorMessage = data.error || `HTTP ${response.status}: ${response.statusText}`;
                 throw new APIError(errorMessage, response.status, data);
             }
@@ -177,84 +174,12 @@ const RecipeBook = {
         }
     },
 
-    /**
-     * Submit form data as JSON
-     */
-    async submitFormAsJSON(form, options = {}) {
-        const method = options.method || form.method || 'POST';
-        const url = options.url || form.action || window.location.href;
-
-        // Collect form data
-        const formData = this.collectFormData(form);
-
-        try {
-            const response = await this.apiRequest(url, {
-                method,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            });
-
-            this.emit('form:submit:success', { form, response });
-            return response;
-        } catch (error) {
-            this.emit('form:submit:error', { form, error });
-            throw error;
-        }
-    },
-
-    /**
-     * Collect form data as a JavaScript object
-     */
-    collectFormData(form) {
-        const formData = new FormData(form);
-        const data = {};
-        
-        for (const [key, value] of formData.entries()) {
-            if (data[key]) {
-                // Handle multiple values (like checkboxes)
-                if (Array.isArray(data[key])) {
-                    data[key].push(value);
-                } else {
-                    data[key] = [data[key], value];
-                }
-            } else {
-                data[key] = value;
-            }
-        }
-        
-        return data;
-    },
-
-    /**
-     * Submit form via FormData (for file uploads)
-     */
-    async submitForm(form, options = {}) {
-        const formData = new FormData(form);
-        const method = options.method || form.method || 'POST';
-        const url = options.url || form.action || window.location.href;
-
-        try {
-            const response = await this.apiRequest(url, {
-                method,
-                body: formData
-            });
-
-            this.emit('form:submit:success', { form, response });
-            return response;
-        } catch (error) {
-            this.emit('form:submit:error', { form, error });
-            throw error;
-        }
-    },
-
     // ============================================
-    // ENHANCED NOTIFICATION SYSTEM
+    // NOTIFICATION SYSTEM
     // ============================================
 
     /**
-     * Show notification toast with JSON API integration
+     * Show notification toast
      */
     showNotification(message, type = 'info', options = {}) {
         const notification = this.createNotification(message, type, options);
@@ -381,7 +306,7 @@ const RecipeBook = {
     // ============================================
 
     /**
-     * Initialize search functionality with JSON API
+     * Initialize search functionality
      */
     initializeSearch() {
         const searchInputs = document.querySelectorAll('.search-input');
@@ -400,7 +325,7 @@ const RecipeBook = {
                 e.preventDefault();
                 const form = e.target.closest('form');
                 if (form) {
-                    form.submit(); // Use regular form submission for search
+                    form.submit();
                 }
             }
         });
@@ -411,16 +336,10 @@ const RecipeBook = {
                 this.performSearch(e.target.value, e.target);
             }, this.config.debounceDelay));
         }
-
-        // Search suggestions (if container exists)
-        const suggestionsContainer = input.parentNode.querySelector('.search-suggestions');
-        if (suggestionsContainer) {
-            this.setupSearchSuggestions(input, suggestionsContainer);
-        }
     },
 
     /**
-     * Perform search operation via JSON API
+     * Perform search operation via API
      */
     async performSearch(query, inputElement) {
         if (!query || query.length < 2) return;
@@ -521,7 +440,6 @@ const RecipeBook = {
             return false;
         }
 
-        // Close other modals if not stacking
         if (!options.stack) {
             this.closeAllModals();
         }
@@ -565,7 +483,6 @@ const RecipeBook = {
             modal.classList.remove('modal-open');
             this.state.activeModals.delete(modal);
             
-            // Restore body scroll if no modals open
             if (this.state.activeModals.size === 0) {
                 document.body.style.overflow = '';
             }
@@ -597,7 +514,7 @@ const RecipeBook = {
     },
 
     // ============================================
-    // MOBILE MENU
+    // MOBILE MENU (SINGLE IMPLEMENTATION)
     // ============================================
 
     /**
@@ -610,7 +527,11 @@ const RecipeBook = {
         
         if (!toggleButton || !navLinks) return;
 
-        toggleButton.addEventListener('click', (e) => {
+        // Remove any existing listeners to prevent duplicates
+        toggleButton.replaceWith(toggleButton.cloneNode(true));
+        const newToggleButton = document.getElementById('mobileMenuToggle');
+
+        newToggleButton.addEventListener('click', (e) => {
             e.preventDefault();
             this.toggleMobileMenu();
         });
@@ -624,13 +545,6 @@ const RecipeBook = {
         navLinks.addEventListener('click', (e) => {
             if (e.target.classList.contains('nav-link') && window.innerWidth <= 768) {
                 setTimeout(() => this.closeMobileMenu(), 150);
-            }
-        });
-
-        // Close menu on escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && navLinks.classList.contains('mobile-open')) {
-                this.closeMobileMenu();
             }
         });
 
@@ -750,69 +664,6 @@ const RecipeBook = {
         return 'rb_' + Math.random().toString(36).substr(2, 9);
     },
 
-    /**
-     * Format date
-     */
-    formatDate(date, options = {}) {
-        const defaultOptions = {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        };
-        
-        return new Date(date).toLocaleDateString('en-US', { ...defaultOptions, ...options });
-    },
-
-    /**
-     * Format time duration
-     */
-    formatTime(minutes) {
-        if (!minutes || minutes === 0) return 'Not specified';
-        
-        if (minutes < 60) return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
-        
-        const hours = Math.floor(minutes / 60);
-        const remainingMinutes = minutes % 60;
-        
-        if (remainingMinutes === 0) {
-            return `${hours} hour${hours !== 1 ? 's' : ''}`;
-        }
-        
-        return `${hours} hour${hours !== 1 ? 's' : ''} ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}`;
-    },
-
-    // ============================================
-    // THEME SYSTEM
-    // ============================================
-
-    /**
-     * Initialize theme system
-     */
-    initializeTheme() {
-        const savedTheme = localStorage.getItem('recipe-book-theme');
-        if (savedTheme) {
-            this.setTheme(savedTheme);
-        }
-
-        // Listen for system theme changes
-        if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-                if (!localStorage.getItem('recipe-book-theme')) {
-                    this.setTheme(e.matches ? 'dark' : 'light');
-                }
-            });
-        }
-    },
-
-    /**
-     * Set application theme
-     */
-    setTheme(theme) {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('recipe-book-theme', theme);
-        this.emit('theme:change', { theme });
-    },
-
     // ============================================
     // SMOOTH SCROLL & NAVIGATION
     // ============================================
@@ -837,7 +688,6 @@ const RecipeBook = {
      */
     setupClickOutside() {
         document.addEventListener('click', (e) => {
-            // Handle dropdowns
             document.querySelectorAll('.dropdown.open').forEach(dropdown => {
                 if (!dropdown.contains(e.target)) {
                     dropdown.classList.remove('open');
@@ -863,6 +713,11 @@ const RecipeBook = {
             // Tab trapping in modals
             if (e.key === 'Tab' && this.state.activeModals.size > 0) {
                 this.handleModalTabTrapping(e);
+            }
+
+            // Escape key to close modals
+            if (e.key === 'Escape') {
+                this.closeTopModal();
             }
         });
     },
@@ -975,7 +830,6 @@ const RecipeBook = {
      * Validate form
      */
     validateForm(form) {
-        // Basic validation - can be extended
         const requiredFields = form.querySelectorAll('[required]');
         let isValid = true;
 
@@ -1079,49 +933,6 @@ const RecipeBook = {
     },
 
     // ============================================
-    // STORAGE UTILITIES
-    // ============================================
-
-    /**
-     * Set local storage item safely
-     */
-    setStorage(key, value) {
-        try {
-            localStorage.setItem(`recipe-book-${key}`, JSON.stringify(value));
-            return true;
-        } catch (error) {
-            console.warn('Failed to save to localStorage:', error);
-            return false;
-        }
-    },
-
-    /**
-     * Get local storage item safely
-     */
-    getStorage(key, defaultValue = null) {
-        try {
-            const item = localStorage.getItem(`recipe-book-${key}`);
-            return item ? JSON.parse(item) : defaultValue;
-        } catch (error) {
-            console.warn('Failed to read from localStorage:', error);
-            return defaultValue;
-        }
-    },
-
-    /**
-     * Remove local storage item
-     */
-    removeStorage(key) {
-        try {
-            localStorage.removeItem(`recipe-book-${key}`);
-            return true;
-        } catch (error) {
-            console.warn('Failed to remove from localStorage:', error);         
-            return false;
-        }
-    },
-
-    // ============================================
     // CLEANUP
     // ============================================
 
@@ -1129,18 +940,12 @@ const RecipeBook = {
      * Cleanup resources
      */
     cleanup() {
-        // Remove all loading states
         this.state.loadingStates.forEach((_, buttonId) => {
             this.removeLoadingState(buttonId);
         });
         
-        // Close all modals
         this.closeAllModals();
-        
-        // Clear event listeners
         this.state.eventListeners.clear();
-        
-        // Reset state
         this.state.isInitialized = false;
         
         console.log('🧹 Recipe Book cleaned up');
@@ -1160,7 +965,7 @@ class APIError extends Error {
 }
 
 // ============================================
-// LOGOUT FUNCTION (Updated for JSON API)
+// LOGOUT FUNCTION (CENTRALIZED)
 // ============================================
 
 /**
@@ -1202,4 +1007,5 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = RecipeBook;
 } else if (typeof window !== 'undefined') {
     window.RecipeBook = RecipeBook;
+    window.logout = logout; // Export logout globally
 }

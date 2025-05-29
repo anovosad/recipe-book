@@ -1,3 +1,4 @@
+
 // templates/ingredients.templ
 package templates
 
@@ -61,7 +62,7 @@ templ IngredientFormModal() {
 		<div class="modal-content">
 			<div class="modal-header">
 				<h3><i class="fas fa-plus-circle"></i> New Ingredient</h3>
-				<button type="button" class="modal-close" onclick="closeIngredientFormModal()">
+				<button type="button" class="modal-close">
 					<i class="fas fa-times"></i>
 				</button>
 			</div>
@@ -72,7 +73,7 @@ templ IngredientFormModal() {
 						<input type="text" id="ingredient-name" name="name" class="form-control" required/>
 					</div>
 					<div class="modal-actions">
-						<button type="button" class="btn btn-secondary" onclick="closeIngredientFormModal()">
+						<button type="button" class="btn btn-secondary modal-close">
 							<i class="fas fa-times"></i> Cancel
 						</button>
 						<button type="submit" class="btn btn-primary">
@@ -85,91 +86,71 @@ templ IngredientFormModal() {
 	</div>
 }
 
+// Simplified script using RecipeBook functionality
 templ IngredientsScript() {
 	<script>
-		document.addEventListener('DOMContentLoaded', function() {
+		RecipeBook.on('app:initialized', function() {
+			const modal = document.getElementById('ingredient-form-modal');
+			const form = document.getElementById('ingredientFormModal');
 			const addBtn = document.getElementById('add-ingredient-btn');
 			const addFirstBtn = document.getElementById('add-first-ingredient-btn');
 			
-			if (addBtn) {
-				addBtn.addEventListener('click', openIngredientFormModal);
-			}
-			if (addFirstBtn) {
-				addFirstBtn.addEventListener('click', openIngredientFormModal);
-			}
+			// Open modal handlers
+			[addBtn, addFirstBtn].forEach(btn => {
+				if (btn) {
+					btn.addEventListener('click', () => {
+						modal.classList.remove('hidden');
+						modal.style.display = 'flex';
+						document.getElementById('ingredient-name').focus();
+					});
+				}
+			});
 			
-			document.getElementById('ingredientFormModal').addEventListener('submit', async function(e) {
+			// Close modal handlers (using RecipeBook modal system)
+			modal.querySelectorAll('.modal-close').forEach(btn => {
+				btn.addEventListener('click', () => {
+					RecipeBook.closeModal(modal);
+					modal.classList.add('hidden');
+					document.getElementById('ingredient-name').value = '';
+				});
+			});
+			
+			// Form submission
+			form.addEventListener('submit', async function(e) {
 				e.preventDefault();
 				
-				const submitBtn = this.querySelector('button[type="submit"]');
-				const originalText = submitBtn.innerHTML;
+				// Use centralized validation
+				if (!validateIngredientForm(this)) return;
 				
-				// Show loading state
-				submitBtn.disabled = true;
-				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+				const submitBtn = this.querySelector('button[type="submit"]');
+				const removeLoading = RecipeBook.addLoadingState(submitBtn, 'Saving...');
 				
 				try {
-					// Collect form data as JSON
 					const ingredientData = {
 						name: this.querySelector('#ingredient-name').value.trim()
 					};
 					
-					const response = await fetch('/api/ingredients', {
+					const response = await RecipeBook.apiRequest('/api/ingredients', {
 						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
+						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify(ingredientData)
 					});
 					
-					const data = await response.json();
-					
-					if (data.success) {
-						RecipeBook.showNotification(data.message, 'success');
-						closeIngredientFormModal();
-						// Reload page to show new ingredient
-						setTimeout(() => {
-							window.location.reload();
-						}, 1000);
+					if (response.success) {
+						RecipeBook.showNotification(response.message, 'success');
+						RecipeBook.closeModal(modal);
+						modal.classList.add('hidden');
+						setTimeout(() => window.location.reload(), 1000);
 					} else {
-						RecipeBook.showNotification(data.error || 'Failed to save ingredient', 'error');
+						RecipeBook.showNotification(response.error || 'Failed to save ingredient', 'error');
 					}
 				} catch (error) {
 					console.error('Ingredient save error:', error);
 					RecipeBook.showNotification('Failed to save ingredient. Please try again.', 'error');
 				} finally {
-					// Reset button state
-					submitBtn.disabled = false;
-					submitBtn.innerHTML = originalText;
+					removeLoading();
 				}
 			});
-		});
-		
-		function openIngredientFormModal() {
-			const modal = document.getElementById('ingredient-form-modal');
-			modal.classList.remove('hidden');
-			modal.style.display = 'flex';
-			document.getElementById('ingredient-name').focus();
-		}
-		
-		function closeIngredientFormModal() {
-			const modal = document.getElementById('ingredient-form-modal');
-			modal.classList.add('hidden');
-			modal.style.display = 'none';
-			document.getElementById('ingredient-name').value = '';
-		}
-		
-		// Close modal events
-		document.getElementById('ingredient-form-modal').addEventListener('click', function(e) {
-			if (e.target === this) {
-				closeIngredientFormModal();
-			}
-		});
-		
-		document.addEventListener('keydown', function(e) {
-			if (e.key === 'Escape' && !document.getElementById('ingredient-form-modal').classList.contains('hidden')) {
-				closeIngredientFormModal();
-			}
 		});
 	</script>
 }
