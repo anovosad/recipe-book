@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/utensils.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Primary Meta Tags -->
+    <title>Recipe Book - Save & Share Your Favorite Recipes</title>
+    <meta name="title" content="Recipe Book - Save & Share Your Favorite Recipes" />
+    <meta name="description" content="Create, organize, and share your favorite recipes with Recipe Book. Add ingredients, cooking instructions, photos, and tags to build your personal cookbook." />
+    <meta name="keywords" content="recipes, cooking, food, cookbook, ingredients, meal planning" />
+    <meta name="author" content="Recipe Book" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://recipebook.example.com/" />
+    <meta property="og:title" content="Recipe Book - Save & Share Your Favorite Recipes" />
+    <meta property="og:description" content="Create, organize, and share your favorite recipes with Recipe Book. Add ingredients, cooking instructions, photos, and tags to build your personal cookbook." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:site_name" content="Recipe Book" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://recipebook.example.com/" />
+    <meta property="twitter:title" content="Recipe Book - Save & Share Your Favorite Recipes" />
+    <meta property="twitter:description" content="Create, organize, and share your favorite recipes with Recipe Book. Add ingredients, cooking instructions, photos, and tags to build your personal cookbook." />
+    <meta property="twitter:image" content="/og-image.png" />
+    
+    <!-- Favicon and Apple Touch Icons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#ff6b6b" />
+    <meta name="msapplication-TileColor" content="#ff6b6b" />
+    <meta name="theme-color" content="#ffffff" />
+    
+    <!-- Performance and Security -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#fef2f2',
+                            100: '#fee2e2',
+                            200: '#fecaca',
+                            300: '#fca5a5',
+                            400: '#f87171',
+                            500: '#ef4444',
+                            600: '#dc2626',
+                            700: '#b91c1c',
+                            800: '#991b1b',
+                            900: '#7f1d1d',
+                        }
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'slide-in-up': 'slideInUp 0.3s ease-out',
+                        'slide-in-down': 'slideInDown 0.3s ease-out',
+                        'scale-in': 'scaleIn 0.2s ease-out',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        },
+                        slideInUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        },
+                        slideInDown: {
+                            '0%': { transform: 'translateY(-20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' }
+                        },
+                        scaleIn: {
+                            '0%': { transform: 'scale(0.9)', opacity: '0' },
+                            '100%': { transform: 'scale(1)', opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Loading Styles -->
+    <style>
+        /* Loading screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        #loading-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #fca5a5;
+            border-top: 4px solid #dc2626;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            margin-top: 1rem;
+            color: #dc2626;
+            font-weight: 500;
+            font-family: Inter, system-ui, sans-serif;
+        }
+
+        /* Hide content until loaded */
+        #root {
+            opacity: 0;
+            transition: opacity 0.3s ease-in;
+        }
+
+        #root.loaded {
+            opacity: 1;
+        }
+        
+        /* Error fallback styles */
+        .error-fallback {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, #fef2f2, #fee2e2);
+        }
+        
+        .error-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-red-600 mb-4">
+            <path d="M3 2l2.01.01L6.5 7H21l-3.5 7H8l-1.5-3H5l-1.5 3H1L3 2zM7 18c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm10 0c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 6v6m-3-3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Recipe Book...</div>
+    </div>
+
+    <!-- React App Root -->
+    <div id="root">
+        <!-- Fallback content for when JavaScript is disabled -->
+        <noscript>
+            <div class="error-fallback">
+                <div class="error-card">
+                    <h1 style="color: #dc2626; margin-bottom: 1rem;">JavaScript Required</h1>
+                    <p style="color: #6b7280; margin-bottom: 1.5rem;">
+                        Recipe Book requires JavaScript to run. Please enable JavaScript in your browser to continue.
+                    </p>
+                    <a href="https://enable-javascript.com/" 
+                       style="color: #dc2626; text-decoration: underline;">
+                        Learn how to enable JavaScript
+                    </a>
+                </div>
+            </div>
+        </noscript>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Loading Script -->
+    <script>
+        // Hide loading screen when app is ready
+        window.addEventListener('DOMContentLoaded', function() {
+            const root = document.getElementById('root');
+            const loadingScreen = document.getElementById('loading-screen');
+            
+            // Function to hide loading screen
+            function hideLoadingScreen() {
+                loadingScreen.classList.add('fade-out');
+                root.classList.add('loaded');
+                
+                setTimeout(function() {
+                    loadingScreen.style.display = 'none';
+                }, 500);
+            }
+            
+            // Hide loading screen after a short delay or when React app is ready
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && root.children.length > 1) {
+                        hideLoadingScreen();
+                        observer.disconnect();
+                    }
+                });
+            });
+            
+            observer.observe(root, { childList: true, subtree: true });
+            
+            // Fallback: hide loading screen after 3 seconds
+            setTimeout(hideLoadingScreen, 3000);
+        });
+
+        // Service Worker Registration (optional)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(function(registration) {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(function(registrationError) {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            });
+        }
+
+        // Global error handler
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error);
+            
+            // Hide loading screen if there's an error
+            const loadingScreen = document.getElementById('loading-screen');
+            if (loadingScreen) {
+                loadingScreen.style.display = 'none';
+            }
+        });
+
+        // Unhandled promise rejection handler
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+    </script>
+</body>
+</html>

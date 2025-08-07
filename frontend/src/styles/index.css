@@ -1,0 +1,414 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Scrollbar styles */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-red-500 ring-offset-2;
+  }
+}
+
+/* Component styles */
+@layer components {
+  /* Card hover effects */
+  .recipe-card {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+  }
+
+  /* Image modal overlay */
+  .image-modal {
+    @apply fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 cursor-pointer;
+  }
+
+  .image-modal img {
+    @apply max-w-full max-h-full object-contain cursor-default;
+  }
+
+  .image-modal-close {
+    @apply absolute top-4 right-4 text-white text-2xl cursor-pointer hover:text-gray-300 transition-colors;
+  }
+
+  /* Line clamp utilities */
+  .line-clamp-1 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .line-clamp-2 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+  }
+
+  /* Animation utilities */
+  .fade-in {
+    @apply animate-in fade-in duration-200;
+  }
+
+  .slide-in-from-bottom {
+    @apply animate-in slide-in-from-bottom-2 duration-300;
+  }
+
+  .slide-in-from-right {
+    @apply animate-in slide-in-from-right-2 duration-300;
+  }
+
+  /* Glassmorphism effect */
+  .glass {
+    @apply backdrop-blur-lg bg-white/80 border border-white/20;
+  }
+
+  .glass-dark {
+    @apply backdrop-blur-lg bg-gray-900/80 border border-gray-700/20;
+  }
+
+  /* Gradient backgrounds */
+  .gradient-red {
+    @apply bg-gradient-to-br from-red-500 to-pink-600;
+  }
+
+  .gradient-blue {
+    @apply bg-gradient-to-br from-blue-500 to-indigo-600;
+  }
+
+  .gradient-green {
+    @apply bg-gradient-to-br from-green-500 to-emerald-600;
+  }
+
+  /* Loading skeleton */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+
+  .skeleton-text {
+    @apply skeleton h-4 w-full;
+  }
+
+  .skeleton-title {
+    @apply skeleton h-6 w-3/4;
+  }
+
+  .skeleton-avatar {
+    @apply skeleton h-10 w-10 rounded-full;
+  }
+
+  /* Form enhancements */
+  .form-floating {
+    @apply relative;
+  }
+
+  .form-floating input:focus ~ label,
+  .form-floating input:not(:placeholder-shown) ~ label {
+    @apply -translate-y-2 scale-75;
+  }
+
+  .form-floating label {
+    @apply absolute left-3 top-2.5 text-gray-500 transition-all duration-200 pointer-events-none;
+  }
+
+  /* Recipe-specific styles */
+  .ingredient-item {
+    @apply flex items-center gap-3 py-2 border-b border-gray-100 last:border-b-0;
+  }
+
+  .ingredient-quantity {
+    @apply font-semibold text-red-600 min-w-[3rem];
+  }
+
+  .ingredient-unit {
+    @apply text-gray-600 min-w-[4rem];
+  }
+
+  .ingredient-name {
+    @apply flex-1 text-gray-900;
+  }
+
+  /* Tag styles */
+  .tag {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors;
+  }
+
+  .tag-active {
+    @apply bg-red-600 text-white;
+  }
+
+  .tag-inactive {
+    @apply bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700;
+  }
+
+  /* Responsive typography */
+  .responsive-text {
+    @apply text-sm md:text-base;
+  }
+
+  .responsive-title {
+    @apply text-xl md:text-2xl lg:text-3xl;
+  }
+
+  /* Print styles */
+  @media print {
+    .no-print {
+      @apply hidden;
+    }
+
+    .print-only {
+      @apply block;
+    }
+
+    body {
+      @apply text-black bg-white;
+    }
+
+    .recipe-content {
+      @apply shadow-none border border-gray-300;
+    }
+  }
+}
+
+/* Utility styles */
+@layer utilities {
+  /* Text selection */
+  .select-none {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  .select-text {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Aspect ratios */
+  .aspect-square {
+    aspect-ratio: 1 / 1;
+  }
+
+  .aspect-video {
+    aspect-ratio: 16 / 9;
+  }
+
+  .aspect-photo {
+    aspect-ratio: 4 / 3;
+  }
+
+  /* Safe areas for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Custom scrollbars */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(156 163 175) rgb(243 244 246);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.3s ease-out;
+}
+
+.animate-slide-in-down {
+  animation: slideInDown 0.3s ease-out;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* Recipe book specific styles */
+.recipe-grid {
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.ingredient-calculator {
+  @apply bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2;
+}
+
+.serving-controls button {
+  @apply w-8 h-8 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors flex items-center justify-center;
+}
+
+.recipe-instructions {
+  @apply prose prose-sm max-w-none;
+}
+
+.recipe-instructions p {
+  @apply mb-3 leading-relaxed;
+}
+
+.recipe-instructions ol {
+  @apply pl-4;
+}
+
+.recipe-instructions li {
+  @apply mb-2;
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  .recipe-grid {
+    grid-template-columns: 1fr;
+    @apply gap-4;
+  }
+
+  .responsive-text {
+    @apply text-sm;
+  }
+
+  .responsive-title {
+    @apply text-lg;
+  }
+
+  .ingredient-item {
+    @apply flex-col items-start gap-1;
+  }
+
+  .ingredient-quantity,
+  .ingredient-unit {
+    @apply min-w-0;
+  }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .recipe-image {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .card {
+    @apply border-2 border-gray-600;
+  }
+
+  .btn {
+    @apply border-2 border-current;
+  }
+}
