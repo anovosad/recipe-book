@@ -1,4 +1,4 @@
-// templates/recipe-form.templ - Cleaned up version
+// templates/recipe-form.templ - FIXED VERSION WITH WORKING BUTTONS
 package templates
 
 import (
@@ -340,8 +340,6 @@ templ TagModal() {
 
 templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 	<script>
-		// Recipe form functionality using RecipeBook core - CLEANED UP VERSION
-		let ingredientCounter = 0;
 		let allIngredients = [
 			for _, ingredient := range ingredients {
 				{id: { strconv.Itoa(ingredient.ID) }, name: "{ ingredient.Name }"},
@@ -350,179 +348,119 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 		const isEditMode = { if recipe != nil { "true" } else { "false" } };
 		const recipeId = { if recipe != nil { strconv.Itoa(recipe.ID) } else { "null" } };
 		
-		// Wait for RecipeBook to be initialized
 		RecipeBook.on('app:initialized', function() {
-			initializeRecipeForm();
-			initializeTagButtons();
-			setServingUnitValue();
-			initializeImageHandling();
-			initializeIngredientRows();
-		});
-		
-		function initializeRecipeForm() {
 			const form = document.getElementById('recipeForm');
+			const ingredientModal = document.getElementById('ingredient-modal');
+			const tagModal = document.getElementById('tag-modal');
+			const addIngredientBtn = document.getElementById('add-ingredient');
+			const addNewIngredientBtn = document.getElementById('add-new-ingredient-btn');
+			const addNewTagBtn = document.getElementById('add-new-tag-btn');
+			const ingredientForm = document.getElementById('new-ingredient-form');
+			const tagForm = document.getElementById('new-tag-form');
 			
-			form.addEventListener('submit', async function(e) {
-				e.preventDefault();
-				
-				// Use centralized validation
-				if (!validateRecipeForm(this)) return;
-				
-				const submitBtn = this.querySelector('button[type="submit"]');
-				const removeLoading = RecipeBook.addLoadingState(submitBtn, 'Saving...');
-				
-				try {
-					const formData = new FormData(this);
-					const url = isEditMode ? `/recipe/${recipeId}/edit` : '/api/recipes';
+			// Form submission
+			if (form) {
+				form.addEventListener('submit', async function(e) {
+					e.preventDefault();
 					
-					const response = await RecipeBook.apiRequest(url, {
-						method: 'POST',
-						body: formData
-					});
+					if (!validateRecipeForm(this)) return;
 					
-					if (response.success) {
-						RecipeBook.showNotification(response.message, 'success');
-						setTimeout(() => {
-							window.location.href = response.redirect;
-						}, 1000);
-					} else {
-						RecipeBook.showNotification(response.error || 'Failed to save recipe', 'error');
-					}
-				} catch (error) {
-					console.error('Recipe save error:', error);
-					RecipeBook.showNotification('Failed to save recipe. Please try again.', 'error');
-				} finally {
-					removeLoading();
-				}
-			});
-			
-			// Button event listeners
-			document.getElementById('add-ingredient').addEventListener('click', addIngredientRow);
-			document.getElementById('add-new-ingredient-btn').addEventListener('click', () => openModal('ingredient-modal'));
-			document.getElementById('add-new-tag-btn').addEventListener('click', () => openModal('tag-modal'));
-			document.getElementById('new-ingredient-form').addEventListener('submit', createNewIngredient);
-			document.getElementById('new-tag-form').addEventListener('submit', createNewTag);
-		}
-		
-		function initializeTagButtons() {
-			document.querySelectorAll('.tag-filter').forEach(button => {
-				const tagId = button.dataset.tagId;
-				const checkbox = document.getElementById('tag_' + tagId);
-				
-				// Set initial state for edit mode
-				if (checkbox && checkbox.checked) {
-					button.classList.add('active');
-				}
-				
-				button.addEventListener('click', function() {
-					if (checkbox) {
-						checkbox.checked = !checkbox.checked;
-						button.classList.toggle('active', checkbox.checked);
-					}
-				});
-			});
-		}
-		
-		function setServingUnitValue() {
-			const servingUnitSelect = document.getElementById('serving_unit');
-			if (servingUnitSelect) {
-				const currentValue = servingUnitSelect.dataset.value || 'people';
-				servingUnitSelect.value = currentValue;
-			}
-		}
-		
-		function initializeImageHandling() {
-			// Image deletion
-			document.querySelectorAll('.delete-image').forEach(button => {
-				button.addEventListener('click', async function() {
-					const imageId = this.dataset.imageId;
-					const imageItem = this.closest('.image-item');
+					const submitBtn = this.querySelector('button[type="submit"]');
+					const removeLoading = RecipeBook.addLoadingState(submitBtn, 'Saving...');
 					
-					if (confirm('Are you sure you want to delete this image?')) {
-						const removeLoading = RecipeBook.addLoadingState(this, '');
+					try {
+						const formData = new FormData(this);
+						const url = isEditMode ? `/recipe/${recipeId}/edit` : '/api/recipes';
 						
-						try {
-							const response = await RecipeBook.apiRequest(`/api/images/${imageId}`, {
-								method: 'DELETE'
-							});
-							
-							if (response.success) {
-								RecipeBook.hideElement(imageItem);
-								RecipeBook.showNotification('Image deleted successfully', 'success');
-							} else {
-								RecipeBook.showNotification('Failed to delete image', 'error');
-							}
-						} catch (error) {
-							console.error('Image deletion error:', error);
-							RecipeBook.showNotification('Failed to delete image', 'error');
-						} finally {
-							removeLoading();
+						const response = await RecipeBook.apiRequest(url, {
+							method: 'POST',
+							body: formData
+						});
+						
+						if (response.success) {
+							RecipeBook.showNotification(response.message, 'success');
+							setTimeout(() => {
+								window.location.href = response.redirect;
+							}, 1000);
+						} else {
+							RecipeBook.showNotification(response.error || 'Failed to save recipe', 'error');
 						}
+					} catch (error) {
+						console.error('Recipe save error:', error);
+						RecipeBook.showNotification('Failed to save recipe. Please try again.', 'error');
+					} finally {
+						removeLoading();
 					}
 				});
-			});
+			}
 			
-			// Image upload preview
-			document.getElementById('recipe_images').addEventListener('change', function(e) {
-				const files = e.target.files;
-				const container = document.getElementById('image-preview-container');
-				container.innerHTML = '';
+			// Button handlers
+			if (addIngredientBtn) {
+				addIngredientBtn.addEventListener('click', addIngredientRow);
+			}
+			
+			if (addNewIngredientBtn && ingredientModal) {
+				addNewIngredientBtn.addEventListener('click', () => {
+					ingredientModal.classList.remove('hidden');
+					ingredientModal.style.display = 'flex';
+					document.getElementById('new-ingredient-name').focus();
+				});
+			}
+			
+			if (addNewTagBtn && tagModal) {
+				addNewTagBtn.addEventListener('click', () => {
+					tagModal.classList.remove('hidden');
+					tagModal.style.display = 'flex';
+					document.getElementById('new-tag-name').focus();
+				});
+			}
+			
+			// Modal close handlers
+			[ingredientModal, tagModal].forEach(modal => {
+				if (!modal) return;
 				
-				for (let i = 0; i < files.length; i++) {
-					const file = files[i];
-					if (file.type.startsWith('image/')) {
-						const reader = new FileReader();
-						reader.onload = function(e) {
-							const previewDiv = document.createElement('div');
-							previewDiv.className = 'image-preview-item';
-							previewDiv.innerHTML = `
-								<img src="${e.target.result}" alt="Preview" class="image-preview">
-								<input type="text" name="image_captions" placeholder="Caption for this image" class="form-control image-caption-input">
-								<button type="button" class="btn btn-danger btn-sm remove-preview" onclick="this.closest('.image-preview-item').remove()">
-									<i class="fas fa-times"></i>
-								</button>
-							`;
-							container.appendChild(previewDiv);
-						};
-						reader.readAsDataURL(file);
+				modal.addEventListener('click', (e) => {
+					if (e.target === modal) {
+						closeModal(modal.id);
 					}
-				}
-			});
-		}
-		
-		function initializeIngredientRows() {
-			// Initialize existing ingredient rows
-			document.querySelectorAll('.ingredient-row .remove-ingredient').forEach(btn => {
-				btn.addEventListener('click', function() {
-					this.closest('.ingredient-row').remove();
+				});
+				
+				modal.querySelectorAll('.modal-close').forEach(btn => {
+					btn.addEventListener('click', () => closeModal(modal.id));
 				});
 			});
-		}
-		
-		function openModal(modalId) {
-			const modal = document.getElementById(modalId);
-			modal.classList.remove('hidden');
-			modal.style.display = 'flex';
 			
-			// Focus first input
-			const firstInput = modal.querySelector('input[type="text"]');
-			if (firstInput) firstInput.focus();
-		}
+			// Form handlers
+			if (ingredientForm) {
+				ingredientForm.addEventListener('submit', handleIngredientSubmission);
+			}
+			if (tagForm) {
+				tagForm.addEventListener('submit', handleTagSubmission);
+			}
+			
+			// Other setup
+			setupTagButtons();
+			setupImageHandling();
+			setupExistingIngredientRows();
+			setServingUnitValue();
+		});
 		
 		function closeModal(modalId) {
 			const modal = document.getElementById(modalId);
-			modal.classList.add('hidden');
-			modal.style.display = 'none';
-			
-			// Clear form
-			const form = modal.querySelector('form');
-			if (form) form.reset();
-			if (modalId === 'tag-modal') {
-				document.getElementById('new-tag-color').value = '#ff6b6b';
+			if (modal) {
+				modal.classList.add('hidden');
+				modal.style.display = 'none';
+				const form = modal.querySelector('form');
+				if (form) {
+					form.reset();
+					if (modalId === 'tag-modal') {
+						document.getElementById('new-tag-color').value = '#ff6b6b';
+					}
+				}
 			}
 		}
 		
-		async function createNewIngredient(e) {
+		async function handleIngredientSubmission(e) {
 			e.preventDefault();
 			
 			const form = e.target;
@@ -563,7 +501,7 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 			}
 		}
 		
-		async function createNewTag(e) {
+		async function handleTagSubmission(e) {
 			e.preventDefault();
 			
 			const form = e.target;
@@ -585,7 +523,6 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 				});
 				
 				if (response.success) {
-					// Add new tag to the form
 					const tagFiltersDiv = document.querySelector('.tag-filters');
 					const newButton = document.createElement('button');
 					newButton.type = 'button';
@@ -623,6 +560,100 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 			}
 		}
 		
+		function setupTagButtons() {
+			document.querySelectorAll('.tag-filter').forEach(button => {
+				const tagId = button.dataset.tagId;
+				const checkbox = document.getElementById('tag_' + tagId);
+				
+				if (checkbox && checkbox.checked) {
+					button.classList.add('active');
+				}
+				
+				button.addEventListener('click', function() {
+					if (checkbox) {
+						checkbox.checked = !checkbox.checked;
+						button.classList.toggle('active', checkbox.checked);
+					}
+				});
+			});
+		}
+		
+		function setServingUnitValue() {
+			const servingUnitSelect = document.getElementById('serving_unit');
+			if (servingUnitSelect) {
+				const currentValue = servingUnitSelect.dataset.value || 'people';
+				servingUnitSelect.value = currentValue;
+			}
+		}
+		
+		function setupImageHandling() {
+			document.querySelectorAll('.delete-image').forEach(button => {
+				button.addEventListener('click', async function() {
+					const imageId = this.dataset.imageId;
+					const imageItem = this.closest('.image-item');
+					
+					if (confirm('Are you sure you want to delete this image?')) {
+						const removeLoading = RecipeBook.addLoadingState(this, '');
+						
+						try {
+							const response = await RecipeBook.apiRequest(`/api/images/${imageId}`, {
+								method: 'DELETE'
+							});
+							
+							if (response.success) {
+								RecipeBook.hideElement(imageItem);
+								RecipeBook.showNotification('Image deleted successfully', 'success');
+							} else {
+								RecipeBook.showNotification('Failed to delete image', 'error');
+							}
+						} catch (error) {
+							console.error('Image deletion error:', error);
+							RecipeBook.showNotification('Failed to delete image', 'error');
+						} finally {
+							removeLoading();
+						}
+					}
+				});
+			});
+			
+			const imageInput = document.getElementById('recipe_images');
+			if (imageInput) {
+				imageInput.addEventListener('change', function(e) {
+					const files = e.target.files;
+					const container = document.getElementById('image-preview-container');
+					container.innerHTML = '';
+					
+					for (let i = 0; i < files.length; i++) {
+						const file = files[i];
+						if (file.type.startsWith('image/')) {
+							const reader = new FileReader();
+							reader.onload = function(e) {
+								const previewDiv = document.createElement('div');
+								previewDiv.className = 'image-preview-item';
+								previewDiv.innerHTML = `
+									<img src="${e.target.result}" alt="Preview" class="image-preview">
+									<input type="text" name="image_captions" placeholder="Caption for this image" class="form-control image-caption-input">
+									<button type="button" class="btn btn-danger btn-sm remove-preview" onclick="this.closest('.image-preview-item').remove()">
+										<i class="fas fa-times"></i>
+									</button>
+								`;
+								container.appendChild(previewDiv);
+							};
+							reader.readAsDataURL(file);
+						}
+					}
+				});
+			}
+		}
+		
+		function setupExistingIngredientRows() {
+			document.querySelectorAll('.ingredient-row .remove-ingredient').forEach(btn => {
+				btn.addEventListener('click', function() {
+					this.closest('.ingredient-row').remove();
+				});
+			});
+		}
+		
 		function updateIngredientSelects() {
 			const selects = document.querySelectorAll('.ingredient-select');
 			selects.forEach(select => {
@@ -642,6 +673,8 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 		
 		function addIngredientRow() {
 			const container = document.getElementById('ingredients-container');
+			if (!container) return;
+			
 			const row = document.createElement('div');
 			row.className = 'ingredient-row';
 			
@@ -692,33 +725,18 @@ templ RecipeFormScript(recipe *models.Recipe, ingredients []models.Ingredient) {
 			
 			container.appendChild(row);
 			
-			row.querySelector('.remove-ingredient').addEventListener('click', function() {
-				row.remove();
-			});
+			const removeBtn = row.querySelector('.remove-ingredient');
+			if (removeBtn) {
+				removeBtn.addEventListener('click', function() {
+					row.remove();
+				});
+			}
 		}
 		
-		// Modal event listeners - use RecipeBook modal system
-		document.querySelectorAll('.modal').forEach(modal => {
-			modal.addEventListener('click', function(e) {
-				if (e.target === this) {
-					closeModal(this.id);
-				}
-			});
-			
-			modal.querySelectorAll('.modal-close').forEach(btn => {
-				btn.addEventListener('click', () => closeModal(modal.id));
-			});
-		});
-		
-		// Escape key to close modals
 		document.addEventListener('keydown', function(e) {
 			if (e.key === 'Escape') {
-				['ingredient-modal', 'tag-modal'].forEach(modalId => {
-					const modal = document.getElementById(modalId);
-					if (modal && !modal.classList.contains('hidden')) {
-						closeModal(modalId);
-					}
-				});
+				closeModal('ingredient-modal');
+				closeModal('tag-modal');
 			}
 		});
 	</script>

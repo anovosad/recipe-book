@@ -1,5 +1,4 @@
-
-// templates/ingredients.templ
+// templates/ingredients.templ - Updated to use core.js functions
 package templates
 
 import (
@@ -22,7 +21,7 @@ templ Ingredients(data *models.PageData) {
 				for _, ingredient := range data.Ingredients {
 					<div class="ingredient-card compact">
 						<div class="ingredient-content">
-							<a href={ templ.URL("/recipes?search=" + ingredient.Name) } class="tag-name" title={ "Find recipes using " + ingredient.Name }>
+							<a href={ templ.URL("/recipes?search=" + ingredient.Name) } class="ingredient-name" title={ "Find recipes using " + ingredient.Name }>
 								{ ingredient.Name }
 							</a>
 							if data.IsLoggedIn {
@@ -53,7 +52,6 @@ templ Ingredients(data *models.PageData) {
 			</div>
 		}
 		@IngredientFormModal()
-		@IngredientsScript()
 	}
 }
 
@@ -84,73 +82,4 @@ templ IngredientFormModal() {
 			</div>
 		</div>
 	</div>
-}
-
-// Simplified script using RecipeBook functionality
-templ IngredientsScript() {
-	<script>
-		RecipeBook.on('app:initialized', function() {
-			const modal = document.getElementById('ingredient-form-modal');
-			const form = document.getElementById('ingredientFormModal');
-			const addBtn = document.getElementById('add-ingredient-btn');
-			const addFirstBtn = document.getElementById('add-first-ingredient-btn');
-			
-			// Open modal handlers
-			[addBtn, addFirstBtn].forEach(btn => {
-				if (btn) {
-					btn.addEventListener('click', () => {
-						modal.classList.remove('hidden');
-						modal.style.display = 'flex';
-						document.getElementById('ingredient-name').focus();
-					});
-				}
-			});
-			
-			// Close modal handlers (using RecipeBook modal system)
-			modal.querySelectorAll('.modal-close').forEach(btn => {
-				btn.addEventListener('click', () => {
-					RecipeBook.closeModal(modal);
-					modal.classList.add('hidden');
-					document.getElementById('ingredient-name').value = '';
-				});
-			});
-			
-			// Form submission
-			form.addEventListener('submit', async function(e) {
-				e.preventDefault();
-				
-				// Use centralized validation
-				if (!validateIngredientForm(this)) return;
-				
-				const submitBtn = this.querySelector('button[type="submit"]');
-				const removeLoading = RecipeBook.addLoadingState(submitBtn, 'Saving...');
-				
-				try {
-					const ingredientData = {
-						name: this.querySelector('#ingredient-name').value.trim()
-					};
-					
-					const response = await RecipeBook.apiRequest('/api/ingredients', {
-						method: 'POST',
-						headers: { 'Content-Type': 'application/json' },
-						body: JSON.stringify(ingredientData)
-					});
-					
-					if (response.success) {
-						RecipeBook.showNotification(response.message, 'success');
-						RecipeBook.closeModal(modal);
-						modal.classList.add('hidden');
-						setTimeout(() => window.location.reload(), 1000);
-					} else {
-						RecipeBook.showNotification(response.error || 'Failed to save ingredient', 'error');
-					}
-				} catch (error) {
-					console.error('Ingredient save error:', error);
-					RecipeBook.showNotification('Failed to save ingredient. Please try again.', 'error');
-				} finally {
-					removeLoading();
-				}
-			});
-		});
-	</script>
 }

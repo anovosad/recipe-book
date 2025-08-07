@@ -14,6 +14,10 @@ templ Base(title string, data *models.PageData) {
 			<link href="/static/style.css" rel="stylesheet"/>
 		</head>
 		<body>
+			<!-- Load scripts in correct order -->
+			<script src="/static/js/core.js"></script>
+			<script src="/static/app.js"></script>
+			
 			<div class="nav-overlay" id="navOverlay"></div>
 			@Navigation(data)
 			<div class="container">
@@ -30,10 +34,7 @@ templ Base(title string, data *models.PageData) {
 					</div>
 				}
 				{ children... }
-			</div>
-			<!-- Load scripts in correct order -->
-			<script src="/static/js/core.js"></script>
-			<script src="/static/app.js"></script>
+			</div>			
 		</body>
 	</html>
 }

@@ -1,4 +1,4 @@
-// templates/tags.templ
+// templates/tags.templ - Updated to use core.js functions
 package templates
 
 import (
@@ -50,7 +50,6 @@ templ Tags(data *models.PageData) {
 			</div>
 		}
 		@TagFormModal()
-		@TagsScript()
 	}
 }
 
@@ -59,7 +58,7 @@ templ TagFormModal() {
 		<div class="modal-content">
 			<div class="modal-header">
 				<h3><i class="fas fa-tag"></i> New Tag</h3>
-				<button type="button" class="modal-close" onclick="closeTagFormModal()">
+				<button type="button" class="modal-close">
 					<i class="fas fa-times"></i>
 				</button>
 			</div>
@@ -69,12 +68,8 @@ templ TagFormModal() {
 						<label for="tag-name">Tag Name *</label>
 						<input type="text" id="tag-name" name="name" class="form-control" required/>
 					</div>
-					<div class="form-group">
-						<label for="tag-color">Tag Color</label>
-						<input type="color" id="tag-color" name="color" class="form-control" value="#ff6b6b"/>
-					</div>
 					<div class="modal-actions">
-						<button type="button" class="btn btn-secondary" onclick="closeTagFormModal()">
+						<button type="button" class="btn btn-secondary modal-close">
 							<i class="fas fa-times"></i> Cancel
 						</button>
 						<button type="submit" class="btn btn-primary">
@@ -85,132 +80,4 @@ templ TagFormModal() {
 			</div>
 		</div>
 	</div>
-}
-
-templ TagsScript() {
-	<script>
-		document.addEventListener('DOMContentLoaded', function() {
-			const addBtn = document.getElementById('add-tag-btn');
-			const addFirstBtn = document.getElementById('add-first-tag-btn');
-			
-			if (addBtn) {
-				addBtn.addEventListener('click', openTagFormModal);
-			}
-			if (addFirstBtn) {
-				addFirstBtn.addEventListener('click', openTagFormModal);
-			}
-			
-			document.getElementById('tagFormModal').addEventListener('submit', async function(e) {
-				e.preventDefault();
-				
-				const submitBtn = this.querySelector('button[type="submit"]');
-				const originalText = submitBtn.innerHTML;
-				
-				// Show loading state
-				submitBtn.disabled = true;
-				submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-				
-				try {
-					// Collect form data as JSON
-					const tagData = {
-						name: this.querySelector('#tag-name').value.trim(),
-						color: this.querySelector('#tag-color').value || '#ff6b6b'
-					};
-					
-					const response = await fetch('/api/tags', {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json'
-						},
-						body: JSON.stringify(tagData)
-					});
-					
-					const data = await response.json();
-					
-					if (data.success) {
-						RecipeBook.showNotification(data.message, 'success');
-						closeTagFormModal();
-						// Reload page to show new tag
-						setTimeout(() => {
-							window.location.reload();
-						}, 1000);
-					} else {
-						RecipeBook.showNotification(data.error || 'Failed to save tag', 'error');
-					}
-				} catch (error) {
-					console.error('Tag save error:', error);
-					RecipeBook.showNotification('Failed to save tag. Please try again.', 'error');
-				} finally {
-					// Reset button state
-					submitBtn.disabled = false;
-					submitBtn.innerHTML = originalText;
-				}
-			});
-		});
-		
-		function openTagFormModal() {
-			const modal = document.getElementById('tag-form-modal');
-			modal.classList.remove('hidden');
-			modal.style.display = 'flex';
-			document.getElementById('tag-name').focus();
-		}
-		
-		function closeTagFormModal() {
-			const modal = document.getElementById('tag-form-modal');
-			modal.classList.add('hidden');
-			modal.style.display = 'none';
-			document.getElementById('tag-name').value = '';
-			document.getElementById('tag-color').value = '#ff6b6b';
-		}
-		
-		function deleteTag(id, name) {
-			if (confirm(`Are you sure you want to delete "${name}"? This will remove it from all recipes.`)) {
-				const button = document.querySelector(`[onclick*="deleteTag(${id}"]`);
-				const originalText = button ? button.innerHTML : '';
-				
-				if (button) {
-					button.disabled = true;
-					button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-				}
-				
-				fetch(`/api/tags/${id}`, {
-					method: 'DELETE'
-				})
-				.then(response => response.json())
-				.then(data => {
-					if (data.success) {
-						RecipeBook.showNotification(data.message, 'success');
-						setTimeout(() => location.reload(), 1000);
-					} else {
-						RecipeBook.showNotification(data.error || 'Failed to delete tag', 'error');
-						if (button) {
-							button.disabled = false;
-							button.innerHTML = originalText;
-						}
-					}
-				})
-				.catch(error => {
-					console.error('Delete tag error:', error);
-					RecipeBook.showNotification('Failed to delete tag. Please try again.', 'error');
-					if (button) {
-						button.disabled = false;
-						button.innerHTML = originalText;
-					}
-				});
-			}
-		}
-		
-		// Close modal events
-		document.getElementById('tag-form-modal').addEventListener('click', function(e) {
-			if (e.target === this) {
-				closeTagFormModal();
-			}
-		});
-		
-		document.addEventListener('keydown', function(e) {
-			if (e.key === 'Escape' && !document.getElementById('tag-form-modal').classList.contains('hidden')) {
-				closeTagFormModal();
-			}
-		});
-	</script>
 }

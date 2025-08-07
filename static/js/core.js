@@ -1,4 +1,4 @@
-// static/js/core.js - Updated Core RecipeBook Application
+// static/js/core.js - Complete Updated Core RecipeBook Application
 
 /**
  * Updated Recipe Book Application Controller
@@ -81,6 +81,8 @@ const RecipeBook = {
         this.initializeAlerts();
         this.initializeSearch();
         this.initializeMobileMenu();
+        this.initializeTagManagement();
+        this.initializeIngredientManagement();
         this.setupClickOutside();
         this.setupFormValidation();
         this.emit('dom:ready');
@@ -605,6 +607,385 @@ const RecipeBook = {
     },
 
     // ============================================
+    // TAG MANAGEMENT
+    // ============================================
+
+    /**
+     * Initialize tag management functionality
+     */
+    initializeTagManagement() {
+        // Tag form modal handling
+        this.setupTagFormModal();
+        
+        // Tag deletion handlers
+        this.setupTagDeletionHandlers();
+    },
+
+    /**
+     * Setup tag form modal
+     */
+    setupTagFormModal() {
+        const modal = document.getElementById('tag-form-modal');
+        const form = document.getElementById('tagFormModal');
+        const addBtn = document.getElementById('add-tag-btn');
+        const addFirstBtn = document.getElementById('add-first-tag-btn');
+        
+        if (!modal || !form) return;
+        
+        // Open modal handlers
+        [addBtn, addFirstBtn].forEach(btn => {
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    this.openTagFormModal();
+                });
+            }
+        });
+        
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            await this.handleTagFormSubmission(e);
+        });
+        
+        // Close handlers
+        this.setupModalCloseHandlers(modal, 'tag-form-modal');
+    },
+
+    /**
+     * Open tag form modal
+     */
+    openTagFormModal() {
+        const modal = document.getElementById('tag-form-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            
+            const nameInput = document.getElementById('tag-name');
+            if (nameInput) {
+                setTimeout(() => nameInput.focus(), 100);
+            }
+            
+            this.emit('tag-modal:open');
+        }
+    },
+
+    /**
+     * Close tag form modal
+     */
+    closeTagFormModal() {
+        const modal = document.getElementById('tag-form-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+            
+            // Reset form
+            const form = document.getElementById('tagFormModal');
+            if (form) {
+                form.reset();
+                const colorInput = document.getElementById('tag-color');
+                if (colorInput) {
+                    colorInput.value = '#ff6b6b';
+                }
+            }
+            
+            this.emit('tag-modal:close');
+        }
+    },
+
+    /**
+     * Handle tag form submission
+     */
+    async handleTagFormSubmission(e) {
+        e.preventDefault();
+        
+        const form = e.target;
+        const nameInput = form.querySelector('#tag-name');
+        const colorInput = form.querySelector('#tag-color');
+        
+        if (!nameInput) return;
+        
+        const name = nameInput.value.trim();
+        const color = colorInput ? colorInput.value || '#ff6b6b' : '#ff6b6b';
+        
+        // Use centralized validation
+        if (!window.validateTagForm || !validateTagForm(form)) {
+            this.showNotification('Tag name is required.', 'error');
+            return;
+        }
+        
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const removeLoading = this.addLoadingState(submitBtn, 'Saving...');
+        
+        try {
+            const response = await this.apiRequest('/api/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, color: color })
+            });
+            
+            if (response.success) {
+                this.showNotification(response.message, 'success');
+                this.closeTagFormModal();
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                this.showNotification(response.error || 'Failed to save tag', 'error');
+            }
+        } catch (error) {
+            console.error('Tag save error:', error);
+            this.showNotification('Failed to save tag. Please try again.', 'error');
+        } finally {
+            removeLoading();
+        }
+    },
+
+    /**
+     * Setup tag deletion handlers
+     */
+    setupTagDeletionHandlers() {
+        // This will be called by the global deleteTag function
+        this.on('tag:delete', async (data) => {
+            await this.handleTagDeletion(data.id, data.name, data.button);
+        });
+    },
+
+    /**
+     * Handle tag deletion
+     */
+    async handleTagDeletion(id, name, button) {
+        if (!confirm(`Are you sure you want to delete "${name}"? This will remove it from all recipes.`)) {
+            return false;
+        }
+
+        const removeLoading = button ? this.addLoadingState(button, '') : null;
+        
+        try {
+            const response = await this.apiRequest(`/api/tags/${id}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.success) {
+                this.showNotification(response.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+                return true;
+            } else {
+                this.showNotification(response.error || 'Failed to delete tag', 'error');
+                return false;
+            }
+        } catch (error) {
+            console.error('Delete tag error:', error);
+            this.showNotification('Failed to delete tag. Please try again.', 'error');
+            return false;
+        } finally {
+            if (removeLoading) removeLoading();
+        }
+    },
+
+    /**
+     * Setup modal close handlers for any modal
+     */
+    setupModalCloseHandlers(modal, modalId) {
+        if (!modal) return;
+        
+        // Close on overlay click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                if (modalId === 'tag-form-modal') {
+                    this.closeTagFormModal();
+                } else if (modalId === 'ingredient-form-modal') {
+                    this.closeIngredientFormModal();
+                } else {
+                    this.closeModal(modal);
+                }
+            }
+        });
+        
+        // Close button handlers
+        modal.querySelectorAll('.modal-close').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (modalId === 'tag-form-modal') {
+                    this.closeTagFormModal();
+                } else if (modalId === 'ingredient-form-modal') {
+                    this.closeIngredientFormModal();
+                } else {
+                    this.closeModal(modal);
+                }
+            });
+        });
+    },
+
+    // ============================================
+    // INGREDIENT MANAGEMENT
+    // ============================================
+
+    /**
+     * Initialize ingredient management functionality
+     */
+    initializeIngredientManagement() {
+        // Ingredient form modal handling
+        this.setupIngredientFormModal();
+        
+        // Ingredient deletion handlers
+        this.setupIngredientDeletionHandlers();
+    },
+
+    /**
+     * Setup ingredient form modal
+     */
+    setupIngredientFormModal() {
+        const modal = document.getElementById('ingredient-form-modal');
+        const form = document.getElementById('ingredientFormModal');
+        const addBtn = document.getElementById('add-ingredient-btn');
+        const addFirstBtn = document.getElementById('add-first-ingredient-btn');
+        
+        if (!modal || !form) return;
+        
+        // Open modal handlers
+        [addBtn, addFirstBtn].forEach(btn => {
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    this.openIngredientFormModal();
+                });
+            }
+        });
+        
+        // Form submission
+        form.addEventListener('submit', async (e) => {
+            await this.handleIngredientFormSubmission(e);
+        });
+        
+        // Close handlers
+        this.setupModalCloseHandlers(modal, 'ingredient-form-modal');
+    },
+
+    /**
+     * Open ingredient form modal
+     */
+    openIngredientFormModal() {
+        const modal = document.getElementById('ingredient-form-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            
+            const nameInput = document.getElementById('ingredient-name');
+            if (nameInput) {
+                setTimeout(() => nameInput.focus(), 100);
+            }
+            
+            this.emit('ingredient-modal:open');
+        }
+    },
+
+    /**
+     * Close ingredient form modal
+     */
+    closeIngredientFormModal() {
+        const modal = document.getElementById('ingredient-form-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+            
+            // Reset form
+            const form = document.getElementById('ingredientFormModal');
+            if (form) {
+                form.reset();
+            }
+            
+            this.emit('ingredient-modal:close');
+        }
+    },
+
+    /**
+     * Handle ingredient form submission
+     */
+    async handleIngredientFormSubmission(e) {
+        e.preventDefault();
+        
+        const form = e.target;
+        const nameInput = form.querySelector('#ingredient-name');
+        
+        if (!nameInput) return;
+        
+        const name = nameInput.value.trim();
+        
+        // Use centralized validation
+        if (!window.validateIngredientForm || !validateIngredientForm(form)) {
+            this.showNotification('Ingredient name is required.', 'error');
+            return;
+        }
+        
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const removeLoading = this.addLoadingState(submitBtn, 'Saving...');
+        
+        try {
+            const response = await this.apiRequest('/api/ingredients', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name })
+            });
+            
+            if (response.success) {
+                this.showNotification(response.message, 'success');
+                this.closeIngredientFormModal();
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                this.showNotification(response.error || 'Failed to save ingredient', 'error');
+            }
+        } catch (error) {
+            console.error('Ingredient save error:', error);
+            this.showNotification('Failed to save ingredient. Please try again.', 'error');
+        } finally {
+            removeLoading();
+        }
+    },
+
+    /**
+     * Setup ingredient deletion handlers
+     */
+    setupIngredientDeletionHandlers() {
+        // This will be called by the global deleteIngredient function
+        this.on('ingredient:delete', async (data) => {
+            await this.handleIngredientDeletion(data.id, data.name, data.button);
+        });
+    },
+
+    /**
+     * Handle ingredient deletion
+     */
+    async handleIngredientDeletion(id, name, button) {
+        if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+            return false;
+        }
+
+        const removeLoading = button ? this.addLoadingState(button, 'Checking...') : null;
+        
+        try {
+            const response = await this.apiRequest(`/api/ingredients/${id}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.success) {
+                this.showNotification(response.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+                return true;
+            } else if (response.usedInRecipes) {
+                // Show usage error modal (this function exists in app.js)
+                if (window.showIngredientUsageError) {
+                    showIngredientUsageError(response);
+                }
+                return false;
+            } else {
+                this.showNotification(response.error || 'Failed to delete ingredient', 'error');
+                return false;
+            }
+        } catch (error) {
+            console.error('Delete ingredient error:', error);
+            this.showNotification('Failed to delete ingredient. Please try again.', 'error');
+            return false;
+        } finally {
+            if (removeLoading) removeLoading();
+        }
+    },
+
+    // ============================================
     // UTILITY FUNCTIONS
     // ============================================
 
@@ -965,7 +1346,7 @@ class APIError extends Error {
 }
 
 // ============================================
-// LOGOUT FUNCTION (CENTRALIZED)
+// GLOBAL FUNCTIONS FOR TEMPLATE USAGE
 // ============================================
 
 /**
@@ -991,6 +1372,32 @@ async function logout() {
     }
 }
 
+/**
+ * Global tag deletion function (called from templates)
+ */
+async function deleteTag(id, name) {
+    const button = document.querySelector(`[onclick*="deleteTag(${id}"], .btn-delete[data-tag-id="${id}"]`);
+    
+    RecipeBook.emit('tag:delete', {
+        id: id,
+        name: name,
+        button: button
+    });
+}
+
+/**
+ * Global ingredient deletion function (called from templates)
+ */
+async function deleteIngredient(id, name) {
+    const button = document.querySelector(`[onclick*="deleteIngredient(${id}"], .btn-delete[data-ingredient-id="${id}"]`);
+    
+    RecipeBook.emit('ingredient:delete', {
+        id: id,
+        name: name,
+        button: button
+    });
+}
+
 // ============================================
 // AUTO-INITIALIZATION
 // ============================================
@@ -1008,4 +1415,6 @@ if (typeof module !== 'undefined' && module.exports) {
 } else if (typeof window !== 'undefined') {
     window.RecipeBook = RecipeBook;
     window.logout = logout; // Export logout globally
+    window.deleteTag = deleteTag; // Export tag deletion globally
+    window.deleteIngredient = deleteIngredient; // Export ingredient deletion globally
 }
