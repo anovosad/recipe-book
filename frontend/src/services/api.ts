@@ -1,4 +1,4 @@
-// frontend/src/services/api.ts
+// frontend/src/services/api.ts - Updated with better error handling and image support
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {

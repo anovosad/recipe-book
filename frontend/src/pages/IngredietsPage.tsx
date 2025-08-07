@@ -1,7 +1,7 @@
-// IngredientsPage.tsx
+// frontend/src/pages/IngredientsPage.tsx - Fixed filename and improved component
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Plus, Trash2, Search } from 'lucide-react';
+import { Leaf, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { Ingredient } from '@/types';
@@ -36,11 +36,13 @@ export const IngredientsPage: React.FC = () => {
   const loadIngredients = async () => {
     try {
       const data = await apiService.getIngredients();
-      setIngredients(data);
-      setFilteredIngredients(data);
+      setIngredients(Array.isArray(data) ? data : []);
+      setFilteredIngredients(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load ingredients:', error);
       toast.error('Failed to load ingredients');
+      setIngredients([]);
+      setFilteredIngredients([]);
     } finally {
       setIsLoading(false);
     }
@@ -49,6 +51,16 @@ export const IngredientsPage: React.FC = () => {
   const handleAddIngredient = async () => {
     if (!newIngredientName.trim()) {
       toast.error('Ingredient name is required');
+      return;
+    }
+
+    // Check for duplicates
+    const exists = ingredients.some(
+      ing => ing.name.toLowerCase() === newIngredientName.trim().toLowerCase()
+    );
+    
+    if (exists) {
+      toast.error('This ingredient already exists');
       return;
     }
 
@@ -64,7 +76,8 @@ export const IngredientsPage: React.FC = () => {
         toast.error(response.error || 'Failed to add ingredient');
       }
     } catch (error: any) {
-      toast.error('Failed to add ingredient');
+      console.error('Add ingredient error:', error);
+      toast.error(error.error || 'Failed to add ingredient');
     } finally {
       setIsSubmitting(false);
     }
@@ -81,12 +94,24 @@ export const IngredientsPage: React.FC = () => {
         await loadIngredients();
         toast.success(response.message || 'Ingredient deleted successfully');
       } else if (response.usedInRecipes) {
-        toast.error(`Cannot delete "${name}" because it is used in recipes.`);
+        // Show detailed error about recipe usage
+        const message = `Cannot delete "${name}" because it is used in recipes.`;
+        toast.error(message);
+        
+        // You could show a modal here with more details about which recipes use it
+        console.log('Ingredient used in recipes:', response);
       } else {
         toast.error(response.error || 'Failed to delete ingredient');
       }
     } catch (error: any) {
-      toast.error('Failed to delete ingredient');
+      console.error('Delete ingredient error:', error);
+      toast.error(error.error || 'Failed to delete ingredient');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isSubmitting) {
+      handleAddIngredient();
     }
   };
 
@@ -139,26 +164,12 @@ export const IngredientsPage: React.FC = () => {
       {filteredIngredients.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredIngredients.map(ingredient => (
-            <Card key={ingredient.id} className="group hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between">
-                <Link
-                  to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-                  className="flex-1 text-gray-900 hover:text-green-600 font-medium transition-colors"
-                  title={`Find recipes using ${ingredient.name}`}
-                >
-                  {ingredient.name}
-                </Link>
-                {isAuthenticated && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteIngredient(ingredient.id, ingredient.name)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700"
-                    icon={<Trash2 className="w-4 h-4" />}
-                  />
-                )}
-              </div>
-            </Card>
+            <IngredientCard
+              key={ingredient.id}
+              ingredient={ingredient}
+              isAuthenticated={isAuthenticated}
+              onDelete={handleDeleteIngredient}
+            />
           ))}
         </div>
       ) : (
@@ -197,22 +208,17 @@ export const IngredientsPage: React.FC = () => {
             value={newIngredientName}
             onChange={(e) => setNewIngredientName(e.target.value)}
             placeholder="e.g., Olive Oil, Chicken Breast, Basil"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isSubmitting) {
-                handleAddIngredient();
-              }
-            }}
+            onKeyDown={handleKeyPress}
+            autoFocus
           />
           <div className="flex justify-end gap-2">
             <Button
-              type="button"
               variant="secondary"
               onClick={() => setShowModal(false)}
             >
               Cancel
             </Button>
             <Button
-              type="button"
               onClick={handleAddIngredient}
               loading={isSubmitting}
               disabled={!newIngredientName.trim()}
@@ -226,5 +232,42 @@ export const IngredientsPage: React.FC = () => {
   );
 };
 
+// Ingredient Card Component
+interface IngredientCardProps {
+  ingredient: Ingredient;
+  isAuthenticated: boolean;
+  onDelete: (id: number, name: string) => void;
+}
 
+const IngredientCard: React.FC<IngredientCardProps> = ({ 
+  ingredient, 
+  isAuthenticated, 
+  onDelete 
+}) => {
+  return (
+    <Card className="group hover:shadow-lg transition-all duration-200">
+      <div className="flex items-center justify-between">
+        <Link
+          to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
+          className="flex-1 text-gray-900 hover:text-green-600 font-medium transition-colors flex items-center gap-2"
+          title={`Find recipes using ${ingredient.name}`}
+        >
+          <span className="truncate">{ingredient.name}</span>
+          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </Link>
+        
+        {isAuthenticated && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => onDelete(ingredient.id, ingredient.name)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
+            icon={<Trash2 className="w-4 h-4" />}
+          />
+        )}
+      </div>
+    </Card>
+  );
+};
 
+export default IngredientsPage;
