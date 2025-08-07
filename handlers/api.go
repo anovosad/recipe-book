@@ -925,3 +925,72 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		"count":   len(recipes),
 	})
 }
+
+// Add these handlers to handlers/api.go
+
+// CheckAuthHandler verifies if user is authenticated
+func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+	})
+}
+
+// GetRecipesHandler returns all recipes
+func GetRecipesHandler(w http.ResponseWriter, r *http.Request) {
+	recipes, err := database.GetAllRecipes()
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch recipes")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, recipes)
+}
+
+// GetRecipeHandler returns a single recipe by ID
+func GetRecipeHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract ID from URL path
+	path := strings.TrimPrefix(r.URL.Path, "/api/recipes/")
+	id, err := strconv.Atoi(path)
+	if err != nil || !utils.IsValidID(id) {
+		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
+		return
+	}
+
+	recipe, err := database.GetRecipeByIDSecure(id)
+	if err != nil {
+		sendJSONError(w, http.StatusNotFound, "Recipe not found")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, recipe)
+}
+
+// GetIngredientsHandler returns all ingredients
+func GetIngredientsHandler(w http.ResponseWriter, r *http.Request) {
+	ingredients, err := database.GetAllIngredients()
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch ingredients")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, ingredients)
+}
+
+// GetTagsHandler returns all tags
+func GetTagsHandler(w http.ResponseWriter, r *http.Request) {
+	tags, err := database.GetAllTags()
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch tags")
+		return
+	}
+
+	sendJSONResponse(w, http.StatusOK, tags)
+}

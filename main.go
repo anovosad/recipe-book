@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"recipe-book/database"
 	"recipe-book/handlers"
 	"recipe-book/middleware"
@@ -39,27 +40,6 @@ func main() {
 	// Health check endpoint
 	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
 
-	// Page routes with specific security middleware
-	r.HandleFunc("/", handlers.HomeHandler).Methods("GET")
-
-	// Login page - no extra rate limiting on GET
-	r.HandleFunc("/login", handlers.LoginPageHandler).Methods("GET")
-
-	// Registration page - no extra rate limiting on GET
-	r.HandleFunc("/register", handlers.RegisterPageHandler).Methods("GET")
-
-	// Protected form routes
-	r.HandleFunc("/recipe/new", handlers.NewRecipePageHandler).Methods("GET")
-	r.HandleFunc("/recipe/{id}/edit", handlers.EditRecipePageHandler).Methods("GET", "POST")
-
-	// Public recipe viewing routes
-	r.HandleFunc("/recipes", handlers.RecipesPageHandler).Methods("GET")
-	r.HandleFunc("/recipe/{id}", handlers.RecipePageHandler).Methods("GET")
-	r.HandleFunc("/ingredients", handlers.IngredientsPageHandler).Methods("GET")
-
-	// Tag routes
-	r.HandleFunc("/tags", handlers.TagsPageHandler).Methods("GET")
-
 	// API routes with specific rate limiting
 
 	// Authentication API routes (with stricter rate limiting)
@@ -78,26 +58,64 @@ func main() {
 
 	// Other API routes (protected by general rate limiting)
 	r.HandleFunc("/api/logout", handlers.LogoutHandler).Methods("POST")
+	r.HandleFunc("/api/auth/check", handlers.CheckAuthHandler).Methods("GET") // Add this
+
+	// Recipe API routes
+	r.HandleFunc("/api/recipes", handlers.GetRecipesHandler).Methods("GET")     // Add this
+	r.HandleFunc("/api/recipes/{id}", handlers.GetRecipeHandler).Methods("GET") // Add this
 	r.HandleFunc("/api/recipes", handlers.CreateRecipeHandler).Methods("POST")
 	r.HandleFunc("/api/recipes/{id}", handlers.UpdateRecipeHandler).Methods("PUT")
 	r.HandleFunc("/api/recipes/{id}", handlers.DeleteRecipeHandler).Methods("DELETE")
+
+	// Ingredient API routes
+	r.HandleFunc("/api/ingredients", handlers.GetIngredientsHandler).Methods("GET") // Add this
 	r.HandleFunc("/api/ingredients", handlers.CreateIngredientHandler).Methods("POST")
 	r.HandleFunc("/api/ingredients/{id}", handlers.DeleteIngredientHandler).Methods("DELETE")
 
 	// Tag API routes
+	r.HandleFunc("/api/tags", handlers.GetTagsHandler).Methods("GET") // Add this
 	r.HandleFunc("/api/tags", handlers.CreateTagHandler).Methods("POST")
 	r.HandleFunc("/api/tags/{id}", handlers.DeleteTagHandler).Methods("DELETE")
 
 	// Image routes
 	r.HandleFunc("/api/images/{id}", handlers.DeleteImageHandler).Methods("DELETE")
 
-	// Serve static files (with some protection)
-	staticHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("./static/")))
-	r.PathPrefix("/static/").Handler(staticHandler)
-
 	// Serve uploaded images (with some protection)
 	uploadsHandler := http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads/")))
 	r.PathPrefix("/uploads/").Handler(uploadsHandler)
+
+	// Serve static files from the built React app
+	staticDir := "./static/dist/"
+
+	// Check if static files exist
+	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
+		log.Printf("⚠️  Static files not found at %s", staticDir)
+		log.Printf("🛠️  Please build the frontend first:")
+		log.Printf("   cd frontend && npm install && npm run build")
+	}
+
+	// Serve static files (JS, CSS, images, etc.)
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
+	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir(staticDir+"assets/"))))
+
+	// SPA fallback: serve index.html for all non-API routes
+	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Don't serve index.html for API routes
+		if r.URL.Path == "/health" ||
+			r.URL.Path == "/uploads" ||
+			filepath.Ext(r.URL.Path) != "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		indexPath := filepath.Join(staticDir, "index.html")
+		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+			http.Error(w, "Frontend not built. Please run 'cd frontend && npm run build'", http.StatusServiceUnavailable)
+			return
+		}
+
+		http.ServeFile(w, r, indexPath)
+	})
 
 	fmt.Println("🍳 Recipe Book Server starting on :8080")
 	fmt.Println("🔒 Security middleware enabled:")
@@ -106,6 +124,7 @@ func main() {
 	fmt.Println("   - Security headers")
 	fmt.Println("   - Request logging")
 	fmt.Println("📖 Open http://localhost:8080 in your browser")
+	fmt.Printf("📁 Serving static files from: %s\n", staticDir)
 
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

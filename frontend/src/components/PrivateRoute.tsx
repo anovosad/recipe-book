@@ -21,3 +21,6 @@ export const PrivateRoute: React.FC<PrivateRouteProps> = ({ children }) => {
 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 };
+
+
+export default PrivateRoute;

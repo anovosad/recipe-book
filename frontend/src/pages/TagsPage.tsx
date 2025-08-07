@@ -244,3 +244,5 @@ export const TagsPage: React.FC = () => {
     </div>
   );
 };
+
+export default TagsPage;
