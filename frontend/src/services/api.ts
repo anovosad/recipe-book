@@ -1,3 +1,4 @@
+// frontend/src/services/api.ts
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
@@ -15,32 +16,52 @@ import {
 } from '@/types';
 
 // Configure axios defaults
-axios.defaults.timeout = 10000;
+axios.defaults.timeout = 15000;
 axios.defaults.withCredentials = true;
 
+// Create axios instance
+const api = axios.create({
+  baseURL: '',
+  timeout: 15000,
+  withCredentials: true,
+});
+
 // Request interceptor
-axios.interceptors.request.use(
+api.interceptors.request.use(
   (config) => {
-    config.headers['Content-Type'] = config.headers['Content-Type'] || 'application/json';
+    // Don't set Content-Type for FormData (let browser set it with boundary)
+    if (!(config.data instanceof FormData)) {
+      config.headers['Content-Type'] = 'application/json';
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
 // Response interceptor
-axios.interceptors.response.use(
+api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
+    console.error('API Error:', error);
+    
     if (error.code === 'ECONNABORTED') {
       toast.error('Request timeout. Please try again.');
     } else if (error.response?.status === 401) {
       // Handle unauthorized - redirect to login if needed
       if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-        window.location.href = '/login';
+        toast.error('Session expired. Please log in again.');
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1000);
       }
-    } else if (error.response?.status === 500) {
+    } else if (error.response?.status === 429) {
+      toast.error('Too many requests. Please slow down.');
+    } else if (error.response?.status >= 500) {
       toast.error('Server error. Please try again later.');
+    } else if (!error.response) {
+      toast.error('Network error. Please check your connection.');
     }
+    
     return Promise.reject(error);
   }
 );
@@ -61,13 +82,18 @@ class ApiService {
       };
 
       if (options.isFormData) {
-        config.headers = { 'Content-Type': 'multipart/form-data' };
+        // Let browser set Content-Type with boundary for FormData
+        config.headers = {};
       }
 
-      const response = await axios(config);
+      const response = await api(config);
       return response.data;
     } catch (error: any) {
-      throw error.response?.data || { error: 'Network error occurred' };
+      // Re-throw with better error info
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { error: error.message || 'Network error occurred' };
     }
   }
 
@@ -122,16 +148,17 @@ class ApiService {
   private prepareRecipeFormData(recipeData: RecipeForm): FormData {
     const formData = new FormData();
     
+    // Basic recipe data
     formData.append('title', recipeData.title);
-    formData.append('description', recipeData.description);
+    formData.append('description', recipeData.description || '');
     formData.append('instructions', recipeData.instructions);
     formData.append('prep_time', recipeData.prep_time.toString());
     formData.append('cook_time', recipeData.cook_time.toString());
     formData.append('servings', recipeData.servings.toString());
     formData.append('serving_unit', recipeData.serving_unit);
 
-    // Add ingredients
-    recipeData.ingredients.forEach((ingredient, index) => {
+    // Add ingredients as JSON strings
+    recipeData.ingredients.forEach((ingredient) => {
       formData.append('ingredients', JSON.stringify(ingredient));
     });
 
@@ -186,6 +213,11 @@ class ApiService {
     const formData = new FormData();
     formData.append('image', file);
     return this.request('POST', '/api/upload/image', formData, { isFormData: true });
+  }
+
+  // Health check
+  async healthCheck(): Promise<{ status: string }> {
+    return this.request('GET', '/health');
   }
 }
 

@@ -1,5 +1,4 @@
-
-// ErrorBoundary Component
+// frontend/src/components/ErrorBoundary.tsx
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
@@ -44,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-50 via-red-50 to-pink-50">
           <Card className="max-w-md w-full text-center">
             <div className="text-red-600 mb-4">
               <AlertTriangle className="w-16 h-16 mx-auto" />
@@ -97,4 +96,4 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-export default PrivateRoute;
+export default ErrorBoundary;
