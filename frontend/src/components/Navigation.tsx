@@ -1,227 +1,202 @@
-// IngredientsPage.tsx
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Leaf, Plus, Trash2, Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { 
+  Utensils, 
+  List, 
+  Leaf, 
+  Tags, 
+  User, 
+  LogIn, 
+  UserPlus, 
+  LogOut,
+  Menu,
+  X
+} from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import apiService from '@/services/api';
-import { Ingredient } from '@/types';
-import { Card, Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
-import toast from 'react-hot-toast';
+import { cn } from '@/utils';
 
-export const IngredientsPage: React.FC = () => {
-  const { isAuthenticated } = useAuthStore();
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [filteredIngredients, setFilteredIngredients] = useState<Ingredient[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [newIngredientName, setNewIngredientName] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const Navigation: React.FC = () => {
+  const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuthStore();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    loadIngredients();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = ingredients.filter(ingredient =>
-        ingredient.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredIngredients(filtered);
-    } else {
-      setFilteredIngredients(ingredients);
-    }
-  }, [ingredients, searchQuery]);
-
-  const loadIngredients = async () => {
-    try {
-      const data = await apiService.getIngredients();
-      setIngredients(data);
-      setFilteredIngredients(data);
-    } catch (error) {
-      console.error('Failed to load ingredients:', error);
-      toast.error('Failed to load ingredients');
-    } finally {
-      setIsLoading(false);
-    }
+  const handleLogout = async () => {
+    await logout();
+    setIsMobileMenuOpen(false);
   };
 
-  const handleAddIngredient = async () => {
-    if (!newIngredientName.trim()) {
-      toast.error('Ingredient name is required');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await apiService.createIngredient({ name: newIngredientName.trim() });
-      if (response.success) {
-        await loadIngredients();
-        setNewIngredientName('');
-        setShowModal(false);
-        toast.success(response.message || 'Ingredient added successfully');
-      } else {
-        toast.error(response.error || 'Failed to add ingredient');
-      }
-    } catch (error: any) {
-      toast.error('Failed to add ingredient');
-    } finally {
-      setIsSubmitting(false);
-    }
+  const closeMobileMenu = () => {
+    setIsMobileMenuOpen(false);
   };
 
-  const handleDeleteIngredient = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
-      return;
-    }
-
-    try {
-      const response = await apiService.deleteIngredient(id);
-      if (response.success) {
-        await loadIngredients();
-        toast.success(response.message || 'Ingredient deleted successfully');
-      } else if (response.usedInRecipes) {
-        toast.error(`Cannot delete "${name}" because it is used in recipes.`);
-      } else {
-        toast.error(response.error || 'Failed to delete ingredient');
-      }
-    } catch (error: any) {
-      toast.error('Failed to delete ingredient');
-    }
+  const isActivePath = (path: string): boolean => {
+    return location.pathname === path;
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  const navLinks = [
+    { path: '/recipes', label: 'Recipes', icon: List },
+    { path: '/ingredients', label: 'Ingredients', icon: Leaf },
+    { path: '/tags', label: 'Tags', icon: Tags }
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Leaf className="w-8 h-8 text-green-600" />
-            Ingredients
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} available
-          </p>
-        </div>
-
-        {isAuthenticated && (
-          <Button
-            onClick={() => setShowModal(true)}
-            icon={<Plus className="w-4 h-4" />}
-          >
-            Add Ingredient
-          </Button>
-        )}
-      </div>
-
-      {/* Search */}
-      <Card>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Search ingredients..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </Card>
-
-      {/* Ingredients Grid */}
-      {filteredIngredients.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredIngredients.map(ingredient => (
-            <Card key={ingredient.id} className="group hover:shadow-lg transition-shadow">
-              <div className="flex items-center justify-between">
-                <Link
-                  to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-                  className="flex-1 text-gray-900 hover:text-green-600 font-medium transition-colors"
-                  title={`Find recipes using ${ingredient.name}`}
-                >
-                  {ingredient.name}
-                </Link>
-                {isAuthenticated && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteIngredient(ingredient.id, ingredient.name)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700"
-                    icon={<Trash2 className="w-4 h-4" />}
-                  />
-                )}
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <EmptyState
-          icon={<Leaf className="w-12 h-12" />}
-          title="No ingredients found"
-          description={
-            searchQuery
-              ? `No ingredients match "${searchQuery}". Try a different search term.`
-              : isAuthenticated
-              ? "Add some ingredients to get started!"
-              : "Please log in to manage ingredients."
-          }
-          action={
-            isAuthenticated && !searchQuery ? (
-              <Button
-                onClick={() => setShowModal(true)}
-                icon={<Plus className="w-4 h-4" />}
-              >
-                Add Your First Ingredient
-              </Button>
-            ) : null
-          }
+    <>
+      {/* Mobile menu overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={closeMobileMenu}
         />
       )}
 
-      {/* Add Ingredient Modal */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Add New Ingredient"
-      >
-        <div className="space-y-4">
-          <Input
-            label="Ingredient Name"
-            value={newIngredientName}
-            onChange={(e) => setNewIngredientName(e.target.value)}
-            placeholder="e.g., Olive Oil, Chicken Breast, Basil"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !isSubmitting) {
-                handleAddIngredient();
-              }
-            }}
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setShowModal(false)}
+      <nav className="bg-white/95 backdrop-blur-lg border-b border-white/20 shadow-lg sticky top-0 z-50">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo */}
+            <div className="flex items-center">
+              <Link
+                to="/recipes"
+                className="flex items-center space-x-2 text-xl font-bold text-red-600 hover:text-red-700 transition-colors"
+                onClick={closeMobileMenu}
+              >
+                <Utensils className="w-6 h-6" />
+                <span>Recipe Book</span>
+              </Link>
+            </div>
+
+            {/* Desktop Navigation */}
+            <div className="hidden lg:flex items-center space-x-8">
+              {navLinks.map(({ path, label, icon: Icon }) => (
+                <Link
+                  key={path}
+                  to={path}
+                  className={cn(
+                    "flex items-center space-x-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    isActivePath(path)
+                      ? "bg-red-100 text-red-700"
+                      : "text-gray-600 hover:text-red-600 hover:bg-red-50"
+                  )}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </Link>
+              ))}
+            </div>
+
+            {/* Desktop Auth Menu */}
+            <div className="hidden lg:flex items-center space-x-4">
+              {isAuthenticated ? (
+                <>
+                  <div className="flex items-center space-x-2 text-gray-700">
+                    <User className="w-4 h-4" />
+                    <span className="text-sm font-medium">{user?.username}</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <Link
+                    to="/login"
+                    className="flex items-center space-x-2 px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Login</span>
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="flex items-center space-x-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    <span>Register</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="lg:hidden p-2 text-gray-600 hover:text-red-600 transition-colors"
+              aria-label="Toggle mobile menu"
             >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleAddIngredient}
-              loading={isSubmitting}
-              disabled={!newIngredientName.trim()}
-            >
-              Add Ingredient
-            </Button>
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6" />
+              ) : (
+                <Menu className="w-6 h-6" />
+              )}
+            </button>
           </div>
+
+          {/* Mobile Navigation Menu */}
+          {isMobileMenuOpen && (
+            <div className="lg:hidden py-4 border-t border-gray-200">
+              <div className="flex flex-col space-y-2">
+                {navLinks.map(({ path, label, icon: Icon }) => (
+                  <Link
+                    key={path}
+                    to={path}
+                    className={cn(
+                      "flex items-center space-x-3 px-3 py-3 rounded-lg transition-colors",
+                      isActivePath(path)
+                        ? "bg-red-100 text-red-700"
+                        : "text-gray-600 hover:text-red-600 hover:bg-red-50"
+                    )}
+                    onClick={closeMobileMenu}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{label}</span>
+                  </Link>
+                ))}
+
+                <div className="pt-4 border-t border-gray-200 mt-4">
+                  {isAuthenticated ? (
+                    <>
+                      <div className="flex items-center space-x-3 px-3 py-3 text-gray-700">
+                        <User className="w-5 h-5" />
+                        <span className="font-medium">{user?.username}</span>
+                      </div>
+                      <button
+                        onClick={handleLogout}
+                        className="flex items-center space-x-3 px-3 py-3 w-full text-left text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <LogOut className="w-5 h-5" />
+                        <span className="font-medium">Logout</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        to="/login"
+                        className="flex items-center space-x-3 px-3 py-3 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        onClick={closeMobileMenu}
+                      >
+                        <LogIn className="w-5 h-5" />
+                        <span className="font-medium">Login</span>
+                      </Link>
+                      <Link
+                        to="/register"
+                        className="flex items-center space-x-3 px-3 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors mt-2"
+                        onClick={closeMobileMenu}
+                      >
+                        <UserPlus className="w-5 h-5" />
+                        <span className="font-medium">Register</span>
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </Modal>
-    </div>
+      </nav>
+    </>
   );
 };
+
+export default Navigation;
