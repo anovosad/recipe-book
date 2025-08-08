@@ -226,7 +226,7 @@ const RecipeFormPage: React.FC = () => {
             uploadedImages = imageResponse.data?.images?.length || 0;
           } catch (error) {
             console.warn('Failed to upload images:', error);
-            toast.warning('Recipe updated but some images failed to upload');
+            toast.error('Recipe updated but some images failed to upload');
           }
         }
         
@@ -252,7 +252,7 @@ const RecipeFormPage: React.FC = () => {
             uploadedImages = imageResponse.data?.images?.length || 0;
           } catch (error) {
             console.warn('Failed to upload images:', error);
-            toast.warning('Recipe created but some images failed to upload');
+            toast.error('Recipe created but some images failed to upload');
           }
         }
         

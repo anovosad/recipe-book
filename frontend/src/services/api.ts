@@ -272,7 +272,7 @@ class ApiService {
       } catch (error) {
         console.warn('Failed to upload images:', error);
         // Don't fail the whole operation if images fail
-        toast.warning('Recipe created but some images failed to upload');
+        toast.error('Recipe created but some images failed to upload');
       }
     }
 
@@ -296,7 +296,7 @@ class ApiService {
         uploadedImagesCount = imageResponse.data?.images?.length || 0;
       } catch (error) {
         console.warn('Failed to upload images:', error);
-        toast.warning('Recipe updated but some images failed to upload');
+        toast.error('Recipe updated but some images failed to upload');
       }
     }
 

@@ -268,6 +268,7 @@ const RecipesPage: React.FC = () => {
               </p>
               <List
                 height={CONTAINER_HEIGHT}
+                width="100%"
                 itemCount={filteredRecipes.length}
                 itemSize={ITEM_HEIGHT}
                 className="border rounded-lg"
