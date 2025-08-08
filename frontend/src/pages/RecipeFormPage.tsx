@@ -91,7 +91,7 @@ const RecipeFormPage: React.FC = () => {
         const [ingredientsData, tagsData, recipeData] = await Promise.all([
           apiService.getIngredients(),
           apiService.getTags(),
-          isEditMode ? apiService.getRecipe(Number(id)) : Promise.resolve(null)
+          isEditMode && id ? apiService.getRecipe(Number(id)) : Promise.resolve(null)
         ]);
 
         setIngredients(ingredientsData);

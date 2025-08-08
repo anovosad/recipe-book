@@ -1,24 +1,26 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { useAuthStore } from '@/store/authStore';
-import Navigation from '@/components/Navigation';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ErrorBoundary from '@/components/ErrorBoundary';
 
-// Pages
-import HomePage from '@/pages/HomePage';
-import LoginPage from '@/pages/LoginPage';
-import RegisterPage from '@/pages/RegisterPage';
-import RecipesPage from '@/pages/RecipesPage';
-import RecipeDetailPage from '@/pages/RecipeDetailPage';
-import RecipeFormPage from '@/pages/RecipeFormPage';
-import IngredientsPage from '@/pages/IngredientsPage';
-import TagsPage from '@/pages/TagsPage';
-import NotFoundPage from '@/pages/NotFoundPage';
+// Store imports
+import { useAuthStore } from './store/authStore';
 
-// Route guards
-import PrivateRoute from '@/components/PrivateRoute';
+// Component imports  
+import Navigation from './components/Navigation';
+import LoadingSpinner from './components/LoadingSpinner';
+import ErrorBoundary from './components/ErrorBoundary';
+import PrivateRoute from './components/PrivateRoute';
+
+// Page imports
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import RecipesPage from './pages/RecipesPage';
+import RecipeDetailPage from './pages/RecipeDetailPage';
+import RecipeFormPage from './pages/RecipeFormPage';
+import IngredientsPage from './pages/IngredientsPage';
+import TagsPage from './pages/TagsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 const App: React.FC = () => {
   const { initialize, isLoading, isAuthenticated } = useAuthStore();

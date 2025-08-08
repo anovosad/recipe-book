@@ -1,3 +1,5 @@
+import React from 'react';
+
 // User types
 export interface User {
   id: number;

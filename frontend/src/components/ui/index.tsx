@@ -25,14 +25,23 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   );
 };
 
-// Button Component
+// Button Component - Fixed for polymorphic usage and optional children
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
   icon?: React.ReactNode;
-  children: React.ReactNode;
-  as?: any; // For Link components
+  children?: React.ReactNode; // Made optional
+  as?: React.ElementType;
+  
+  // Props for Link component compatibility
+  to?: string;
+  replace?: boolean;
+  
+  // Props for anchor element compatibility  
+  href?: string;
+  target?: string;
+  rel?: string;
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -44,6 +53,11 @@ export const Button: React.FC<ButtonProps> = ({
   className,
   disabled,
   as: Component = 'button',
+  to,
+  replace,
+  href,
+  target,
+  rel,
   ...props
 }) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -61,6 +75,15 @@ export const Button: React.FC<ButtonProps> = ({
     lg: 'px-6 py-3 text-base gap-2'
   };
 
+  // Prepare props for the component - include Link and anchor props
+  const componentProps: any = { ...props };
+  
+  if (to !== undefined) componentProps.to = to;
+  if (replace !== undefined) componentProps.replace = replace;
+  if (href !== undefined) componentProps.href = href;
+  if (target !== undefined) componentProps.target = target;
+  if (rel !== undefined) componentProps.rel = rel;
+
   return (
     <Component
       className={cn(
@@ -70,7 +93,7 @@ export const Button: React.FC<ButtonProps> = ({
         className
       )}
       disabled={disabled || loading}
-      {...props}
+      {...componentProps}
     >
       {loading ? (
         <LoadingSpinner size="sm" />
@@ -393,17 +416,4 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {action}
     </div>
   );
-};
-
-// Export all components
-export default {
-  LoadingSpinner,
-  Button,
-  Modal,
-  Alert,
-  Input,
-  Textarea,
-  Select,
-  Card,
-  EmptyState
 };

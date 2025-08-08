@@ -1,5 +1,3 @@
-// Create this as frontend/src/components/ui/LoadingSpinner.tsx
-
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
@@ -24,4 +22,3 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 };
 
 export default LoadingSpinner;
-export { LoadingSpinner };
