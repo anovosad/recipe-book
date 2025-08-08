@@ -1,4 +1,3 @@
-// frontend/src/components/RecipeCard.tsx - Enhanced recipe card with images and actions
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -169,7 +168,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
         )}
       </div>
 
-      {/* Tags */}
+      {/* Tags - No colors, more compact */}
       {recipe.tags && recipe.tags.length > 0 && (
         <div className="mb-4">
           <div className="flex flex-wrap gap-1">
@@ -178,7 +177,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
                 key={tag.id}
                 to={`/recipes?tag=${tag.id}`}
                 className={cn(
-                  "inline-flex items-center px-2 py-1 rounded-full bg-red-100 text-red-800 hover:bg-red-200 transition-colors",
+                  "inline-flex items-center px-2 py-1 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors",
                   size === 'compact' ? 'text-xs' : 'text-sm'
                 )}
                 onClick={(e) => e.stopPropagation()}

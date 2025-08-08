@@ -1,4 +1,4 @@
-// frontend/src/pages/IngredientsPage.tsx - Fixed filename and improved component
+// frontend/src/pages/IngredientsPage.tsx - More compact version
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
@@ -94,12 +94,8 @@ export const IngredientsPage: React.FC = () => {
         await loadIngredients();
         toast.success(response.message || 'Ingredient deleted successfully');
       } else if (response.usedInRecipes) {
-        // Show detailed error about recipe usage
         const message = `Cannot delete "${name}" because it is used in recipes.`;
         toast.error(message);
-        
-        // You could show a modal here with more details about which recipes use it
-        console.log('Ingredient used in recipes:', response);
       } else {
         toast.error(response.error || 'Failed to delete ingredient');
       }
@@ -124,15 +120,15 @@ export const IngredientsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Leaf className="w-8 h-8 text-green-600" />
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Leaf className="w-6 h-6 text-green-600" />
             Ingredients
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-sm text-gray-600 mt-1">
             {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} available
           </p>
         </div>
@@ -140,7 +136,8 @@ export const IngredientsPage: React.FC = () => {
         {isAuthenticated && (
           <Button
             onClick={() => setShowModal(true)}
-            icon={<Plus className="w-4 h-4" />}
+            size="sm"
+            icon={<Plus className="w-3 h-3" />}
           >
             Add Ingredient
           </Button>
@@ -148,21 +145,21 @@ export const IngredientsPage: React.FC = () => {
       </div>
 
       {/* Search */}
-      <Card>
+      <Card className="p-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
             placeholder="Search ingredients..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-9"
           />
         </div>
       </Card>
 
-      {/* Ingredients Grid */}
+      {/* Ingredients Grid - More Compact */}
       {filteredIngredients.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
           {filteredIngredients.map(ingredient => (
             <IngredientCard
               key={ingredient.id}
@@ -187,7 +184,8 @@ export const IngredientsPage: React.FC = () => {
             isAuthenticated && !searchQuery ? (
               <Button
                 onClick={() => setShowModal(true)}
-                icon={<Plus className="w-4 h-4" />}
+                size="sm"
+                icon={<Plus className="w-3 h-3" />}
               >
                 Add Your First Ingredient
               </Button>
@@ -214,12 +212,14 @@ export const IngredientsPage: React.FC = () => {
           <div className="flex justify-end gap-2">
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => setShowModal(false)}
             >
               Cancel
             </Button>
             <Button
               onClick={handleAddIngredient}
+              size="sm"
               loading={isSubmitting}
               disabled={!newIngredientName.trim()}
             >
@@ -232,7 +232,7 @@ export const IngredientsPage: React.FC = () => {
   );
 };
 
-// Ingredient Card Component
+// Compact Ingredient Card Component
 interface IngredientCardProps {
   ingredient: Ingredient;
   isAuthenticated: boolean;
@@ -245,28 +245,37 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
   onDelete 
 }) => {
   return (
-    <Card className="group hover:shadow-lg transition-all duration-200">
-      <div className="flex items-center justify-between">
+    <div className="group bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all duration-200 hover:border-green-300">
+      <div className="flex items-center justify-between gap-1">
         <Link
           to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-          className="flex-1 text-gray-900 hover:text-green-600 font-medium transition-colors flex items-center gap-2"
+          className="flex-1 text-sm text-gray-900 hover:text-green-600 font-medium transition-colors truncate"
           title={`Find recipes using ${ingredient.name}`}
         >
-          <span className="truncate">{ingredient.name}</span>
-          <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+          {ingredient.name}
         </Link>
         
-        {isAuthenticated && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onDelete(ingredient.id, ingredient.name)}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50"
-            icon={<Trash2 className="w-4 h-4" />}
-          />
-        )}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Link
+            to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
+            className="p-1 text-green-600 hover:text-green-700 transition-colors"
+            title={`Find recipes using ${ingredient.name}`}
+          >
+            <ExternalLink className="w-3 h-3" />
+          </Link>
+          
+          {isAuthenticated && (
+            <button
+              onClick={() => onDelete(ingredient.id, ingredient.name)}
+              className="p-1 text-red-600 hover:text-red-700 transition-colors"
+              title="Delete ingredient"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

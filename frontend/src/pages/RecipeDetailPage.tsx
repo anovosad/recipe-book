@@ -10,7 +10,9 @@ import {
   ChefHat,
   Tag as TagIcon,
   Calculator,
-  RotateCcw
+  RotateCcw,
+  Minus,
+  Plus
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
@@ -254,45 +256,45 @@ const RecipeDetailPage: React.FC = () => {
         {/* Ingredients */}
         <div className="lg:col-span-1">
           <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">Ingredients</h2>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold text-gray-900">Ingredients</h2>
+                {scalingRatio !== 1 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={resetServings}
+                    icon={<RotateCcw className="w-4 h-4" />}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
+              
               {recipe.servings > 0 && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-lg">
                   <button
                     onClick={() => handleServingsChange(servings - 1)}
                     disabled={servings <= 1}
-                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
+                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-red-700 transition-colors"
+                    title="Decrease servings"
                   >
-                    -
+                    <Minus className="w-4 h-4" />
                   </button>
-                  <div className="flex items-center gap-2 px-3 py-1 bg-gray-50 rounded-lg">
-                    <input
-                      type="number"
-                      value={servings}
-                      onChange={(e) => handleServingsChange(parseInt(e.target.value) || 1)}
-                      className="w-12 text-center bg-transparent border-none focus:outline-none font-medium"
-                      min="1"
-                      max="50"
-                    />
+                  
+                  <div className="flex items-center gap-2 px-3 py-1 bg-white rounded-md min-w-[80px] justify-center">
+                    <span className="font-semibold text-gray-900">{servings}</span>
                     <span className="text-sm text-gray-600">{recipe.serving_unit}</span>
                   </div>
+                  
                   <button
                     onClick={() => handleServingsChange(servings + 1)}
                     disabled={servings >= 50}
-                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-lg font-bold"
+                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-red-700 transition-colors"
+                    title="Increase servings"
                   >
-                    +
+                    <Plus className="w-4 h-4" />
                   </button>
-                  {scalingRatio !== 1 && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={resetServings}
-                      icon={<RotateCcw className="w-3 h-3" />}
-                    >
-                      Reset
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
@@ -326,7 +328,7 @@ const RecipeDetailPage: React.FC = () => {
             )}
           </Card>
 
-          {/* Tags */}
+          {/* Tags - No colors */}
           {recipe.tags && recipe.tags.length > 0 && (
             <Card className="mt-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -338,7 +340,7 @@ const RecipeDetailPage: React.FC = () => {
                   <Link
                     key={tag.id}
                     to={`/recipes?tag=${tag.id}`}
-                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 hover:bg-red-200 transition-colors"
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                   >
                     {tag.name}
                   </Link>
