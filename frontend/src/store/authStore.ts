@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import toast from 'react-hot-toast';
-import { User, LoginForm, RegisterForm, AuthState } from '@/types';
+import { LoginForm, RegisterForm, AuthState } from '@/types';
 import apiService from '@/services/api';
 
 interface AuthStore extends AuthState {
@@ -10,7 +10,7 @@ interface AuthStore extends AuthState {
 
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
       isAuthenticated: false,
       isLoading: false,

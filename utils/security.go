@@ -402,16 +402,21 @@ func ValidateUnit(unit string) ValidationResult {
 		return ValidationResult{false, "Unit is required", "unit"}
 	}
 
-	// List of allowed units
+	// Comprehensive list of allowed units
 	allowedUnits := []string{
+		// Volume
 		"tsp", "tbsp", "cup", "ml", "l", "fl oz",
+		// Weight
 		"g", "kg", "oz", "lb",
-		"piece", "clove", "slice", "can",
+		// Count
+		"piece", "clove", "slice", "can", "package",
+		// Other
 		"pinch", "dash", "to taste",
 	}
 
+	unitLower := strings.ToLower(unit)
 	for _, allowed := range allowedUnits {
-		if strings.EqualFold(unit, allowed) {
+		if unitLower == strings.ToLower(allowed) {
 			return ValidationResult{true, "", "unit"}
 		}
 	}

@@ -56,7 +56,7 @@ api.interceptors.response.use(
       }
     } else if (error.response?.status === 429) {
       toast.error('Too many requests. Please slow down.');
-    } else if (error.response?.status >= 500) {
+    } else if ((error.response?.status ?? 0) >= 500) {
       toast.error('Server error. Please try again later.');
     } else if (!error.response) {
       toast.error('Network error. Please check your connection.');

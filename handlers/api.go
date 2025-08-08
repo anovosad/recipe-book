@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/gorilla/mux"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -207,6 +208,14 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
+	// Check if request is multipart form data for file uploads
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		handleCreateRecipeWithFiles(w, r, user, clientIP)
+		return
+	}
+
+	// Handle JSON request (without files)
 	var req RecipeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_RECIPE", clientIP, err.Error())
@@ -214,6 +223,140 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate and create recipe (existing logic)
+	recipeID, err := createRecipeFromRequest(req, user.ID, clientIP)
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.LogSecurityEvent("RECIPE_CREATED", clientIP, fmt.Sprintf("RecipeID:%d, Title:%s, User:%s", recipeID, req.Title, user.Username))
+
+	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success":   true,
+		"message":   "Recipe created successfully",
+		"recipe_id": recipeID,
+		"redirect":  fmt.Sprintf("/recipe/%d", recipeID),
+	})
+}
+
+func handleCreateRecipeWithFiles(w http.ResponseWriter, r *http.Request, user *models.User, clientIP string) {
+	// Parse multipart form with 32MB max memory
+	err := r.ParseMultipartForm(32 << 20)
+	if err != nil {
+		utils.LogSecurityEvent("MULTIPART_PARSE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Invalid form data")
+		return
+	}
+
+	// Extract recipe data from form
+	req := RecipeRequest{
+		Title:        strings.TrimSpace(r.FormValue("title")),
+		Description:  strings.TrimSpace(r.FormValue("description")),
+		Instructions: strings.TrimSpace(r.FormValue("instructions")),
+		ServingUnit:  strings.TrimSpace(r.FormValue("serving_unit")),
+	}
+
+	// Parse numeric fields
+	if prepTimeStr := r.FormValue("prep_time"); prepTimeStr != "" {
+		if prepTime, err := strconv.Atoi(prepTimeStr); err == nil {
+			req.PrepTime = prepTime
+		}
+	}
+	if cookTimeStr := r.FormValue("cook_time"); cookTimeStr != "" {
+		if cookTime, err := strconv.Atoi(cookTimeStr); err == nil {
+			req.CookTime = cookTime
+		}
+	}
+	if servingsStr := r.FormValue("servings"); servingsStr != "" {
+		if servings, err := strconv.Atoi(servingsStr); err == nil {
+			req.Servings = servings
+		}
+	}
+
+	// Parse ingredients (JSON strings in form)
+	if ingredientsData := r.Form["ingredients"]; len(ingredientsData) > 0 {
+		for _, ingredientJSON := range ingredientsData {
+			var ingredient RecipeIngredientReq
+			if err := json.Unmarshal([]byte(ingredientJSON), &ingredient); err == nil {
+				req.Ingredients = append(req.Ingredients, ingredient)
+			}
+		}
+	}
+
+	// Parse tags
+	if tagsData := r.Form["tags"]; len(tagsData) > 0 {
+		for _, tagStr := range tagsData {
+			if tagID, err := strconv.Atoi(tagStr); err == nil {
+				req.Tags = append(req.Tags, tagID)
+			}
+		}
+	}
+
+	// Create recipe
+	recipeID, err := createRecipeFromRequest(req, user.ID, clientIP)
+	if err != nil {
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Handle file uploads
+	files := r.MultipartForm.File["recipe_images"]
+	var uploadedImages []string
+
+	for i, fileHeader := range files {
+		if i >= 5 { // Limit to 5 images
+			break
+		}
+
+		// Validate file
+		validation := utils.ValidateFileUpload(fileHeader.Filename, fileHeader.Size)
+		if !validation.Valid {
+			// Log but continue with other files
+			utils.LogSecurityEvent("INVALID_FILE_UPLOAD", clientIP, validation.Message)
+			continue
+		}
+
+		file, err := fileHeader.Open()
+		if err != nil {
+			continue
+		}
+		defer file.Close()
+
+		// Save file
+		filename, err := utils.SaveUploadedFile(file, fileHeader)
+		if err != nil {
+			utils.LogSecurityEvent("FILE_SAVE_ERROR", clientIP, err.Error())
+			continue
+		}
+
+		// Save to database
+		_, err = database.DB.Exec(
+			"INSERT INTO recipe_images (recipe_id, filename, caption, display_order) VALUES (?, ?, ?, ?)",
+			recipeID, filename, "", i,
+		)
+		if err != nil {
+			// Remove file if database insert fails
+			os.Remove(filepath.Join("uploads", filename))
+			continue
+		}
+
+		uploadedImages = append(uploadedImages, filename)
+	}
+
+	utils.LogSecurityEvent("RECIPE_CREATED_WITH_FILES", clientIP,
+		fmt.Sprintf("RecipeID:%d, Title:%s, Images:%d, User:%s", recipeID, req.Title, len(uploadedImages), user.Username))
+
+	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
+		"success":         true,
+		"message":         "Recipe created successfully",
+		"recipe_id":       recipeID,
+		"uploaded_images": len(uploadedImages),
+		"redirect":        fmt.Sprintf("/recipe/%d", recipeID),
+	})
+}
+
+func createRecipeFromRequest(req RecipeRequest, userID int, clientIP string) (int64, error) {
 	// Trim whitespace
 	req.Title = strings.TrimSpace(req.Title)
 	req.Description = strings.TrimSpace(req.Description)
@@ -228,26 +371,22 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !titleValidation.Valid {
 		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, titleValidation.Message)
-		sendJSONError(w, http.StatusBadRequest, titleValidation.Message)
-		return
+		return 0, fmt.Errorf(titleValidation.Message)
 	}
 
 	if !descValidation.Valid {
 		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, descValidation.Message)
-		sendJSONError(w, http.StatusBadRequest, descValidation.Message)
-		return
+		return 0, fmt.Errorf(descValidation.Message)
 	}
 
 	if !instrValidation.Valid {
 		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, instrValidation.Message)
-		sendJSONError(w, http.StatusBadRequest, instrValidation.Message)
-		return
+		return 0, fmt.Errorf(instrValidation.Message)
 	}
 
 	if !servingUnitValidation.Valid {
 		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, servingUnitValidation.Message)
-		sendJSONError(w, http.StatusBadRequest, servingUnitValidation.Message)
-		return
+		return 0, fmt.Errorf(servingUnitValidation.Message)
 	}
 
 	// Validate numeric inputs
@@ -256,18 +395,15 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	servingsValidation := utils.ValidateNumericInput(req.Servings, 1, 100, "Servings")
 
 	if !prepTimeValidation.Valid {
-		sendJSONError(w, http.StatusBadRequest, prepTimeValidation.Message)
-		return
+		return 0, fmt.Errorf(prepTimeValidation.Message)
 	}
 
 	if !cookTimeValidation.Valid {
-		sendJSONError(w, http.StatusBadRequest, cookTimeValidation.Message)
-		return
+		return 0, fmt.Errorf(cookTimeValidation.Message)
 	}
 
 	if !servingsValidation.Valid {
-		sendJSONError(w, http.StatusBadRequest, servingsValidation.Message)
-		return
+		return 0, fmt.Errorf(servingsValidation.Message)
 	}
 
 	if req.ServingUnit == "" {
@@ -275,11 +411,10 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use secure database function
-	recipeID, err := database.CreateRecipeSecure(req.Title, req.Description, req.Instructions, req.PrepTime, req.CookTime, req.Servings, req.ServingUnit, user.ID)
+	recipeID, err := database.CreateRecipeSecure(req.Title, req.Description, req.Instructions, req.PrepTime, req.CookTime, req.Servings, req.ServingUnit, userID)
 	if err != nil {
 		utils.LogSecurityEvent("RECIPE_INSERT_ERROR", clientIP, err.Error())
-		sendJSONError(w, http.StatusInternalServerError, "Error creating recipe")
-		return
+		return 0, fmt.Errorf("error creating recipe")
 	}
 
 	// Handle tags with validation
@@ -312,14 +447,7 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit)
 	}
 
-	utils.LogSecurityEvent("RECIPE_CREATED", clientIP, fmt.Sprintf("RecipeID:%d, Title:%s, User:%s", recipeID, req.Title, user.Username))
-
-	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
-		"success":   true,
-		"message":   "Recipe created successfully",
-		"recipe_id": recipeID,
-		"redirect":  fmt.Sprintf("/recipe/%d", recipeID),
-	})
+	return recipeID, nil
 }
 
 func HandleEditRecipeSubmission(w http.ResponseWriter, r *http.Request, user *models.User, recipeID int) {
@@ -462,11 +590,17 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
-	// Extract ID from URL path with validation
-	path := strings.TrimPrefix(r.URL.Path, "/api/recipes/")
-	id, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Recipe ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(id) {
-		utils.LogSecurityEvent("INVALID_RECIPE_ID_API", clientIP, path)
+		utils.LogSecurityEvent("INVALID_RECIPE_ID_API", clientIP, idStr)
 		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
 		return
 	}
@@ -479,47 +613,47 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var recipe models.Recipe
-	if err := json.NewDecoder(r.Body).Decode(&recipe); err != nil {
+	var req RecipeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_RECIPE_UPDATE", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
 	}
 
 	// Validate recipe data
-	titleValidation := utils.ValidateRecipeTitle(recipe.Title)
-	descValidation := utils.ValidateRecipeDescription(recipe.Description)
-	instrValidation := utils.ValidateRecipeInstructions(recipe.Instructions)
-	servingUnitValidation := utils.ValidateServingUnit(recipe.ServingUnit)
+	titleValidation := utils.ValidateRecipeTitle(req.Title)
+	descValidation := utils.ValidateRecipeDescription(req.Description)
+	instrValidation := utils.ValidateRecipeInstructions(req.Instructions)
+	servingUnitValidation := utils.ValidateServingUnit(req.ServingUnit)
 
 	if !titleValidation.Valid {
-		utils.LogSecurityEvent("INVALID_RECIPE_TITLE_API", clientIP, recipe.Title)
+		utils.LogSecurityEvent("INVALID_RECIPE_TITLE_API", clientIP, req.Title)
 		sendJSONError(w, http.StatusBadRequest, titleValidation.Message)
 		return
 	}
 
 	if !descValidation.Valid {
-		utils.LogSecurityEvent("INVALID_RECIPE_DESC_API", clientIP, recipe.Description)
+		utils.LogSecurityEvent("INVALID_RECIPE_DESC_API", clientIP, req.Description)
 		sendJSONError(w, http.StatusBadRequest, descValidation.Message)
 		return
 	}
 
 	if !instrValidation.Valid {
-		utils.LogSecurityEvent("INVALID_RECIPE_INSTR_API", clientIP, recipe.Instructions)
+		utils.LogSecurityEvent("INVALID_RECIPE_INSTR_API", clientIP, req.Instructions)
 		sendJSONError(w, http.StatusBadRequest, instrValidation.Message)
 		return
 	}
 
 	if !servingUnitValidation.Valid {
-		utils.LogSecurityEvent("INVALID_SERVING_UNIT_API", clientIP, recipe.ServingUnit)
+		utils.LogSecurityEvent("INVALID_SERVING_UNIT_API", clientIP, req.ServingUnit)
 		sendJSONError(w, http.StatusBadRequest, servingUnitValidation.Message)
 		return
 	}
 
 	// Validate numeric fields
-	prepTimeValidation := utils.ValidateNumericInput(recipe.PrepTime, 0, 1440, "Prep time")
-	cookTimeValidation := utils.ValidateNumericInput(recipe.CookTime, 0, 1440, "Cook time")
-	servingsValidation := utils.ValidateNumericInput(recipe.Servings, 1, 100, "Servings")
+	prepTimeValidation := utils.ValidateNumericInput(req.PrepTime, 0, 1440, "Prep time")
+	cookTimeValidation := utils.ValidateNumericInput(req.CookTime, 0, 1440, "Cook time")
+	servingsValidation := utils.ValidateNumericInput(req.Servings, 1, 100, "Servings")
 
 	if !prepTimeValidation.Valid {
 		utils.LogSecurityEvent("INVALID_RECIPE_NUMERIC_API", clientIP, prepTimeValidation.Message)
@@ -543,8 +677,8 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	_, err = database.DB.Exec(`
 		UPDATE recipes SET title = ?, description = ?, instructions = ?, 
 		prep_time = ?, cook_time = ?, servings = ?, serving_unit = ? WHERE id = ? AND created_by = ?
-	`, recipe.Title, recipe.Description, recipe.Instructions,
-		recipe.PrepTime, recipe.CookTime, recipe.Servings, recipe.ServingUnit, id, user.ID)
+	`, req.Title, req.Description, req.Instructions,
+		req.PrepTime, req.CookTime, req.Servings, req.ServingUnit, id, user.ID)
 
 	if err != nil {
 		utils.LogSecurityEvent("RECIPE_UPDATE_API_ERROR", clientIP, err.Error())
@@ -552,24 +686,34 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Update tags with validation
+	database.DB.Exec("DELETE FROM recipe_tags WHERE recipe_id = ?", id)
+	for _, tagID := range req.Tags {
+		if utils.IsValidID(tagID) {
+			database.DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", id, tagID)
+		} else {
+			utils.LogSecurityEvent("INVALID_TAG_ID_API", clientIP, fmt.Sprintf("%d", tagID))
+		}
+	}
+
 	// Update ingredients with validation
 	database.DB.Exec("DELETE FROM recipe_ingredients WHERE recipe_id = ?", id)
-	for _, ing := range recipe.Ingredients {
-		if !utils.IsValidID(ing.IngredientID) {
-			utils.LogSecurityEvent("INVALID_INGREDIENT_ID_API", clientIP, fmt.Sprintf("ID: %d", ing.IngredientID))
+	for _, ingredient := range req.Ingredients {
+		if !utils.IsValidID(ingredient.IngredientID) {
+			utils.LogSecurityEvent("INVALID_INGREDIENT_ID_API", clientIP, fmt.Sprintf("ID: %d", ingredient.IngredientID))
 			continue
 		}
 
-		quantityValidation := utils.ValidateQuantity(ing.Quantity)
-		unitValidation := utils.ValidateUnit(ing.Unit)
+		quantityValidation := utils.ValidateQuantity(ingredient.Quantity)
+		unitValidation := utils.ValidateUnit(ingredient.Unit)
 
 		if !quantityValidation.Valid || !unitValidation.Valid {
-			utils.LogSecurityEvent("INVALID_INGREDIENT_DATA_API", clientIP, fmt.Sprintf("ID:%d, Qty:%f, Unit:%s", ing.IngredientID, ing.Quantity, ing.Unit))
+			utils.LogSecurityEvent("INVALID_INGREDIENT_DATA_API", clientIP, fmt.Sprintf("ID:%d, Qty:%f, Unit:%s", ingredient.IngredientID, ingredient.Quantity, ingredient.Unit))
 			continue
 		}
 
 		database.DB.Exec("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
-			id, ing.IngredientID, ing.Quantity, ing.Unit)
+			id, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit)
 	}
 
 	utils.LogSecurityEvent("RECIPE_UPDATED_API", clientIP, fmt.Sprintf("RecipeID:%d, User:%s", id, user.Username))
@@ -585,11 +729,17 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
-	// Extract ID from URL path with validation
-	path := strings.TrimPrefix(r.URL.Path, "/api/recipes/")
-	id, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Recipe ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(id) {
-		utils.LogSecurityEvent("INVALID_RECIPE_ID_DELETE", clientIP, path)
+		utils.LogSecurityEvent("INVALID_RECIPE_ID_DELETE", clientIP, idStr)
 		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
 		return
 	}
@@ -675,11 +825,17 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
-	// Extract ID from URL path with validation
-	path := strings.TrimPrefix(r.URL.Path, "/api/ingredients/")
-	id, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Ingredient ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(id) {
-		utils.LogSecurityEvent("INVALID_INGREDIENT_ID_DELETE", clientIP, path)
+		utils.LogSecurityEvent("INVALID_INGREDIENT_ID_DELETE", clientIP, idStr)
 		sendJSONError(w, http.StatusBadRequest, "Invalid ingredient ID")
 		return
 	}
@@ -807,11 +963,17 @@ func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
-	// Extract ID from URL path with validation
-	path := strings.TrimPrefix(r.URL.Path, "/api/tags/")
-	id, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Tag ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(id) {
-		utils.LogSecurityEvent("INVALID_TAG_ID_DELETE", clientIP, path)
+		utils.LogSecurityEvent("INVALID_TAG_ID_DELETE", clientIP, idStr)
 		sendJSONError(w, http.StatusBadRequest, "Invalid tag ID")
 		return
 	}
@@ -841,11 +1003,17 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 
 	clientIP := getClientIP(r)
 
-	// Extract ID from URL path with validation
-	path := strings.TrimPrefix(r.URL.Path, "/api/images/")
-	imageID, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Image ID is required")
+		return
+	}
+
+	imageID, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(imageID) {
-		utils.LogSecurityEvent("INVALID_IMAGE_ID_DELETE", clientIP, path)
+		utils.LogSecurityEvent("INVALID_IMAGE_ID_DELETE", clientIP, idStr)
 		sendJSONError(w, http.StatusBadRequest, "Invalid image ID")
 		return
 	}
@@ -956,9 +1124,15 @@ func GetRecipesHandler(w http.ResponseWriter, r *http.Request) {
 
 // GetRecipeHandler returns a single recipe by ID
 func GetRecipeHandler(w http.ResponseWriter, r *http.Request) {
-	// Extract ID from URL path
-	path := strings.TrimPrefix(r.URL.Path, "/api/recipes/")
-	id, err := strconv.Atoi(path)
+	// Extract ID from URL using Gorilla Mux
+	vars := mux.Vars(r)
+	idStr, exists := vars["id"]
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Recipe ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
 	if err != nil || !utils.IsValidID(id) {
 		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
 		return

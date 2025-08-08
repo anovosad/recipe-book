@@ -9,6 +9,7 @@ import (
 	"recipe-book/database"
 	"recipe-book/handlers"
 	"recipe-book/middleware"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
@@ -31,6 +32,7 @@ func main() {
 	r := mux.NewRouter()
 
 	// Apply global middleware (order matters!)
+	r.Use(middleware.CORSMiddleware()) // Add CORS support
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.RequestLogging())
 	r.Use(securityManager.AddSecurityContext())
@@ -58,27 +60,27 @@ func main() {
 
 	// Other API routes (protected by general rate limiting)
 	r.HandleFunc("/api/logout", handlers.LogoutHandler).Methods("POST")
-	r.HandleFunc("/api/auth/check", handlers.CheckAuthHandler).Methods("GET") // Add this
+	r.HandleFunc("/api/auth/check", handlers.CheckAuthHandler).Methods("GET")
 
-	// Recipe API routes
-	r.HandleFunc("/api/recipes", handlers.GetRecipesHandler).Methods("GET")     // Add this
-	r.HandleFunc("/api/recipes/{id}", handlers.GetRecipeHandler).Methods("GET") // Add this
+	// Recipe API routes (fix route patterns)
+	r.HandleFunc("/api/recipes", handlers.GetRecipesHandler).Methods("GET")
 	r.HandleFunc("/api/recipes", handlers.CreateRecipeHandler).Methods("POST")
-	r.HandleFunc("/api/recipes/{id}", handlers.UpdateRecipeHandler).Methods("PUT")
-	r.HandleFunc("/api/recipes/{id}", handlers.DeleteRecipeHandler).Methods("DELETE")
+	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.GetRecipeHandler).Methods("GET")
+	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.UpdateRecipeHandler).Methods("PUT")
+	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.DeleteRecipeHandler).Methods("DELETE")
 
 	// Ingredient API routes
-	r.HandleFunc("/api/ingredients", handlers.GetIngredientsHandler).Methods("GET") // Add this
+	r.HandleFunc("/api/ingredients", handlers.GetIngredientsHandler).Methods("GET")
 	r.HandleFunc("/api/ingredients", handlers.CreateIngredientHandler).Methods("POST")
-	r.HandleFunc("/api/ingredients/{id}", handlers.DeleteIngredientHandler).Methods("DELETE")
+	r.HandleFunc("/api/ingredients/{id:[0-9]+}", handlers.DeleteIngredientHandler).Methods("DELETE")
 
 	// Tag API routes
-	r.HandleFunc("/api/tags", handlers.GetTagsHandler).Methods("GET") // Add this
+	r.HandleFunc("/api/tags", handlers.GetTagsHandler).Methods("GET")
 	r.HandleFunc("/api/tags", handlers.CreateTagHandler).Methods("POST")
-	r.HandleFunc("/api/tags/{id}", handlers.DeleteTagHandler).Methods("DELETE")
+	r.HandleFunc("/api/tags/{id:[0-9]+}", handlers.DeleteTagHandler).Methods("DELETE")
 
 	// Image routes
-	r.HandleFunc("/api/images/{id}", handlers.DeleteImageHandler).Methods("DELETE")
+	r.HandleFunc("/api/images/{id:[0-9]+}", handlers.DeleteImageHandler).Methods("DELETE")
 
 	// Serve uploaded images (with some protection)
 	uploadsHandler := http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads/")))
@@ -100,9 +102,12 @@ func main() {
 
 	// SPA fallback: serve index.html for all non-API routes
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Don't serve index.html for API routes
-		if r.URL.Path == "/health" ||
-			r.URL.Path == "/uploads" ||
+		// Don't serve index.html for API routes or specific file requests
+		if strings.HasPrefix(r.URL.Path, "/api/") ||
+			strings.HasPrefix(r.URL.Path, "/uploads/") ||
+			strings.HasPrefix(r.URL.Path, "/static/") ||
+			strings.HasPrefix(r.URL.Path, "/assets/") ||
+			r.URL.Path == "/health" ||
 			filepath.Ext(r.URL.Path) != "" {
 			http.NotFound(w, r)
 			return
@@ -119,6 +124,7 @@ func main() {
 
 	fmt.Println("🍳 Recipe Book Server starting on :8080")
 	fmt.Println("🔒 Security middleware enabled:")
+	fmt.Println("   - CORS enabled")
 	fmt.Println("   - Rate limiting: Login, Registration, Search, General")
 	fmt.Println("   - SQL injection protection")
 	fmt.Println("   - Security headers")

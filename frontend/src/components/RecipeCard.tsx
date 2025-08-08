@@ -8,9 +8,7 @@ import {
   Edit,
   Trash2,
   ChefHat,
-  Tag as TagIcon,
   Heart,
-  Star
 } from 'lucide-react';
 import { Recipe } from '@/types';
 import { formatTime, formatDate, cn } from '@/utils';

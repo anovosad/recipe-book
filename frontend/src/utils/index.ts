@@ -1,3 +1,5 @@
+// Make sure this is the complete frontend/src/utils/index.ts file
+
 import { clsx, type ClassValue } from 'clsx';
 
 /**

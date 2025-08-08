@@ -516,3 +516,45 @@ func (sm *SecurityManager) AddSecurityContext() func(http.Handler) http.Handler 
 		})
 	}
 }
+
+// CORS middleware for frontend-backend communication
+func CORSMiddleware() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Allow requests from frontend development server and production
+			origin := r.Header.Get("Origin")
+			allowedOrigins := []string{
+				"http://localhost:3000", // Vite dev server
+				"http://localhost:5173", // Alternative Vite port
+				"http://localhost:8080", // Same origin
+				"http://127.0.0.1:8080", // Same origin alternative
+			}
+
+			// Check if origin is allowed
+			for _, allowedOrigin := range allowedOrigins {
+				if origin == allowedOrigin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					break
+				}
+			}
+
+			// If no origin header (same-origin requests), allow
+			if origin == "" {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			}
+
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Max-Age", "86400")
+
+			// Handle preflight requests
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}

@@ -32,6 +32,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   icon?: React.ReactNode;
   children: React.ReactNode;
+  as?: any; // For Link components
 }
 
 export const Button: React.FC<ButtonProps> = ({
@@ -42,6 +43,7 @@ export const Button: React.FC<ButtonProps> = ({
   children,
   className,
   disabled,
+  as: Component = 'button',
   ...props
 }) => {
   const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -60,7 +62,7 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   return (
-    <button
+    <Component
       className={cn(
         baseClasses,
         variantClasses[variant],
@@ -76,7 +78,7 @@ export const Button: React.FC<ButtonProps> = ({
         icon
       ) : null}
       {children}
-    </button>
+    </Component>
   );
 };
 
@@ -284,7 +286,7 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
   helperText?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -313,7 +315,7 @@ export const Select: React.FC<SelectProps> = ({
         {...props}
       >
         {options.map(option => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} disabled={option.disabled}>
             {option.label}
           </option>
         ))}
@@ -393,6 +395,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   );
 };
 
+// Export all components
 export default {
   LoadingSpinner,
   Button,
