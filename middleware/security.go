@@ -369,10 +369,11 @@ func SecurityHeaders() func(http.Handler) http.Handler {
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			w.Header().Set("Content-Security-Policy",
 				"default-src 'self'; "+
-					"script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; "+
-					"style-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; "+
+					"script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com cdn.tailwindcss.com; "+
+					"style-src 'self' 'unsafe-inline' cdnjs.cloudflare.com fonts.googleapis.com; "+
 					"img-src 'self' data:; "+
-					"font-src 'self' cdnjs.cloudflare.com; "+
+					"font-src 'self' cdnjs.cloudflare.com fonts.gstatic.com; "+
+					"connect-src 'self'; "+
 					"object-src 'none'; "+
 					"base-uri 'self';")
 
