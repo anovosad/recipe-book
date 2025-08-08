@@ -78,7 +78,7 @@ const RegisterPage: React.FC = () => {
             </div>
             {errors.username && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                <Alert className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 {errors.username.message}
               </p>
             )}
@@ -111,7 +111,7 @@ const RegisterPage: React.FC = () => {
             </div>
             {errors.email && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                <Alert className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 {errors.email.message}
               </p>
             )}
@@ -154,7 +154,7 @@ const RegisterPage: React.FC = () => {
             </div>
             {errors.password && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                <Alert className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 {errors.password.message}
               </p>
             )}

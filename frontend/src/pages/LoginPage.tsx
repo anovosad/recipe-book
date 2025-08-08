@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { LoginForm } from '@/types';
-import { Card, Input, Button, Alert as AlertComponent } from '@/components/ui';
+import { Card, Input, Button, Alert } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 const LoginPage: React.FC = () => {
@@ -87,7 +87,7 @@ const LoginPage: React.FC = () => {
             </div>
             {errors.username && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                <Alert className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 {errors.username.message}
               </p>
             )}
@@ -116,7 +116,7 @@ const LoginPage: React.FC = () => {
             </div>
             {errors.password && (
               <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
-                <Alert className="w-3 h-3" />
+                <AlertCircle className="w-3 h-3" />
                 {errors.password.message}
               </p>
             )}
@@ -149,13 +149,13 @@ const LoginPage: React.FC = () => {
         {/* Demo Credentials for Development */}
         {process.env.NODE_ENV === 'development' && (
           <div className="mt-6">
-            <AlertComponent type="info">
+            <Alert type="info">
               <strong>Demo Account:</strong>
               <br />
               Username: admin
               <br />
               Password: admin123
-            </AlertComponent>
+            </Alert>
           </div>
         )}
       </Card>
