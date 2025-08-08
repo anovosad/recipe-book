@@ -175,33 +175,72 @@ const RecipeFormPage: React.FC = () => {
         return;
       }
 
-      // Prepare form data
-      const formData: RecipeForm = {
-        ...data,
+      // Prepare form data (without images for the recipe API)
+      const recipeData: Omit<RecipeForm, 'images'> = {
+        title: data.title,
+        description: data.description,
+        instructions: data.instructions,
+        prep_time: data.prep_time,
+        cook_time: data.cook_time,
+        servings: data.servings,
+        serving_unit: data.serving_unit,
         ingredients: validIngredients,
         tags: Array.from(selectedTags),
-        images: data.images ? Array.from(data.images) : undefined
       };
 
-      let response;
+      let recipeId: number;
+      let uploadedImages = 0;
+
       if (isEditMode && recipe) {
-        response = await apiService.updateRecipe(recipe.id, formData);
+        // Update existing recipe
+        await apiService.updateRecipe(recipe.id, recipeData);
+        recipeId = recipe.id;
+        
+        // Upload new images if provided
+        if (data.images && data.images.length > 0) {
+          try {
+            const imageResponse = await apiService.uploadRecipeImages(recipeId, Array.from(data.images));
+            uploadedImages = imageResponse.data?.images?.length || 0;
+          } catch (error) {
+            console.warn('Failed to upload images:', error);
+            toast.warning('Recipe updated but some images failed to upload');
+          }
+        }
+        
+        let message = 'Recipe updated successfully!';
+        if (uploadedImages > 0) {
+          message += ` ${uploadedImages} image(s) uploaded.`;
+        }
+        toast.success(message);
       } else {
-        response = await apiService.createRecipe(formData);
+        // Create new recipe
+        const createResponse = await apiService.createRecipe(recipeData);
+        
+        if (!createResponse.success || !createResponse.data?.recipe_id) {
+          throw new Error(createResponse.error || 'Failed to create recipe');
+        }
+        
+        recipeId = createResponse.data.recipe_id;
+        
+        // Upload images if provided
+        if (data.images && data.images.length > 0) {
+          try {
+            const imageResponse = await apiService.uploadRecipeImages(recipeId, Array.from(data.images));
+            uploadedImages = imageResponse.data?.images?.length || 0;
+          } catch (error) {
+            console.warn('Failed to upload images:', error);
+            toast.warning('Recipe created but some images failed to upload');
+          }
+        }
+        
+        let message = 'Recipe created successfully!';
+        if (uploadedImages > 0) {
+          message += ` ${uploadedImages} image(s) uploaded.`;
+        }
+        toast.success(message);
       }
 
-      if (response.success) {
-        toast.success(response.message || `Recipe ${isEditMode ? 'updated' : 'created'} successfully!`);
-        
-        const recipeId = isEditMode ? recipe!.id : response.data?.recipe_id;
-        if (recipeId) {
-          navigate(`/recipe/${recipeId}`);
-        } else {
-          navigate('/recipes');
-        }
-      } else {
-        toast.error(response.error || `Failed to ${isEditMode ? 'update' : 'create'} recipe`);
-      }
+      navigate(`/recipe/${recipeId}`);
     } catch (error: any) {
       console.error('Recipe form error:', error);
       toast.error(getErrorMessage(error));
@@ -269,6 +308,12 @@ const RecipeFormPage: React.FC = () => {
       }
     } catch (error: any) {
       toast.error(getErrorMessage(error));
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isLoading) {
+      e.preventDefault();
     }
   };
 
@@ -667,6 +712,7 @@ const RecipeFormPage: React.FC = () => {
             value={newIngredientName}
             onChange={(e) => setNewIngredientName(e.target.value)}
             placeholder="e.g., Olive Oil, Chicken Breast"
+            onKeyDown={handleKeyPress}
           />
           <div className="flex justify-end gap-2">
             <Button
@@ -697,6 +743,7 @@ const RecipeFormPage: React.FC = () => {
             value={newTagName}
             onChange={(e) => setNewTagName(e.target.value)}
             placeholder="e.g., Dessert, Quick & Easy"
+            onKeyDown={handleKeyPress}
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

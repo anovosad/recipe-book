@@ -1,4 +1,4 @@
-// frontend/src/services/api.ts - Updated with better error handling and image support
+// frontend/src/services/api.ts - Updated with separated image handling
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import {
@@ -29,8 +29,9 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Don't set Content-Type for FormData (let browser set it with boundary)
-    if (!(config.data instanceof FormData)) {
+    // Always set Content-Type to application/json for API requests
+    // except for form data uploads
+    if (!config.headers['Content-Type']) {
       config.headers['Content-Type'] = 'application/json';
     }
     return config;
@@ -71,8 +72,7 @@ class ApiService {
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
-    data?: any,
-    options: { isFormData?: boolean } = {}
+    data?: any
   ): Promise<T> {
     try {
       const config: any = {
@@ -80,11 +80,6 @@ class ApiService {
         url,
         ...(data && { data })
       };
-
-      if (options.isFormData) {
-        // Let browser set Content-Type with boundary for FormData
-        config.headers = {};
-      }
 
       const response = await api(config);
       return response.data;
@@ -94,6 +89,30 @@ class ApiService {
         throw error.response.data;
       }
       throw { error: error.message || 'Network error occurred' };
+    }
+  }
+
+  // Form data request handler (for image uploads)
+  private async uploadFormData<T>(
+    method: 'POST' | 'PUT',
+    url: string,
+    formData: FormData
+  ): Promise<T> {
+    try {
+      const response = await api({
+        method,
+        url,
+        data: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        throw error.response.data;
+      }
+      throw { error: error.message || 'Upload failed' };
     }
   }
 
@@ -114,7 +133,7 @@ class ApiService {
     return this.request('GET', '/api/auth/check');
   }
 
-  // Recipe API
+  // Recipe API (JSON only - no images)
   async getRecipes(): Promise<Recipe[]> {
     return this.request('GET', '/api/recipes');
   }
@@ -131,50 +150,68 @@ class ApiService {
     return this.request('GET', `/api/recipes/tag/${tagId}`);
   }
 
-  async createRecipe(recipeData: RecipeForm): Promise<ApiResponse<{ recipe_id: number }>> {
-    const formData = this.prepareRecipeFormData(recipeData);
-    return this.request('POST', '/api/recipes', formData, { isFormData: true });
+  async createRecipe(recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse<{ recipe_id: number }>> {
+    // Remove images from recipe data - they're handled separately
+    const { images, ...jsonData } = recipeData as RecipeForm;
+    
+    const payload = {
+      title: jsonData.title,
+      description: jsonData.description || '',
+      instructions: jsonData.instructions,
+      prep_time: jsonData.prep_time,
+      cook_time: jsonData.cook_time,
+      servings: jsonData.servings,
+      serving_unit: jsonData.serving_unit,
+      ingredients: jsonData.ingredients,
+      tags: jsonData.tags
+    };
+
+    return this.request('POST', '/api/recipes', payload);
   }
 
-  async updateRecipe(id: number, recipeData: RecipeForm): Promise<ApiResponse> {
-    const formData = this.prepareRecipeFormData(recipeData);
-    return this.request('PUT', `/api/recipes/${id}`, formData, { isFormData: true });
+  async updateRecipe(id: number, recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse> {
+    // Remove images from recipe data - they're handled separately
+    const { images, ...jsonData } = recipeData as RecipeForm;
+    
+    const payload = {
+      title: jsonData.title,
+      description: jsonData.description || '',
+      instructions: jsonData.instructions,
+      prep_time: jsonData.prep_time,
+      cook_time: jsonData.cook_time,
+      servings: jsonData.servings,
+      serving_unit: jsonData.serving_unit,
+      ingredients: jsonData.ingredients,
+      tags: jsonData.tags
+    };
+
+    return this.request('PUT', `/api/recipes/${id}`, payload);
   }
 
   async deleteRecipe(id: number): Promise<ApiResponse> {
     return this.request('DELETE', `/api/recipes/${id}`);
   }
 
-  private prepareRecipeFormData(recipeData: RecipeForm): FormData {
-    const formData = new FormData();
-    
-    // Basic recipe data
-    formData.append('title', recipeData.title);
-    formData.append('description', recipeData.description || '');
-    formData.append('instructions', recipeData.instructions);
-    formData.append('prep_time', recipeData.prep_time.toString());
-    formData.append('cook_time', recipeData.cook_time.toString());
-    formData.append('servings', recipeData.servings.toString());
-    formData.append('serving_unit', recipeData.serving_unit);
-
-    // Add ingredients as JSON strings
-    recipeData.ingredients.forEach((ingredient) => {
-      formData.append('ingredients', JSON.stringify(ingredient));
-    });
-
-    // Add tags
-    recipeData.tags.forEach(tagId => {
-      formData.append('tags', tagId.toString());
-    });
-
-    // Add images
-    if (recipeData.images) {
-      recipeData.images.forEach(image => {
-        formData.append('recipe_images', image);
-      });
+  // Image API (Form data only)
+  async uploadRecipeImages(recipeId: number, images: File[]): Promise<ApiResponse<{ images: any[] }>> {
+    if (!images || images.length === 0) {
+      throw { error: 'No images provided' };
     }
 
-    return formData;
+    const formData = new FormData();
+    
+    // Add images to form data
+    images.forEach((image, index) => {
+      formData.append('images', image);
+      // You can also add captions if needed
+      // formData.append(`caption_${index}`, caption || '');
+    });
+
+    return this.uploadFormData('POST', `/api/recipes/${recipeId}/images`, formData);
+  }
+
+  async deleteImage(imageId: number): Promise<ApiResponse> {
+    return this.request('DELETE', `/api/images/${imageId}`);
   }
 
   // Ingredient API
@@ -203,21 +240,69 @@ class ApiService {
     return this.request('DELETE', `/api/tags/${id}`);
   }
 
-  // Image API
-  async deleteImage(imageId: number): Promise<ApiResponse> {
-    return this.request('DELETE', `/api/images/${imageId}`);
-  }
-
-  // Upload API
-  async uploadImage(file: File): Promise<{ filename: string }> {
+  // Utility method for uploading single image
+  async uploadSingleImage(file: File): Promise<{ filename: string }> {
     const formData = new FormData();
     formData.append('image', file);
-    return this.request('POST', '/api/upload/image', formData, { isFormData: true });
+    return this.uploadFormData('POST', '/api/upload/image', formData);
   }
 
   // Health check
   async healthCheck(): Promise<{ status: string }> {
     return this.request('GET', '/health');
+  }
+
+  // Helper method to create recipe with images in sequence
+  async createRecipeWithImages(recipeData: RecipeForm): Promise<{ recipeId: number; uploadedImages: number }> {
+    // Step 1: Create recipe (JSON only)
+    const recipeResponse = await this.createRecipe(recipeData);
+    
+    if (!recipeResponse.success || !recipeResponse.data?.recipe_id) {
+      throw new Error('Failed to create recipe');
+    }
+
+    const recipeId = recipeResponse.data.recipe_id;
+    let uploadedImagesCount = 0;
+
+    // Step 2: Upload images if provided
+    if (recipeData.images && recipeData.images.length > 0) {
+      try {
+        const imageResponse = await this.uploadRecipeImages(recipeId, recipeData.images);
+        uploadedImagesCount = imageResponse.data?.images?.length || 0;
+      } catch (error) {
+        console.warn('Failed to upload images:', error);
+        // Don't fail the whole operation if images fail
+        toast.warning('Recipe created but some images failed to upload');
+      }
+    }
+
+    return {
+      recipeId,
+      uploadedImages: uploadedImagesCount
+    };
+  }
+
+  // Helper method to update recipe with images
+  async updateRecipeWithImages(id: number, recipeData: RecipeForm): Promise<{ uploadedImages: number }> {
+    // Step 1: Update recipe data (JSON only)
+    await this.updateRecipe(id, recipeData);
+    
+    let uploadedImagesCount = 0;
+
+    // Step 2: Upload new images if provided
+    if (recipeData.images && recipeData.images.length > 0) {
+      try {
+        const imageResponse = await this.uploadRecipeImages(id, recipeData.images);
+        uploadedImagesCount = imageResponse.data?.images?.length || 0;
+      } catch (error) {
+        console.warn('Failed to upload images:', error);
+        toast.warning('Recipe updated but some images failed to upload');
+      }
+    }
+
+    return {
+      uploadedImages: uploadedImagesCount
+    };
   }
 }
 
