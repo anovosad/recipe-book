@@ -264,6 +264,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   );
 });
 
+Input.displayName = 'Input';
+
 // Textarea Component
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
@@ -271,13 +273,13 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   helperText?: string;
 }
 
-export const Textarea: React.FC<TextareaProps> = ({
+export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
   label,
   error,
   helperText,
   className,
   ...props
-}) => {
+}, ref) => {
   return (
     <div className="space-y-1">
       {label && (
@@ -287,6 +289,7 @@ export const Textarea: React.FC<TextareaProps> = ({
         </label>
       )}
       <textarea
+        ref={ref}
         className={cn(
           'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
           'focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500',
@@ -303,7 +306,9 @@ export const Textarea: React.FC<TextareaProps> = ({
       )}
     </div>
   );
-};
+});
+
+Textarea.displayName = 'Textarea';
 
 // Select Component
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
@@ -313,14 +318,14 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   options: { value: string; label: string; disabled?: boolean }[];
 }
 
-export const Select: React.FC<SelectProps> = ({
+export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(({
   label,
   error,
   helperText,
   options,
   className,
   ...props
-}) => {
+}, ref) => {
   return (
     <div className="space-y-1">
       {label && (
@@ -330,6 +335,7 @@ export const Select: React.FC<SelectProps> = ({
         </label>
       )}
       <select
+        ref={ref}
         className={cn(
           'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm',
           'focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500',
@@ -352,7 +358,9 @@ export const Select: React.FC<SelectProps> = ({
       )}
     </div>
   );
-};
+});
+
+Select.displayName = 'Select';
 
 // Card Component
 interface CardProps {

@@ -538,8 +538,8 @@ const RecipeFormPage: React.FC = () => {
                           });
                         }
                         return acc;
-                      }, [] as any[]).flatMap(group => [
-                        { value: '', label: `--- ${group.label} ---`, disabled: true },
+                      }, [] as any[]).flatMap((group, groupIndex) => [
+                        { value: `__separator_${groupIndex}__`, label: `--- ${group.label} ---`, disabled: true },
                         ...group.options
                       ])
                     ]}
