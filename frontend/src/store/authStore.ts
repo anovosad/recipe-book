@@ -28,11 +28,12 @@ export const useAuthStore = create<AuthStore>()(
                 isLoading: false 
               });
               
-              // Verify in background
+              // Verify in background without blocking UI
               setTimeout(async () => {
                 try {
                   await apiService.checkAuth();
                 } catch (error) {
+                  // Silently clear invalid session
                   set({ user: null, isAuthenticated: false });
                 }
               }, 100);
@@ -40,7 +41,7 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
           } catch (error) {
-            console.warn('Failed to parse persisted auth state');
+            // Invalid persisted state, continue with server check
           }
         }
 
@@ -66,7 +67,7 @@ export const useAuthStore = create<AuthStore>()(
               isLoading: false 
             });
             
-            toast.success(response.message || 'Login successful!');
+            toast.success(response.message || 'Welcome back!');
             return true;
           } else {
             set({ isLoading: false });

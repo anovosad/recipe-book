@@ -47,6 +47,14 @@ interface AppStore {
   getFilteredRecipes: () => Recipe[];
 }
 
+// Helper function to ensure recipe arrays are never null
+const normalizeRecipe = (recipe: Recipe): Recipe => ({
+  ...recipe,
+  tags: recipe.tags || [],
+  ingredients: recipe.ingredients || [],
+  images: recipe.images || []
+});
+
 export const useAppStore = create<AppStore>((set, get) => ({
   // Initial state
   isLoading: false,
@@ -65,47 +73,25 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // Recipe actions
   setRecipes: (recipes: Recipe[]) => {
-    // Ensure all recipes have tags array (never null)
-    const normalizedRecipes = recipes.map(recipe => ({
-      ...recipe,
-      tags: recipe.tags || [],
-      ingredients: recipe.ingredients || []
-    }));
+    const normalizedRecipes = recipes.map(normalizeRecipe);
     set({ recipes: normalizedRecipes });
     get().getFilteredRecipes();
   },
   
   setCurrentRecipe: (recipe: Recipe | null) => {
-    // Normalize current recipe as well
-    if (recipe) {
-      const normalizedRecipe = {
-        ...recipe,
-        tags: recipe.tags || [],
-        ingredients: recipe.ingredients || []
-      };
-      set({ currentRecipe: normalizedRecipe });
-    } else {
-      set({ currentRecipe: null });
-    }
+    const normalizedRecipe = recipe ? normalizeRecipe(recipe) : null;
+    set({ currentRecipe: normalizedRecipe });
   },
   
   addRecipe: (recipe: Recipe) => {
-    const normalizedRecipe = {
-      ...recipe,
-      tags: recipe.tags || [],
-      ingredients: recipe.ingredients || []
-    };
+    const normalizedRecipe = normalizeRecipe(recipe);
     const recipes = [...get().recipes, normalizedRecipe];
     set({ recipes });
     get().getFilteredRecipes();
   },
   
   updateRecipe: (updatedRecipe: Recipe) => {
-    const normalizedRecipe = {
-      ...updatedRecipe,
-      tags: updatedRecipe.tags || [],
-      ingredients: updatedRecipe.ingredients || []
-    };
+    const normalizedRecipe = normalizeRecipe(updatedRecipe);
     
     const recipes = get().recipes.map(recipe =>
       recipe.id === normalizedRecipe.id ? normalizedRecipe : recipe
@@ -189,42 +175,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(recipe => {
-        // Safely check all searchable fields with null checks
+        // Search in basic fields
         const title = recipe.title?.toLowerCase() || '';
         const description = recipe.description?.toLowerCase() || '';
         const instructions = recipe.instructions?.toLowerCase() || '';
         
-        // Check basic fields
         if (title.includes(query) || description.includes(query) || instructions.includes(query)) {
           return true;
         }
         
-        // Check ingredients with null safety
-        if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
-          if (recipe.ingredients.some(ing => ing.name?.toLowerCase().includes(query))) {
-            return true;
-          }
+        // Search in ingredients
+        if (recipe.ingredients?.some(ing => ing.name?.toLowerCase().includes(query))) {
+          return true;
         }
         
-        // Check tags with null safety
-        if (recipe.tags && Array.isArray(recipe.tags)) {
-          if (recipe.tags.some(tag => tag.name?.toLowerCase().includes(query))) {
-            return true;
-          }
+        // Search in tags
+        if (recipe.tags?.some(tag => tag.name?.toLowerCase().includes(query))) {
+          return true;
         }
         
         return false;
       });
     }
 
-    // Apply tag filter with null safety
+    // Apply tag filter
     if (activeTagId) {
       filtered = filtered.filter(recipe => {
-        // Ensure recipe.tags exists and is an array
-        if (!recipe.tags || !Array.isArray(recipe.tags)) {
-          return false;
-        }
-        return recipe.tags.some(tag => tag && tag.id === activeTagId);
+        return recipe.tags?.some(tag => tag.id === activeTagId) || false;
       });
     }
 

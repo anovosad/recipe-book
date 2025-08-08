@@ -10,9 +10,9 @@ import Navigation from './components/Navigation';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
-import HomePage from './pages/HomePage'; // Keep HomePage as non-lazy since it's the landing page
+import HomePage from './pages/HomePage';
 
-// Lazy imports
+// Lazy imports for code splitting
 import {
   RecipesPage,
   RecipeDetailPage,
@@ -29,7 +29,7 @@ const App: React.FC = () => {
   const { initialize, isLoading, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
-    // Initialize auth in background - don't block rendering
+    // Initialize auth on app startup
     initialize();
   }, [initialize]);
 
