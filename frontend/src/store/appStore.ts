@@ -65,27 +65,56 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   // Recipe actions
   setRecipes: (recipes: Recipe[]) => {
-    set({ recipes });
+    // Ensure all recipes have tags array (never null)
+    const normalizedRecipes = recipes.map(recipe => ({
+      ...recipe,
+      tags: recipe.tags || [],
+      ingredients: recipe.ingredients || []
+    }));
+    set({ recipes: normalizedRecipes });
     get().getFilteredRecipes();
   },
   
-  setCurrentRecipe: (recipe: Recipe | null) => set({ currentRecipe: recipe }),
+  setCurrentRecipe: (recipe: Recipe | null) => {
+    // Normalize current recipe as well
+    if (recipe) {
+      const normalizedRecipe = {
+        ...recipe,
+        tags: recipe.tags || [],
+        ingredients: recipe.ingredients || []
+      };
+      set({ currentRecipe: normalizedRecipe });
+    } else {
+      set({ currentRecipe: null });
+    }
+  },
   
   addRecipe: (recipe: Recipe) => {
-    const recipes = [...get().recipes, recipe];
+    const normalizedRecipe = {
+      ...recipe,
+      tags: recipe.tags || [],
+      ingredients: recipe.ingredients || []
+    };
+    const recipes = [...get().recipes, normalizedRecipe];
     set({ recipes });
     get().getFilteredRecipes();
   },
   
   updateRecipe: (updatedRecipe: Recipe) => {
+    const normalizedRecipe = {
+      ...updatedRecipe,
+      tags: updatedRecipe.tags || [],
+      ingredients: updatedRecipe.ingredients || []
+    };
+    
     const recipes = get().recipes.map(recipe =>
-      recipe.id === updatedRecipe.id ? updatedRecipe : recipe
+      recipe.id === normalizedRecipe.id ? normalizedRecipe : recipe
     );
     set({ recipes });
     
     // Update current recipe if it's the one being updated
-    if (get().currentRecipe?.id === updatedRecipe.id) {
-      set({ currentRecipe: updatedRecipe });
+    if (get().currentRecipe?.id === normalizedRecipe.id) {
+      set({ currentRecipe: normalizedRecipe });
     }
     
     get().getFilteredRecipes();
@@ -159,20 +188,44 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(recipe => 
-        recipe.title.toLowerCase().includes(query) ||
-        recipe.description.toLowerCase().includes(query) ||
-        recipe.instructions.toLowerCase().includes(query) ||
-        recipe.ingredients.some(ing => ing.name.toLowerCase().includes(query)) ||
-        recipe.tags.some(tag => tag.name.toLowerCase().includes(query))
-      );
+      filtered = filtered.filter(recipe => {
+        // Safely check all searchable fields with null checks
+        const title = recipe.title?.toLowerCase() || '';
+        const description = recipe.description?.toLowerCase() || '';
+        const instructions = recipe.instructions?.toLowerCase() || '';
+        
+        // Check basic fields
+        if (title.includes(query) || description.includes(query) || instructions.includes(query)) {
+          return true;
+        }
+        
+        // Check ingredients with null safety
+        if (recipe.ingredients && Array.isArray(recipe.ingredients)) {
+          if (recipe.ingredients.some(ing => ing.name?.toLowerCase().includes(query))) {
+            return true;
+          }
+        }
+        
+        // Check tags with null safety
+        if (recipe.tags && Array.isArray(recipe.tags)) {
+          if (recipe.tags.some(tag => tag.name?.toLowerCase().includes(query))) {
+            return true;
+          }
+        }
+        
+        return false;
+      });
     }
 
-    // Apply tag filter
+    // Apply tag filter with null safety
     if (activeTagId) {
-      filtered = filtered.filter(recipe =>
-        recipe.tags.some(tag => tag.id === activeTagId)
-      );
+      filtered = filtered.filter(recipe => {
+        // Ensure recipe.tags exists and is an array
+        if (!recipe.tags || !Array.isArray(recipe.tags)) {
+          return false;
+        }
+        return recipe.tags.some(tag => tag && tag.id === activeTagId);
+      });
     }
 
     set({ filteredRecipes: filtered });
