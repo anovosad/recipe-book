@@ -99,6 +99,10 @@ export interface ApiResponse<T = any> {
   error?: string;
   data?: T;
   redirect?: string;
+  // Additional properties for specific error cases
+  usedInRecipes?: boolean;
+  recipeCount?: number;
+  recipeNames?: string[];
 }
 
 export interface SearchResponse {

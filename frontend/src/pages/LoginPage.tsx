@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { LogIn, User, Lock, Alert } from 'lucide-react';
+import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { LoginForm } from '@/types';
 import { Card, Input, Button, Alert as AlertComponent } from '@/components/ui';
