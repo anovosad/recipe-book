@@ -68,12 +68,20 @@ const RecipeFormPage: React.FC = () => {
     }
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control,
     name: 'ingredients'
   });
 
   const watchedImages = watch('images');
+  const currentFormValues = watch(); // Debug: watch all form values
+
+  // Debug: Log current form values when they change
+  useEffect(() => {
+    if (isEditMode && recipe) {
+      console.log('Current form values:', currentFormValues);
+    }
+  }, [currentFormValues, isEditMode, recipe]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -99,7 +107,6 @@ const RecipeFormPage: React.FC = () => {
 
         if (recipeData) {
           setRecipe(recipeData);
-          populateForm(recipeData);
         }
       } catch (error) {
         console.error('Failed to load data:', error);
@@ -114,6 +121,61 @@ const RecipeFormPage: React.FC = () => {
 
     loadData();
   }, [id, isEditMode, navigate]);
+
+  const populateForm = React.useCallback((recipeData: Recipe) => {
+    console.log('Populating form with recipe data:', recipeData);
+    console.log('Available ingredients:', ingredients.length);
+    console.log('Available tags:', tags.length);
+
+    // Set basic fields using setValue (more reliable for individual fields)
+    setValue('title', recipeData.title || '');
+    setValue('description', recipeData.description || '');
+    setValue('instructions', recipeData.instructions || '');
+    setValue('prep_time', recipeData.prep_time || 0);
+    setValue('cook_time', recipeData.cook_time || 0);
+    setValue('servings', recipeData.servings || 4);
+    setValue('serving_unit', recipeData.serving_unit || 'people');
+
+    // Handle ingredients using replace method for field array
+    if (recipeData.ingredients && recipeData.ingredients.length > 0) {
+      const ingredientsData = recipeData.ingredients.map(ing => ({
+        ingredient_id: ing.ingredient_id || 0,
+        quantity: ing.quantity || 0,
+        unit: ing.unit || ''
+      }));
+      console.log('Setting ingredients:', ingredientsData);
+      replace(ingredientsData);
+    } else {
+      // Ensure at least one ingredient field
+      replace([{ ingredient_id: 0, quantity: 0, unit: '' }]);
+    }
+
+    // Handle tags - set both form value and UI state
+    if (recipeData.tags && recipeData.tags.length > 0) {
+      const tagIds = recipeData.tags.map(tag => tag.id);
+      setValue('tags', tagIds);
+      setSelectedTags(new Set(tagIds));
+      console.log('Setting tags:', tagIds);
+    } else {
+      setValue('tags', []);
+      setSelectedTags(new Set());
+    }
+
+    console.log('Form population complete');
+  }, [setValue, replace, ingredients.length, tags.length]);
+
+
+  // Separate effect to populate form once all dependencies are loaded
+  useEffect(() => {
+    if (recipe && !isLoadingData) {
+      console.log('All data loaded, populating form...');
+      console.log('Recipe to populate:', recipe);
+      // Small delay to ensure form is ready
+      setTimeout(() => {
+        populateForm(recipe);
+      }, 50);
+    }
+  }, [recipe, isLoadingData, populateForm]);
 
   // Handle image preview
   useEffect(() => {
@@ -141,25 +203,7 @@ const RecipeFormPage: React.FC = () => {
     }
   }, [watchedImages]);
 
-  const populateForm = (recipeData: Recipe) => {
-    setValue('title', recipeData.title);
-    setValue('description', recipeData.description);
-    setValue('instructions', recipeData.instructions);
-    setValue('prep_time', recipeData.prep_time);
-    setValue('cook_time', recipeData.cook_time);
-    setValue('servings', recipeData.servings);
-    setValue('serving_unit', recipeData.serving_unit);
-    setValue('ingredients', recipeData.ingredients.map(ing => ({
-      ingredient_id: ing.ingredient_id,
-      quantity: ing.quantity,
-      unit: ing.unit
-    })));
-    
-    const tagIds = new Set(recipeData.tags.map(tag => tag.id));
-    setSelectedTags(tagIds);
-    setValue('tags', Array.from(tagIds));
-  };
-
+  
   const onSubmit = async (data: FormData) => {
     setIsLoading(true);
     
@@ -356,6 +400,14 @@ const RecipeFormPage: React.FC = () => {
         {/* Basic Information */}
         <Card>
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+          {/* Debug info */}
+          {process.env.NODE_ENV === 'development' && isEditMode && (
+            <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+              <div>Title: {watch('title')}</div>
+              <div>Description: {watch('description')}</div>
+              <div>Instructions: {watch('instructions') ? `${watch('instructions').substring(0, 50)}...` : 'empty'}</div>
+            </div>
+          )}
           <div className="space-y-4">
             <Input
               label="Recipe Title"
@@ -398,7 +450,8 @@ const RecipeFormPage: React.FC = () => {
               min="0"
               {...register('prep_time', {
                 min: { value: 0, message: 'Prep time cannot be negative' },
-                max: { value: 1440, message: 'Prep time cannot exceed 24 hours' }
+                max: { value: 1440, message: 'Prep time cannot exceed 24 hours' },
+                valueAsNumber: true
               })}
               error={errors.prep_time?.message}
               placeholder="0"
@@ -410,7 +463,8 @@ const RecipeFormPage: React.FC = () => {
               min="0"
               {...register('cook_time', {
                 min: { value: 0, message: 'Cook time cannot be negative' },
-                max: { value: 1440, message: 'Cook time cannot exceed 24 hours' }
+                max: { value: 1440, message: 'Cook time cannot exceed 24 hours' },
+                valueAsNumber: true
               })}
               error={errors.cook_time?.message}
               placeholder="0"
@@ -424,7 +478,8 @@ const RecipeFormPage: React.FC = () => {
               {...register('servings', {
                 required: 'Number of servings is required',
                 min: { value: 1, message: 'Must serve at least 1' },
-                max: { value: 100, message: 'Cannot exceed 100 servings' }
+                max: { value: 100, message: 'Cannot exceed 100 servings' },
+                valueAsNumber: true
               })}
               error={errors.servings?.message}
               placeholder="4"
@@ -467,7 +522,8 @@ const RecipeFormPage: React.FC = () => {
                   <Select
                     label={index === 0 ? "Ingredient" : ""}
                     {...register(`ingredients.${index}.ingredient_id` as const, {
-                      required: 'Please select an ingredient'
+                      required: 'Please select an ingredient',
+                      valueAsNumber: true
                     })}
                     options={[
                       { value: '0', label: 'Select ingredient...' },
@@ -478,6 +534,12 @@ const RecipeFormPage: React.FC = () => {
                     ]}
                     error={errors.ingredients?.[index]?.ingredient_id?.message}
                   />
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Value: {watch(`ingredients.${index}.ingredient_id`)}
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-24">
@@ -489,7 +551,8 @@ const RecipeFormPage: React.FC = () => {
                     {...register(`ingredients.${index}.quantity` as const, {
                       required: 'Quantity is required',
                       min: { value: 0.1, message: 'Must be greater than 0' },
-                      max: { value: 10000, message: 'Quantity too large' }
+                      max: { value: 10000, message: 'Quantity too large' },
+                      valueAsNumber: true
                     })}
                     error={errors.ingredients?.[index]?.quantity?.message}
                     placeholder="0"
@@ -523,6 +586,12 @@ const RecipeFormPage: React.FC = () => {
                     ]}
                     error={errors.ingredients?.[index]?.unit?.message}
                   />
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Unit: {watch(`ingredients.${index}.unit`)}
+                    </div>
+                  )}
                 </div>
 
                 <Button

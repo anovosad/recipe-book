@@ -210,9 +210,9 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
           <span>by {recipe.author_name}</span>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons - ALWAYS VISIBLE for owners */}
         {showActions && isOwner && (onEdit || onDelete) && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1">
             {onEdit && (
               <Button
                 size="sm"

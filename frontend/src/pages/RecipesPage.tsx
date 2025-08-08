@@ -316,7 +316,7 @@ const RecipesPage: React.FC = () => {
   );
 };
 
-// Optimized Recipe Card Component
+// Optimized Recipe Card Component - FIXED to always show buttons
 interface RecipeCardProps {
   recipe: Recipe;
   isOwner: boolean;
@@ -379,9 +379,9 @@ const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, isOwner, onD
           </div>
         )}
 
-        {/* Actions */}
+        {/* Actions - ALWAYS VISIBLE for owners */}
         {isOwner && (
-          <div className="flex items-center gap-2 pt-2 border-t opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-2 pt-2 border-t">
             <Button
               as={Link}
               to={`/recipe/${recipe.id}/edit`}
