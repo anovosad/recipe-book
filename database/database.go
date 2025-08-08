@@ -10,6 +10,7 @@ import (
 	"recipe-book/models"
 	"recipe-book/utils"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
@@ -38,26 +39,20 @@ func InitDB() {
 		dbPath = "./recipes.db"
 	}
 
-	log.Print("Opening database at:", dbPath)
+	log.Print("🔌 Opening database at:", dbPath)
 
-	// Ensure the directory exists and is writable
-	dbDir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		log.Printf("Warning: Could not create database directory %s: %v", dbDir, err)
+	// Check if database already exists
+	dbExists := true
+	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+		dbExists = false
 	}
 
-	// Check if we can write to the directory
-	testFile := filepath.Join(dbDir, ".write_test")
-	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
-		log.Printf("Error: Cannot write to database directory %s: %v", dbDir, err)
-		log.Printf("Database directory permissions:")
-		if info, err := os.Stat(dbDir); err == nil {
-			log.Printf("Directory: %s, Mode: %v", dbDir, info.Mode())
+	// Ensure the directory exists and is writable (only if DB doesn't exist)
+	if !dbExists {
+		dbDir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			log.Printf("Warning: Could not create database directory %s: %v", dbDir, err)
 		}
-		log.Fatal("Database directory is not writable")
-	} else {
-		os.Remove(testFile) // Clean up test file
-		log.Printf("✅ Database directory %s is writable", dbDir)
 	}
 
 	DB, err = sql.Open("sqlite", dbPath)
@@ -65,33 +60,45 @@ func InitDB() {
 		log.Fatal("Failed to open database:", err)
 	}
 
-	// Set connection pool settings for security
-	DB.SetMaxOpenConns(25)
-	DB.SetMaxIdleConns(25)
-	DB.SetConnMaxLifetime(0)
+	// Set connection pool settings for performance
+	DB.SetMaxOpenConns(10) // Reduced for startup speed
+	DB.SetMaxIdleConns(5)
+	DB.SetConnMaxLifetime(5 * time.Minute)
 
-	// Enable foreign keys and other security settings
+	// Enable WAL mode and other pragmas for performance
 	_, err = DB.Exec(`
-		PRAGMA foreign_keys = ON;
 		PRAGMA journal_mode = WAL;
 		PRAGMA synchronous = NORMAL;
-		PRAGMA cache_size = 1000;
+		PRAGMA cache_size = 2000;
 		PRAGMA temp_store = memory;
 		PRAGMA mmap_size = 268435456;
+		PRAGMA foreign_keys = ON;
 	`)
 	if err != nil {
-		log.Fatal("Failed to set database pragmas:", err)
+		log.Printf("Warning: Failed to set some database pragmas: %v", err)
 	}
 
-	migrateDatabase()
-	createTables()
-	prepareStatements()
-	insertDefaultIngredients()
-	insertDefaultTags()
-	os.MkdirAll("./uploads", 0755)
-	insertDefaultRecipes()
+	// Only run heavy initialization if database is new
+	if !dbExists {
+		log.Println("📊 Setting up new database...")
+		migrateDatabase()
+		createTables()
+		insertDefaultIngredients()
+		insertDefaultTags()
+		os.MkdirAll("./uploads", 0755)
+		insertDefaultRecipes()
+		fmt.Println("✅ New database initialized successfully")
+	} else {
+		log.Println("📊 Using existing database...")
+		// Just ensure tables exist and run critical migrations
+		createTables()        // This is idempotent
+		migrateServingUnits() // Run any necessary migrations
+	}
 
-	fmt.Println("✅ Database initialized successfully with security enhancements")
+	// Prepare statements after database is ready
+	prepareStatements()
+
+	fmt.Println("🚀 Database ready for connections")
 }
 
 func prepareStatements() {

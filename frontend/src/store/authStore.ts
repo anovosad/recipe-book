@@ -16,6 +16,35 @@ export const useAuthStore = create<AuthStore>()(
       isLoading: false,
 
       initialize: async () => {
+        // Check localStorage first for faster startup
+        const persistedState = localStorage.getItem('recipe-book-auth');
+        if (persistedState) {
+          try {
+            const { state } = JSON.parse(persistedState);
+            if (state?.user && state?.isAuthenticated) {
+              set({ 
+                user: state.user, 
+                isAuthenticated: true, 
+                isLoading: false 
+              });
+              
+              // Verify in background
+              setTimeout(async () => {
+                try {
+                  await apiService.checkAuth();
+                } catch (error) {
+                  set({ user: null, isAuthenticated: false });
+                }
+              }, 100);
+              
+              return;
+            }
+          } catch (error) {
+            console.warn('Failed to parse persisted auth state');
+          }
+        }
+
+        // If no valid persisted state, check with server
         set({ isLoading: true });
         try {
           const user = await apiService.checkAuth();

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
@@ -10,22 +10,26 @@ import Navigation from './components/Navigation';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
+import HomePage from './pages/HomePage'; // Keep HomePage as non-lazy since it's the landing page
 
-// Page imports
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import RecipesPage from './pages/RecipesPage';
-import RecipeDetailPage from './pages/RecipeDetailPage';
-import RecipeFormPage from './pages/RecipeFormPage';
-import IngredientsPage from './pages/IngredientsPage';
-import TagsPage from './pages/TagsPage';
+// Lazy imports
+import {
+  RecipesPage,
+  RecipeDetailPage,
+  RecipeFormPage,
+  IngredientsPage,
+  TagsPage,
+  LoginPage,
+  RegisterPage,
+  PageLoader
+} from './components/LazyComponents';
 import NotFoundPage from './pages/NotFoundPage';
 
 const App: React.FC = () => {
   const { initialize, isLoading, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
+    // Initialize auth in background - don't block rendering
     initialize();
   }, [initialize]);
 
@@ -44,49 +48,51 @@ const App: React.FC = () => {
           <Navigation />
           
           <main className="container mx-auto px-4 py-6">
-            <Routes>
-              {/* Public routes */}
-              <Route path="/" element={<HomePage />} />
-              <Route path="/recipes" element={<RecipesPage />} />
-              <Route path="/recipe/:id" element={<RecipeDetailPage />} />
-              <Route path="/ingredients" element={<IngredientsPage />} />
-              <Route path="/tags" element={<TagsPage />} />
-              
-              {/* Auth routes - redirect if already authenticated */}
-              <Route 
-                path="/login" 
-                element={
-                  isAuthenticated ? <Navigate to="/recipes" replace /> : <LoginPage />
-                } 
-              />
-              <Route 
-                path="/register" 
-                element={
-                  isAuthenticated ? <Navigate to="/recipes" replace /> : <RegisterPage />
-                } 
-              />
-              
-              {/* Protected routes */}
-              <Route
-                path="/recipe/new"
-                element={
-                  <PrivateRoute>
-                    <RecipeFormPage />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/recipe/:id/edit"
-                element={
-                  <PrivateRoute>
-                    <RecipeFormPage />
-                  </PrivateRoute>
-                }
-              />
-              
-              {/* 404 route */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/" element={<HomePage />} />
+                <Route path="/recipes" element={<RecipesPage />} />
+                <Route path="/recipe/:id" element={<RecipeDetailPage />} />
+                <Route path="/ingredients" element={<IngredientsPage />} />
+                <Route path="/tags" element={<TagsPage />} />
+                
+                {/* Auth routes - redirect if already authenticated */}
+                <Route 
+                  path="/login" 
+                  element={
+                    isAuthenticated ? <Navigate to="/recipes" replace /> : <LoginPage />
+                  } 
+                />
+                <Route 
+                  path="/register" 
+                  element={
+                    isAuthenticated ? <Navigate to="/recipes" replace /> : <RegisterPage />
+                  } 
+                />
+                
+                {/* Protected routes */}
+                <Route
+                  path="/recipe/new"
+                  element={
+                    <PrivateRoute>
+                      <RecipeFormPage />
+                    </PrivateRoute>
+                  }
+                />
+                <Route
+                  path="/recipe/:id/edit"
+                  element={
+                    <PrivateRoute>
+                      <RecipeFormPage />
+                    </PrivateRoute>
+                  }
+                />
+                
+                {/* 404 route */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
           </main>
           
           {/* Toast notifications */}

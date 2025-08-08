@@ -17,64 +17,28 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
     
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Preload critical font -->
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"></noscript>
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                    },
-                    colors: {
-                        primary: {
-                            50: '#fef2f2',
-                            100: '#fee2e2',
-                            200: '#fecaca',
-                            300: '#fca5a5',
-                            400: '#f87171',
-                            500: '#ef4444',
-                            600: '#dc2626',
-                            700: '#b91c1c',
-                            800: '#991b1b',
-                            900: '#7f1d1d',
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.3s ease-out',
-                        'slide-in-up': 'slideInUp 0.3s ease-out',
-                        'slide-in-down': 'slideInDown 0.3s ease-out',
-                        'scale-in': 'scaleIn 0.2s ease-out',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' }
-                        },
-                        slideInUp: {
-                            '0%': { transform: 'translateY(20px)', opacity: '0' },
-                            '100%': { transform: 'translateY(0)', opacity: '1' }
-                        },
-                        slideInDown: {
-                            '0%': { transform: 'translateY(-20px)', opacity: '0' },
-                            '100%': { transform: 'translateY(0)', opacity: '1' }
-                        },
-                        scaleIn: {
-                            '0%': { transform: 'scale(0.9)', opacity: '0' },
-                            '100%': { transform: 'scale(1)', opacity: '1' }
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- Loading Styles -->
+    <!-- Critical CSS inline (add this for above-the-fold styles) -->
     <style>
-        /* Loading screen */
+        /* Inline critical CSS here */
+        body { margin: 0; font-family: Inter, system-ui, sans-serif; }
+        .min-h-screen { min-height: 100vh; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-center { justify-content: center; }
+    </style>
+    
+    <!-- Tailwind CSS - Load async -->
+    <link rel="preload" href="https://cdn.tailwindcss.com" as="script">
+    <script src="https://cdn.tailwindcss.com" async></script>
+    
+    <!-- Remove tailwind.config from here, move to separate file -->
+    
+    <!-- Simplified loading styles -->
+    <style>
         #loading-screen {
             position: fixed;
             top: 0;
@@ -87,12 +51,7 @@
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            transition: opacity 0.5s ease-out;
-        }
-        
-        #loading-screen.fade-out {
-            opacity: 0;
-            pointer-events: none;
+            transition: opacity 0.3s ease-out;
         }
         
         .loading-spinner {
@@ -109,124 +68,61 @@
             100% { transform: rotate(360deg); }
         }
         
-        .loading-text {
-            margin-top: 1rem;
-            color: #dc2626;
-            font-weight: 500;
-            font-family: Inter, system-ui, sans-serif;
-        }
-
-        /* Hide content until loaded */
-        #root {
-            opacity: 0;
-            transition: opacity 0.3s ease-in;
-        }
-
-        #root.loaded {
-            opacity: 1;
-        }
-        
-        /* Error fallback styles */
-        .error-fallback {
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-            background: linear-gradient(135deg, #fef2f2, #fee2e2);
-        }
-        
-        .error-card {
-            background: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 400px;
-        }
+        #root { opacity: 0; transition: opacity 0.2s ease-in; }
+        #root.loaded { opacity: 1; }
     </style>
 </head>
 <body>
-    <!-- Loading Screen -->
+    <!-- Simplified loading screen -->
     <div id="loading-screen">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-red-600 mb-4">
-            <path d="M3 2l2.01.01L6.5 7H21l-3.5 7H8l-1.5-3H5l-1.5 3H1L3 2zM7 18c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm10 0c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M12 6v6m-3-3h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
         <div class="loading-spinner"></div>
-        <div class="loading-text">Loading Recipe Book...</div>
+        <div style="margin-top: 1rem; color: #dc2626; font-weight: 500;">Loading...</div>
     </div>
 
-    <!-- React App Root -->
     <div id="root">
-        <!-- Fallback content for when JavaScript is disabled -->
         <noscript>
-            <div class="error-fallback">
-                <div class="error-card">
+            <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+                <div style="background: white; padding: 2rem; border-radius: 1rem; text-align: center; max-width: 400px;">
                     <h1 style="color: #dc2626; margin-bottom: 1rem;">JavaScript Required</h1>
                     <p style="color: #6b7280; margin-bottom: 1.5rem;">
                         Recipe Book requires JavaScript to run. Please enable JavaScript in your browser to continue.
                     </p>
-                    <a href="https://enable-javascript.com/" 
-                       style="color: #dc2626; text-decoration: underline;">
-                        Learn how to enable JavaScript
-                    </a>
                 </div>
             </div>
         </noscript>
     </div>
 
+    <!-- Module preloading for main app -->
+    <link rel="modulepreload" href="/src/main.tsx">
+    
     <!-- Scripts -->
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Loading Script -->
+    <!-- Optimized loading script -->
     <script>
-        // Hide loading screen when app is ready
-        window.addEventListener('DOMContentLoaded', function() {
-            const root = document.getElementById('root');
-            const loadingScreen = document.getElementById('loading-screen');
-            
-            // Function to hide loading screen
-            function hideLoadingScreen() {
-                loadingScreen.classList.add('fade-out');
-                root.classList.add('loaded');
-                
-                setTimeout(function() {
-                    loadingScreen.style.display = 'none';
-                }, 500);
-            }
-            
-            // Hide loading screen after a short delay or when React app is ready
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === 'childList' && root.children.length > 1) {
-                        hideLoadingScreen();
-                        observer.disconnect();
-                    }
-                });
-            });
-            
-            observer.observe(root, { childList: true, subtree: true });
-            
-            // Fallback: hide loading screen after 3 seconds
-            setTimeout(hideLoadingScreen, 3000);
-        });
-
-        // Global error handler
-        window.addEventListener('error', function(e) {
-            console.error('Global error:', e.error);
-            
-            // Hide loading screen if there's an error
-            const loadingScreen = document.getElementById('loading-screen');
+        const root = document.getElementById('root');
+        const loadingScreen = document.getElementById('loading-screen');
+        
+        function hideLoadingScreen() {
             if (loadingScreen) {
-                loadingScreen.style.display = 'none';
+                loadingScreen.style.opacity = '0';
+                root.classList.add('loaded');
+                setTimeout(() => loadingScreen.style.display = 'none', 300);
+            }
+        }
+        
+        // Hide loading screen when React mounts
+        const observer = new MutationObserver((mutations) => {
+            if (root.children.length > 1) {
+                hideLoadingScreen();
+                observer.disconnect();
             }
         });
-
-        // Unhandled promise rejection handler
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('Unhandled promise rejection:', e.reason);
-        });
+        
+        observer.observe(root, { childList: true });
+        
+        // Fallback timeout
+        setTimeout(hideLoadingScreen, 2000);
     </script>
 </body>
 </html>

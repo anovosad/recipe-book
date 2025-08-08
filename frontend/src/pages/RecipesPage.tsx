@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { FixedSizeList as List } from 'react-window';
 import { 
   Plus, 
   Search, 
@@ -13,33 +14,42 @@ import {
   Tag as TagIcon
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useOptimizedRecipes, useOptimizedTags } from '@/hooks/useOptimizedData';
 import { useAppStore } from '@/store/appStore';
 import apiService from '@/services/api';
-import { Recipe, Tag } from '@/types';
+import { Recipe } from '@/types';
 import { formatTime, debounce } from '@/utils';
 import { Card, Button, Input, LoadingSpinner, EmptyState } from '@/components/ui';
 import toast from 'react-hot-toast';
 
+const ITEM_HEIGHT = 200; // Height of each recipe card
+const CONTAINER_HEIGHT = 600; // Height of virtualized container
+
 const RecipesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
+  
+  // Use optimized data hooks
+  const { recipes, isLoading: recipesLoading, loadRecipes } = useOptimizedRecipes();
+  const { tags, loadTags } = useOptimizedTags();
+  
   const { 
-    recipes, 
-    tags, 
     searchQuery, 
     activeTagId,
-    filteredRecipes,
-    setRecipes, 
-    setTags, 
     setSearchQuery, 
     setActiveTagId,
     deleteRecipe,
     getFilteredRecipes
   } = useAppStore();
 
-  const [isLoading, setIsLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
+
+  // Load data on mount
+  useEffect(() => {
+    loadRecipes();
+    loadTags();
+  }, [loadRecipes, loadTags]);
 
   // Initialize from URL params
   useEffect(() => {
@@ -51,8 +61,13 @@ const RecipesPage: React.FC = () => {
     setActiveTagId(tagId ? parseInt(tagId) : null);
   }, [searchParams, setSearchQuery, setActiveTagId]);
 
+  // Memoized filtered recipes for performance
+  const filteredRecipes = useMemo(() => {
+    return getFilteredRecipes();
+  }, [recipes, searchQuery, activeTagId, getFilteredRecipes]);
+
   // Debounced search function
-  const debouncedSearch = React.useMemo(
+  const debouncedSearch = useMemo(
     () => debounce((query: string) => {
       setSearchQuery(query);
       updateUrlParams(query, activeTagId);
@@ -77,31 +92,6 @@ const RecipesPage: React.FC = () => {
     setSearchParams(paramString ? params : {}, { replace: true });
   };
 
-  // Load data
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      try {
-        const [recipesData, tagsData] = await Promise.all([
-          apiService.getRecipes(),
-          apiService.getTags()
-        ]);
-        
-        setRecipes(Array.isArray(recipesData) ? recipesData : []);
-        setTags(Array.isArray(tagsData) ? tagsData : []);
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        toast.error('Failed to load recipes');
-        setRecipes([]);
-        setTags([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadData();
-  }, [setRecipes, setTags]);
-
   // Handle tag filter
   const handleTagFilter = (tagId: number | null) => {
     setActiveTagId(tagId);
@@ -118,7 +108,7 @@ const RecipesPage: React.FC = () => {
 
   // Delete recipe handler
   const handleDeleteRecipe = async (recipeId: number, recipeName: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${recipeName}"? This action cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to delete "${recipeName}"?`)) {
       return;
     }
 
@@ -126,7 +116,7 @@ const RecipesPage: React.FC = () => {
       const response = await apiService.deleteRecipe(recipeId);
       if (response.success) {
         deleteRecipe(recipeId);
-        toast.success(response.message || 'Recipe deleted successfully');
+        toast.success('Recipe deleted successfully');
       } else {
         toast.error(response.error || 'Failed to delete recipe');
       }
@@ -136,16 +126,31 @@ const RecipesPage: React.FC = () => {
     }
   };
 
-  // Get active tag name
-  const activeTag = tags.find(tag => tag.id === activeTagId);
+  // Virtualized row renderer
+  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+    const recipe = filteredRecipes[index];
+    if (!recipe) return null;
 
-  if (isLoading) {
+    return (
+      <div style={style} className="px-2 py-1">
+        <RecipeCard
+          recipe={recipe}
+          isOwner={user?.id === recipe.created_by}
+          onDelete={handleDeleteRecipe}
+        />
+      </div>
+    );
+  };
+
+  if (recipesLoading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
+
+  const activeTag = tags.find(tag => tag.id === activeTagId);
 
   return (
     <div className="space-y-6">
@@ -186,7 +191,6 @@ const RecipesPage: React.FC = () => {
       {/* Search and Filters */}
       <Card>
         <div className="space-y-4">
-          {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
@@ -197,7 +201,6 @@ const RecipesPage: React.FC = () => {
             />
           </div>
 
-          {/* Filter Tags */}
           {(showFilters || activeTagId || searchQuery) && (
             <div className="border-t pt-4">
               <div className="flex items-center justify-between mb-3">
@@ -254,17 +257,36 @@ const RecipesPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Recipes Grid */}
+      {/* Recipes List */}
       {filteredRecipes.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredRecipes.map(recipe => (
-            <RecipeCard
-              key={recipe.id}
-              recipe={recipe}
-              isOwner={user?.id === recipe.created_by}
-              onDelete={handleDeleteRecipe}
-            />
-          ))}
+        <div className="space-y-4">
+          {/* Use virtualization for large lists */}
+          {filteredRecipes.length > 20 ? (
+            <div>
+              <p className="text-sm text-gray-600 mb-4">
+                Showing {filteredRecipes.length} recipes (virtualized for performance)
+              </p>
+              <List
+                height={CONTAINER_HEIGHT}
+                itemCount={filteredRecipes.length}
+                itemSize={ITEM_HEIGHT}
+                className="border rounded-lg"
+              >
+                {Row}
+              </List>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredRecipes.map(recipe => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  isOwner={user?.id === recipe.created_by}
+                  onDelete={handleDeleteRecipe}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <EmptyState
@@ -294,14 +316,14 @@ const RecipesPage: React.FC = () => {
   );
 };
 
-// Recipe Card Component
+// Optimized Recipe Card Component
 interface RecipeCardProps {
   recipe: Recipe;
   isOwner: boolean;
   onDelete: (id: number, name: string) => void;
 }
 
-const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, isOwner, onDelete }) => {
+const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, isOwner, onDelete }) => {
   return (
     <Card className="group hover:shadow-xl transition-shadow duration-300">
       <div className="space-y-4">
@@ -382,6 +404,6 @@ const RecipeCard: React.FC<RecipeCardProps> = ({ recipe, isOwner, onDelete }) =>
       </div>
     </Card>
   );
-};
+});
 
 export default RecipesPage;

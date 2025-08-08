@@ -15,12 +15,29 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          router: ['react-router-dom'],
-          icons: ['lucide-react']
-        }
+          // Vendor libraries
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-router': ['react-router-dom'],
+          'vendor-forms': ['react-hook-form'],
+          'vendor-ui': ['lucide-react', 'react-hot-toast'],
+          'vendor-http': ['axios'],
+          'vendor-state': ['zustand']
+        },
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
       }
-    }
+    },
+    // Enable compression and minification
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.logs in production
+        drop_debugger: true
+      }
+    },
+    // Reduce chunk size warning limit
+    chunkSizeWarningLimit: 1000
   },
   server: {
     port: 3000,

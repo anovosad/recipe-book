@@ -10,6 +10,7 @@ import (
 	"recipe-book/handlers"
 	"recipe-book/middleware"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -21,87 +22,106 @@ func main() {
 		return
 	}
 
-	// Initialize components
-	database.InitDB()
+	// Initialize database in background
+	go func() {
+		database.InitDB()
+		log.Println("✅ Database initialization completed")
+	}()
 
-	// Initialize security manager
-	securityConfig := middleware.DefaultRateLimitConfig()
-	securityManager := middleware.NewSecurityManager(securityConfig)
-
-	// Create router
+	// Create router immediately
 	r := mux.NewRouter()
 
 	// Apply global middleware (order matters!)
-	r.Use(middleware.CORSMiddleware()) // Add CORS support
+	r.Use(middleware.CORSMiddleware())
 	r.Use(middleware.SecurityHeaders())
+	r.Use(middleware.CacheHeaders())          // Add caching middleware
+	r.Use(middleware.CompressionMiddleware()) // Add compression
 	r.Use(middleware.RequestLogging())
+
+	// Initialize security manager with lighter config for startup
+	securityConfig := middleware.LightRateLimitConfig() // Use lighter config
+	securityManager := middleware.NewSecurityManager(securityConfig)
 	r.Use(securityManager.AddSecurityContext())
 	r.Use(middleware.SQLInjectionProtection())
 	r.Use(securityManager.GeneralRateLimit(securityConfig))
 
-	// Health check endpoint
-	r.HandleFunc("/health", healthCheckHandler).Methods("GET")
+	// Health check endpoint (no database dependency)
+	r.HandleFunc("/health", quickHealthCheckHandler).Methods("GET")
 
 	// API routes with specific rate limiting
+	setupAPIRoutes(r, securityManager, securityConfig)
 
-	// Authentication API routes (with stricter rate limiting)
+	// Static file serving with caching
+	setupStaticRoutes(r)
+
+	// SPA fallback
+	setupSPAFallback(r)
+
+	fmt.Println("🚀 Recipe Book Server starting on :8080 (Fast Mode)")
+	fmt.Println("📦 Database initializing in background...")
+	log.Fatal(http.ListenAndServe(":8080", r))
+}
+
+func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager, config *middleware.RateLimitConfig) {
+	// Authentication API routes
 	loginRouter := r.PathPrefix("/api").Subrouter()
-	loginRouter.Use(securityManager.LoginRateLimit(securityConfig))
+	loginRouter.Use(sm.LoginRateLimit(config))
 	loginRouter.HandleFunc("/login", handlers.LoginHandler).Methods("POST")
 
 	registerRouter := r.PathPrefix("/api").Subrouter()
-	registerRouter.Use(securityManager.RegisterRateLimit(securityConfig))
+	registerRouter.Use(sm.RegisterRateLimit(config))
 	registerRouter.HandleFunc("/register", handlers.RegisterHandler).Methods("POST")
 
-	// Search API (with search-specific rate limiting)
+	// Search API
 	searchRouter := r.PathPrefix("/api").Subrouter()
-	searchRouter.Use(securityManager.SearchRateLimit(securityConfig))
+	searchRouter.Use(sm.SearchRateLimit(config))
 	searchRouter.HandleFunc("/search", handlers.SearchHandler).Methods("GET")
 
-	// Other API routes (protected by general rate limiting)
+	// Other API routes
 	r.HandleFunc("/api/logout", handlers.LogoutHandler).Methods("POST")
 	r.HandleFunc("/api/auth/check", handlers.CheckAuthHandler).Methods("GET")
 
-	// Recipe API routes (JSON only)
+	// Recipe API routes
 	r.HandleFunc("/api/recipes", handlers.GetRecipesHandler).Methods("GET")
 	r.HandleFunc("/api/recipes", handlers.CreateRecipeHandler).Methods("POST")
 	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.GetRecipeHandler).Methods("GET")
 	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.UpdateRecipeHandler).Methods("PUT")
 	r.HandleFunc("/api/recipes/{id:[0-9]+}", handlers.DeleteRecipeHandler).Methods("DELETE")
 
-	// Recipe Image API routes (form-data only)
+	// Recipe Image API routes
 	r.HandleFunc("/api/recipes/{id:[0-9]+}/images", handlers.UploadRecipeImagesHandler).Methods("POST")
 	r.HandleFunc("/api/images/{id:[0-9]+}", handlers.DeleteImageHandler).Methods("DELETE")
 
-	// Ingredient API routes (JSON only)
+	// Ingredient API routes
 	r.HandleFunc("/api/ingredients", handlers.GetIngredientsHandler).Methods("GET")
 	r.HandleFunc("/api/ingredients", handlers.CreateIngredientHandler).Methods("POST")
 	r.HandleFunc("/api/ingredients/{id:[0-9]+}", handlers.DeleteIngredientHandler).Methods("DELETE")
 
-	// Tag API routes (JSON only)
+	// Tag API routes
 	r.HandleFunc("/api/tags", handlers.GetTagsHandler).Methods("GET")
 	r.HandleFunc("/api/tags", handlers.CreateTagHandler).Methods("POST")
 	r.HandleFunc("/api/tags/{id:[0-9]+}", handlers.DeleteTagHandler).Methods("DELETE")
+}
 
-	// Serve uploaded images (with some protection)
-	uploadsHandler := http.StripPrefix("/uploads/", http.FileServer(http.Dir("./uploads/")))
+func setupStaticRoutes(r *mux.Router) {
+	// Serve uploaded images with cache headers
+	uploadsHandler := http.StripPrefix("/uploads/", addCacheHeaders(http.FileServer(http.Dir("./uploads/")), 86400)) // 1 day
 	r.PathPrefix("/uploads/").Handler(uploadsHandler)
 
-	// Serve static files from the built React app
+	// Serve static files from React build with aggressive caching
 	staticDir := "./static/dist/"
 
 	// Check if static files exist
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
 		log.Printf("⚠️  Static files not found at %s", staticDir)
-		log.Printf("🛠️  Please build the frontend first:")
-		log.Printf("   cd frontend && npm install && npm run build")
 	}
 
-	// Serve static files (JS, CSS, images, etc.)
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
-	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir(staticDir+"assets/"))))
+	// Serve static assets with long cache
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", addCacheHeaders(http.FileServer(http.Dir(staticDir)), 31536000)))           // 1 year
+	r.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", addCacheHeaders(http.FileServer(http.Dir(staticDir+"assets/")), 31536000))) // 1 year
+}
 
-	// SPA fallback: serve index.html for all non-API routes
+func setupSPAFallback(r *mux.Router) {
 	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Don't serve index.html for API routes or specific file requests
 		if strings.HasPrefix(r.URL.Path, "/api/") ||
@@ -114,56 +134,37 @@ func main() {
 			return
 		}
 
+		staticDir := "./static/dist/"
 		indexPath := filepath.Join(staticDir, "index.html")
 		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
 			http.Error(w, "Frontend not built. Please run 'cd frontend && npm run build'", http.StatusServiceUnavailable)
 			return
 		}
 
+		// Add cache headers for HTML (short cache)
+		w.Header().Set("Cache-Control", "public, max-age=300") // 5 minutes
 		http.ServeFile(w, r, indexPath)
 	})
-
-	fmt.Println("🍳 Recipe Book Server starting on :8080")
-	fmt.Println("🔒 Security middleware enabled:")
-	fmt.Println("   - CORS enabled")
-	fmt.Println("   - Rate limiting: Login, Registration, Search, General")
-	fmt.Println("   - SQL injection protection")
-	fmt.Println("   - Security headers")
-	fmt.Println("   - Request logging")
-	fmt.Println("")
-	fmt.Println("📡 API Endpoints:")
-	fmt.Println("   JSON APIs:")
-	fmt.Println("     - POST   /api/register")
-	fmt.Println("     - POST   /api/login")
-	fmt.Println("     - POST   /api/logout")
-	fmt.Println("     - GET    /api/auth/check")
-	fmt.Println("     - GET    /api/recipes")
-	fmt.Println("     - POST   /api/recipes")
-	fmt.Println("     - GET    /api/recipes/{id}")
-	fmt.Println("     - PUT    /api/recipes/{id}")
-	fmt.Println("     - DELETE /api/recipes/{id}")
-	fmt.Println("     - GET    /api/ingredients")
-	fmt.Println("     - POST   /api/ingredients")
-	fmt.Println("     - DELETE /api/ingredients/{id}")
-	fmt.Println("     - GET    /api/tags")
-	fmt.Println("     - POST   /api/tags")
-	fmt.Println("     - DELETE /api/tags/{id}")
-	fmt.Println("     - GET    /api/search")
-	fmt.Println("     - DELETE /api/images/{id}")
-	fmt.Println("")
-	fmt.Println("   Form-data APIs:")
-	fmt.Println("     - POST   /api/recipes/{id}/images")
-	fmt.Println("")
-	fmt.Println("   Static files:")
-	fmt.Println("     - GET    /uploads/{filename}")
-	fmt.Println("")
-	fmt.Println("📖 Open http://localhost:8080 in your browser")
-	fmt.Printf("📁 Serving static files from: %s\n", staticDir)
-
-	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
-// Health check function for Docker health checks
+// Helper function to add cache headers
+func addCacheHeaders(h http.Handler, maxAge int) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
+		w.Header().Set("Expires", time.Now().Add(time.Duration(maxAge)*time.Second).UTC().Format(http.TimeFormat))
+		h.ServeHTTP(w, r)
+	})
+}
+
+// Quick health check that doesn't depend on database
+func quickHealthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"healthy","service":"recipe-book","timestamp":"` + time.Now().UTC().Format(time.RFC3339) + `"}`))
+}
+
+// Regular health check function for Docker
 func healthCheck() {
 	resp, err := http.Get("http://localhost:8080/health")
 	if err != nil {
@@ -179,12 +180,4 @@ func healthCheck() {
 
 	fmt.Println("Health check passed")
 	os.Exit(0)
-}
-
-// Health check handler
-func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	// Basic health check - you can add database connectivity check here
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"healthy","service":"recipe-book"}`))
 }
