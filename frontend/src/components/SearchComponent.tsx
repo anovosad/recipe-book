@@ -8,8 +8,7 @@ import {
   Clock, 
   Users, 
   Tag as TagIcon,
-  Utensils,
-  ChevronDown
+  Utensils
 } from 'lucide-react';
 import { Recipe, Tag } from '@/types';
 import { Button, Input, Card } from '@/components/ui';
@@ -65,6 +64,10 @@ export const SearchComponent: React.FC<SearchComponentProps> = ({
   useEffect(() => {
     const tag = searchParams.get('tag');
     if (tag) {
+      // The URL is the external system this effect synchronises from, and these
+      // values stay user-editable afterwards, so they cannot simply be derived
+      // during render - which is the alternative the rule is pointing at.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedTags([parseInt(tag)]);
     }
   }, [searchParams]);

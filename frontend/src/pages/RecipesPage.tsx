@@ -56,6 +56,10 @@ const RecipesPage: React.FC = () => {
     const search = searchParams.get('search') || '';
     const tagId = searchParams.get('tag');
     
+    // The URL is the external system this effect synchronises from, and these
+    // values stay user-editable afterwards, so they cannot simply be derived
+    // during render - which is the alternative the rule is pointing at.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalSearchQuery(search);
     setSearchQuery(search);
     setActiveTagId(tagId ? parseInt(tagId) : null);
@@ -64,6 +68,10 @@ const RecipesPage: React.FC = () => {
   // Memoized filtered recipes for performance
   const filteredRecipes = useMemo(() => {
     return getFilteredRecipes();
+    // getFilteredRecipes reads the store itself, so these do not appear in the
+    // body - they are what makes the result recompute when the data or the
+    // filters change. Dropping them would freeze the list on its first value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recipes, searchQuery, activeTagId, getFilteredRecipes]);
 
   // Debounced search function
@@ -72,6 +80,9 @@ const RecipesPage: React.FC = () => {
       setSearchQuery(query);
       updateUrlParams(query, activeTagId);
     }, 300),
+    // updateUrlParams only closes over setSearchParams, which react-router
+    // keeps stable, so it never goes stale here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [setSearchQuery, activeTagId]
   );
 

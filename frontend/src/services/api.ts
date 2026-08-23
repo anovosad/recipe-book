@@ -68,12 +68,17 @@ api.interceptors.response.use(
 );
 
 class ApiService {
-  // Generic API request handler
-  private async request<T>(
+  // Every /api response is the same envelope:
+  //   { success: true,  data, message?, meta? }
+  //   { success: false, error, code, details? }
+  // request() returns the envelope; requestData() unwraps `data` for the calls
+  // that only want the resource. Failures are thrown as the error envelope, so
+  // callers keep reading `error.error` (and now `error.code` / `error.details`).
+  private async request<T = any>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
     data?: any
-  ): Promise<T> {
+  ): Promise<ApiResponse<T>> {
     try {
       const config: any = {
         method,
@@ -88,16 +93,25 @@ class ApiService {
       if (error.response?.data) {
         throw error.response.data;
       }
-      throw { error: error.message || 'Network error occurred' };
+      throw { success: false, error: error.message || 'Network error occurred', code: 'network_error' };
     }
   }
 
+  private async requestData<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    url: string,
+    data?: any
+  ): Promise<T> {
+    const envelope = await this.request<T>(method, url, data);
+    return envelope.data as T;
+  }
+
   // Form data request handler (for image uploads)
-  private async uploadFormData<T>(
+  private async uploadFormData<T = any>(
     method: 'POST' | 'PUT',
     url: string,
     formData: FormData
-  ): Promise<T> {
+  ): Promise<ApiResponse<T>> {
     try {
       const response = await api({
         method,
@@ -112,7 +126,7 @@ class ApiService {
       if (error.response?.data) {
         throw error.response.data;
       }
-      throw { error: error.message || 'Upload failed' };
+      throw { success: false, error: error.message || 'Upload failed', code: 'network_error' };
     }
   }
 
@@ -130,27 +144,36 @@ class ApiService {
   }
 
   async checkAuth(): Promise<User> {
-    return this.request('GET', '/api/auth/check');
+    return this.requestData<User>('GET', '/api/auth/check');
   }
 
   // Recipe API (JSON only - no images)
   async getRecipes(): Promise<Recipe[]> {
-    return this.request('GET', '/api/recipes');
+    return this.requestData<Recipe[]>('GET', '/api/recipes');
   }
 
   async getRecipe(id: number): Promise<Recipe> {
-    return this.request('GET', `/api/recipes/${id}`);
+    return this.requestData<Recipe>('GET', `/api/recipes/${id}`);
   }
 
+  // The canonical spelling of a search is the filtered recipe collection.
   async searchRecipes(query: string): Promise<SearchResponse> {
-    return this.request('GET', `/api/search?q=${encodeURIComponent(query)}`);
+    const envelope = await this.request<Recipe[]>('GET', `/api/recipes?q=${encodeURIComponent(query)}`);
+    return {
+      success: envelope.success,
+      query: envelope.meta?.query ?? query,
+      results: envelope.data ?? [],
+      count: envelope.meta?.count ?? envelope.data?.length ?? 0,
+    };
   }
 
   async getRecipesByTag(tagId: number): Promise<Recipe[]> {
-    return this.request('GET', `/api/recipes/tag/${tagId}`);
+    return this.requestData<Recipe[]>('GET', `/api/recipes?tag=${tagId}`);
   }
 
-  async createRecipe(recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse<{ recipe_id: number }>> {
+  // POST answers 201 with the created recipe (and a Location header), so `data`
+  // is the resource itself rather than a bag holding its id.
+  async createRecipe(recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse<Recipe>> {
     // Remove images from recipe data - they're handled separately
     const { images, ...jsonData } = recipeData as RecipeForm;
     
@@ -169,7 +192,7 @@ class ApiService {
     return this.request('POST', '/api/recipes', payload);
   }
 
-  async updateRecipe(id: number, recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse> {
+  async updateRecipe(id: number, recipeData: Omit<RecipeForm, 'images'>): Promise<ApiResponse<Recipe>> {
     // Remove images from recipe data - they're handled separately
     const { images, ...jsonData } = recipeData as RecipeForm;
     
@@ -201,10 +224,8 @@ class ApiService {
     const formData = new FormData();
     
     // Add images to form data
-    images.forEach((image, index) => {
+    images.forEach((image) => {
       formData.append('images', image);
-      // You can also add captions if needed
-      // formData.append(`caption_${index}`, caption || '');
     });
 
     return this.uploadFormData('POST', `/api/recipes/${recipeId}/images`, formData);
@@ -216,7 +237,7 @@ class ApiService {
 
   // Ingredient API
   async getIngredients(): Promise<Ingredient[]> {
-    return this.request('GET', '/api/ingredients');
+    return this.requestData<Ingredient[]>('GET', '/api/ingredients');
   }
 
   async createIngredient(ingredientData: IngredientForm): Promise<ApiResponse> {
@@ -229,7 +250,7 @@ class ApiService {
 
   // Tag API
   async getTags(): Promise<Tag[]> {
-    return this.request('GET', '/api/tags');
+    return this.requestData<Tag[]>('GET', '/api/tags');
   }
 
   async createTag(tagData: TagForm): Promise<ApiResponse> {
@@ -240,16 +261,11 @@ class ApiService {
     return this.request('DELETE', `/api/tags/${id}`);
   }
 
-  // Utility method for uploading single image
-  async uploadSingleImage(file: File): Promise<{ filename: string }> {
-    const formData = new FormData();
-    formData.append('image', file);
-    return this.uploadFormData('POST', '/api/upload/image', formData);
-  }
-
   // Health check
+  // /health is not part of /api and keeps its own flat shape.
   async healthCheck(): Promise<{ status: string }> {
-    return this.request('GET', '/health');
+    const response = await api({ method: 'GET', url: '/health' });
+    return response.data;
   }
 
   // Helper method to create recipe with images in sequence
@@ -257,11 +273,11 @@ class ApiService {
     // Step 1: Create recipe (JSON only)
     const recipeResponse = await this.createRecipe(recipeData);
     
-    if (!recipeResponse.success || !recipeResponse.data?.recipe_id) {
+    if (!recipeResponse.success || !recipeResponse.data?.id) {
       throw new Error('Failed to create recipe');
     }
 
-    const recipeId = recipeResponse.data.recipe_id;
+    const recipeId = recipeResponse.data.id;
     let uploadedImagesCount = 0;
 
     // Step 2: Upload images if provided

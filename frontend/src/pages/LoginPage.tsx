@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { LoginForm } from '@/types';
-import { Card, Input, Button, Alert } from '@/components/ui';
+import { Card, Button, Alert } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 const LoginPage: React.FC = () => {

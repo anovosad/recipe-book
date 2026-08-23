@@ -1,5 +1,5 @@
 // TagsPage.tsx - Compact version without colors
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Tag as TagIcon, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -11,40 +11,42 @@ import toast from 'react-hot-toast';
 export const TagsPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
   const [tags, setTags] = useState<Tag[]>([]);
-  const [filteredTags, setFilteredTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [newTagName, setNewTagName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadTags();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = tags.filter(tag =>
-        tag.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredTags(filtered);
-    } else {
-      setFilteredTags(tags);
-    }
+  // Derived during render rather than mirrored into state by an effect. The
+  // effect version rendered once with the previous list before the new one
+  // arrived, so typing in the box flashed the old results for a frame.
+  const filteredTags = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return tags;
+    return tags.filter(tag => tag.name.toLowerCase().includes(query));
   }, [tags, searchQuery]);
 
-  const loadTags = async () => {
+  // Declared above the effect that calls it: reading a `const` from inside its
+  // temporal dead zone is what react-hooks/immutability rejects.
+  const loadTags = useCallback(async () => {
     try {
       const data = await apiService.getTags();
       setTags(data);
-      setFilteredTags(data);
     } catch (error) {
       console.error('Failed to load tags:', error);
       toast.error('Failed to load tags');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Fetching on mount: every setState in loadTags happens after an await,
+    // so nothing here is the synchronous cascade the rule is aimed at - the
+    // React Compiler heuristic just cannot see past the async boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadTags();
+  }, [loadTags]);
 
   const handleAddTag = async () => {
     if (!newTagName.trim()) {
@@ -77,7 +79,7 @@ export const TagsPage: React.FC = () => {
       } else {
         toast.error(response.error || 'Failed to add tag');
       }
-    } catch (error: any) {
+    } catch {
       toast.error('Failed to add tag');
     } finally {
       setIsSubmitting(false);
@@ -85,7 +87,7 @@ export const TagsPage: React.FC = () => {
   };
 
   const handleDeleteTag = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"? This will remove it from all recipes.`)) {
+    if (!window.confirm(`Are you sure you want to delete "${name}"? This will remove it from your recipes.`)) {
       return;
     }
 
@@ -98,7 +100,10 @@ export const TagsPage: React.FC = () => {
         toast.error(response.error || 'Failed to delete tag');
       }
     } catch (error: any) {
-      toast.error('Failed to delete tag');
+      console.error('Delete tag error:', error);
+      // The API explains why a delete was refused (for example the tag is still
+      // on other users' recipes); showing a fixed string would hide that.
+      toast.error(error.error || 'Failed to delete tag');
     }
   };
 

@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 const RecipeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuthStore();
+  const { user } = useAuthStore();
   const { setCurrentRecipe, deleteRecipe } = useAppStore();
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);

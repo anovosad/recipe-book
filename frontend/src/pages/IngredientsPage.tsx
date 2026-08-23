@@ -1,5 +1,5 @@
 // frontend/src/pages/IngredientsPage.tsx - More compact version
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Leaf, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -11,42 +11,45 @@ import toast from 'react-hot-toast';
 export const IngredientsPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [filteredIngredients, setFilteredIngredients] = useState<Ingredient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [newIngredientName, setNewIngredientName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadIngredients();
-  }, []);
-
-  useEffect(() => {
-    if (searchQuery.trim()) {
-      const filtered = ingredients.filter(ingredient =>
-        ingredient.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredIngredients(filtered);
-    } else {
-      setFilteredIngredients(ingredients);
-    }
+  // Derived during render rather than mirrored into state by an effect. The
+  // effect version rendered once with the previous list before the new one
+  // arrived, so typing in the box flashed the old results for a frame.
+  const filteredIngredients = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return ingredients;
+    return ingredients.filter(ingredient =>
+      ingredient.name.toLowerCase().includes(query)
+    );
   }, [ingredients, searchQuery]);
 
-  const loadIngredients = async () => {
+  // Declared above the effect that calls it: reading a `const` from inside its
+  // temporal dead zone is what react-hooks/immutability rejects.
+  const loadIngredients = useCallback(async () => {
     try {
       const data = await apiService.getIngredients();
       setIngredients(Array.isArray(data) ? data : []);
-      setFilteredIngredients(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load ingredients:', error);
       toast.error('Failed to load ingredients');
       setIngredients([]);
-      setFilteredIngredients([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Fetching on mount: every setState in loadIngredients happens after an await,
+    // so nothing here is the synchronous cascade the rule is aimed at - the
+    // React Compiler heuristic just cannot see past the async boundary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadIngredients();
+  }, [loadIngredients]);
 
   const handleAddIngredient = async () => {
     if (!newIngredientName.trim()) {
@@ -90,17 +93,12 @@ export const IngredientsPage: React.FC = () => {
 
     try {
       const response = await apiService.deleteIngredient(id);
-      if (response.success) {
-        await loadIngredients();
-        toast.success(response.message || 'Ingredient deleted successfully');
-      } else if (response.usedInRecipes) {
-        const message = `Cannot delete "${name}" because it is used in recipes.`;
-        toast.error(message);
-      } else {
-        toast.error(response.error || 'Failed to delete ingredient');
-      }
+      await loadIngredients();
+      toast.success(response.message || 'Ingredient deleted successfully');
     } catch (error: any) {
       console.error('Delete ingredient error:', error);
+      // A refusal arrives as a 409, so it lands here rather than in a false
+      // branch above. The API already names the recipes still using it.
       toast.error(error.error || 'Failed to delete ingredient');
     }
   };

@@ -9,7 +9,6 @@ import {
   X,
   Tag as TagIcon,
   Clock,
-  Users,
   ChefHat
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -69,7 +68,7 @@ const RecipeFormPage: React.FC = () => {
     }
   });
 
-  const { fields, append, remove, replace } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control,
     name: 'ingredients'
   });
@@ -239,11 +238,11 @@ const RecipeFormPage: React.FC = () => {
         // Create new recipe
         const createResponse = await apiService.createRecipe(recipeData);
         
-        if (!createResponse.success || !createResponse.data?.recipe_id) {
+        if (!createResponse.success || !createResponse.data?.id) {
           throw new Error(createResponse.error || 'Failed to create recipe');
         }
         
-        recipeId = createResponse.data.recipe_id;
+        recipeId = createResponse.data.id;
         
         // Upload images if provided
         if (data.images && data.images.length > 0) {
@@ -663,7 +662,7 @@ const RecipeFormPage: React.FC = () => {
                             const updatedRecipe = await apiService.getRecipe(recipe.id);
                             setRecipe(updatedRecipe);
                             toast.success('Image deleted');
-                          } catch (error) {
+                          } catch {
                             toast.error('Failed to delete image');
                           }
                         }}

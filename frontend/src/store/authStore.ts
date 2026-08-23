@@ -32,7 +32,7 @@ export const useAuthStore = create<AuthStore>()(
               setTimeout(async () => {
                 try {
                   await apiService.checkAuth();
-                } catch (error) {
+                } catch {
                   // Silently clear invalid session
                   set({ user: null, isAuthenticated: false });
                 }
@@ -40,7 +40,7 @@ export const useAuthStore = create<AuthStore>()(
               
               return;
             }
-          } catch (error) {
+          } catch {
             // Invalid persisted state, continue with server check
           }
         }
@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const user = await apiService.checkAuth();
           set({ user, isAuthenticated: true, isLoading: false });
-        } catch (error) {
+        } catch {
           set({ user: null, isAuthenticated: false, isLoading: false });
         }
       },
@@ -114,7 +114,7 @@ export const useAuthStore = create<AuthStore>()(
             isLoading: false 
           });
           toast.success('Logged out successfully');
-        } catch (error) {
+        } catch {
           // Even if API call fails, clear local state
           set({ 
             user: null, 
@@ -129,7 +129,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const user = await apiService.checkAuth();
           set({ user, isAuthenticated: true });
-        } catch (error) {
+        } catch {
           set({ user: null, isAuthenticated: false });
         }
       }

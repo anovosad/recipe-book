@@ -1,5 +1,5 @@
 // frontend/src/components/RecipeImageGallery.tsx - Image gallery with modal
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { RecipeImage } from '@/types';
 import { cn } from '@/utils';
@@ -19,6 +19,40 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
+
+  const closeModal = useCallback(() => {
+    setIsModalOpen(false);
+    setSelectedIndex(null);
+    setZoom(1);
+    setRotation(0);
+  }, []);
+
+  const navigateImage = useCallback((direction: number) => {
+    if (selectedIndex === null) return;
+    const newIndex = (selectedIndex + direction + images.length) % images.length;
+    setSelectedIndex(newIndex);
+    setZoom(1);
+    setRotation(0);
+  }, [selectedIndex, images.length]);
+
+  const openModal = (index: number) => {
+    setSelectedIndex(index);
+    setIsModalOpen(true);
+    setZoom(1);
+    setRotation(0);
+  };
+
+  // Locking body scroll from an effect rather than from openModal/closeModal:
+  // the old version only restored `overflow` when the modal was closed by hand,
+  // so unmounting with it open (navigating away) left <body> unscrollable.
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isModalOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,31 +84,10 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, selectedIndex, images.length]);
-
-  const openModal = (index: number) => {
-    setSelectedIndex(index);
-    setIsModalOpen(true);
-    setZoom(1);
-    setRotation(0);
-    document.body.style.overflow = 'hidden';
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedIndex(null);
-    setZoom(1);
-    setRotation(0);
-    document.body.style.overflow = 'auto';
-  };
-
-  const navigateImage = (direction: number) => {
-    if (selectedIndex === null) return;
-    const newIndex = (selectedIndex + direction + images.length) % images.length;
-    setSelectedIndex(newIndex);
-    setZoom(1);
-    setRotation(0);
-  };
+    // navigateImage is a useCallback over selectedIndex/images.length, so the
+    // listener is rebound exactly when it would otherwise go stale - no
+    // exhaustive-deps suppression needed any more.
+  }, [isModalOpen, closeModal, navigateImage]);
 
   if (!images || images.length === 0) {
     return null;

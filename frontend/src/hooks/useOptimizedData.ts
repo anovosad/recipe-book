@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useAppStore } from '@/store/appStore';
 import apiService from '@/services/api';
 

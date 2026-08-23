@@ -93,16 +93,27 @@ export interface TagForm {
 }
 
 // API response types
+// The one shape every /api response takes:
+//   { success: true,  data, message?, meta? }
+//   { success: false, error, code, details? }
 export interface ApiResponse<T = any> {
   success: boolean;
   message?: string;
-  error?: string;
   data?: T;
-  redirect?: string;
-  // Additional properties for specific error cases
+  meta?: any;
+  error?: string;
+  code?: string;
+  // Structured context for a refused request - which recipes still use the
+  // ingredient, how long a rate limit block still has to run. These used to sit
+  // next to `error` at the top level.
+  details?: ApiErrorDetails;
+}
+
+export interface ApiErrorDetails {
   usedInRecipes?: boolean;
   recipeCount?: number;
   recipeNames?: string[];
+  retryAfterSeconds?: number;
 }
 
 export interface SearchResponse {
