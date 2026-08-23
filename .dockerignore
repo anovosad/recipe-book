@@ -1,0 +1,35 @@
+# The Dockerfile does `COPY . .`, so everything not excluded here is both sent
+# as build context and baked into the builder layer.
+
+# Dependencies. The frontend sources must reach the build context - the image
+# builds them itself now. Only the installed tree is excluded; npm ci recreates
+# it from package-lock.json inside the frontend stage.
+frontend/node_modules/
+
+# The host's Vite output. The image builds its own into /app/static/dist, so
+# shipping a stale local build into the context would only be confusing.
+static/dist/
+
+# Version control and local build artifacts
+.git/
+.gitignore
+recipe-book
+*.test
+
+# Runtime state - the image creates empty /app/data and /app/uploads itself,
+# and compose mounts volumes over both.
+data/
+uploads/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Local configuration
+.env
+.env.*
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
