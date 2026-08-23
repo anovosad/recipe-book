@@ -156,11 +156,20 @@
     border-color: color-mix(in srgb, var(--chip) 45%, white);
   }
 
+  /* Selection deepens the tint and darkens the label - it does not flip to
+     white text. White on the tag colour reads at 1.3:1 for the pale tags in
+     the palette (#ffd93d, #a8e6cf); this stays above 7:1 for every one of
+     them, because both sides are derived from the same hue. */
   .chip-selected {
-    background: color-mix(in srgb, var(--chip) 88%, white);
-    border-color: color-mix(in srgb, var(--chip) 88%, white);
-    color: white;
-    text-shadow: 0 1px 1px rgb(0 0 0 / 0.18);
+    background: color-mix(in srgb, var(--chip) 55%, white);
+    border-color: color-mix(in srgb, var(--chip) 80%, white);
+    color: color-mix(in srgb, var(--chip) 25%, #0d1016);
+    font-weight: 600;
+  }
+
+  a.chip-selected:hover, button.chip-selected:hover {
+    background: color-mix(in srgb, var(--chip) 68%, white);
+    border-color: color-mix(in srgb, var(--chip) 90%, white);
   }
 
   /* The same colour as a solid block, for a tag shown on its own row. */
