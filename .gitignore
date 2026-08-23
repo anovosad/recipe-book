@@ -1,0 +1,25 @@
+# Dependencies
+frontend/node_modules/
+
+# Build output. static/dist is the Vite build the Go server serves; it is
+# produced by `npm run build` (or ./build.sh), never edited by hand.
+static/dist/
+frontend/dist/
+recipe-book
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+data/
+uploads/
+
+# Local configuration and logs
+.env
+.env.local
+*.log
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
