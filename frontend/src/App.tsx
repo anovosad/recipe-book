@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 
 // Store imports
 import { useAuthStore } from './store/authStore';
+import { useLanguageStore } from './i18n';
 
 // Component imports  
 import Navigation from './components/Navigation';
@@ -34,11 +35,18 @@ const RecipesRedirect: React.FC = () => {
 
 const App: React.FC = () => {
   const { initialize, isLoading, isAuthenticated } = useAuthStore();
+  const language = useLanguageStore(state => state.language);
 
   useEffect(() => {
     // Initialize auth on app startup
     initialize();
   }, [initialize]);
+
+  // Keep <html lang> honest: screen readers and the browser's own translation
+  // prompt both read it, and it was hardcoded to "en" in index.html.
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   if (isLoading) {
     return (

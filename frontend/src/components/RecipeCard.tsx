@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Clock, Users, Edit, Trash2, ChefHat, Flame } from 'lucide-react';
 import { Recipe } from '@/types';
-import { formatTime, cn } from '@/utils';
+import { cn } from '@/utils';
+import { useTranslation, useFormatters } from '@/i18n';
 import { Button, TagChip } from '@/components/ui';
 
 interface RecipeCardProps {
@@ -22,6 +23,8 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
   onDelete,
   className
 }) => {
+  const { t } = useTranslation();
+  const { formatDuration, formatServings } = useFormatters();
   const cover = recipe.images?.[0];
   const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0);
   const shownTags = recipe.tags?.slice(0, MAX_TAGS) ?? [];
@@ -55,7 +58,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
 
         {recipe.images && recipe.images.length > 1 && (
           <span className="absolute bottom-2 right-2 rounded-full bg-ink-900/55 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
-            +{recipe.images.length - 1}
+            {t('recipes.morePhotos', { count: recipe.images.length - 1 })}
           </span>
         )}
       </Link>
@@ -79,21 +82,21 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
           {totalTime > 0 && (
-            <span className="flex items-center gap-1.5" title="Prep + cook time">
+            <span className="flex items-center gap-1.5" title={t('recipe.prepPlusCook')}>
               <Clock className="h-4 w-4 text-brand-400" />
-              {formatTime(totalTime)}
+              {formatDuration(totalTime)}
             </span>
           )}
           {recipe.cook_time > 0 && (
-            <span className="flex items-center gap-1.5" title="Cook time">
+            <span className="flex items-center gap-1.5" title={t('recipe.cookTime')}>
               <Flame className="h-4 w-4 text-ember-500" />
-              {formatTime(recipe.cook_time)}
+              {formatDuration(recipe.cook_time)}
             </span>
           )}
           {recipe.servings > 0 && (
-            <span className="flex items-center gap-1.5" title="Servings">
+            <span className="flex items-center gap-1.5" title={t('recipe.servings')}>
               <Users className="h-4 w-4 text-brand-400" />
-              {recipe.servings} {recipe.serving_unit}
+              {formatServings(recipe.servings, recipe.serving_unit)}
             </span>
           )}
         </div>
@@ -104,13 +107,13 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
               <TagChip key={tag.id} tag={tag} as={Link} to={`/?tag=${tag.id}`} dot />
             ))}
             {hiddenTagCount > 0 && (
-              <span className="chip">+{hiddenTagCount}</span>
+              <span className="chip">{t('recipes.morePhotos', { count: hiddenTagCount })}</span>
             )}
           </div>
         )}
 
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-black/5 pt-3.5 text-xs text-ink-300">
-          <span className="truncate">by {recipe.author_name}</span>
+          <span className="truncate">{t('common.by', { author: recipe.author_name })}</span>
 
           {isOwner && (onEdit || onDelete) && (
             <div className="flex shrink-0 items-center gap-1">
@@ -119,7 +122,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
                   size="sm"
                   variant="ghost"
                   onClick={() => onEdit(recipe)}
-                  aria-label={`Edit ${recipe.title}`}
+                  aria-label={`${t('common.edit')} ${recipe.title}`}
                   icon={<Edit className="h-4 w-4" />}
                 />
               )}
@@ -128,7 +131,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
                   size="sm"
                   variant="ghost"
                   onClick={() => onDelete(recipe)}
-                  aria-label={`Delete ${recipe.title}`}
+                  aria-label={`${t('common.delete')} ${recipe.title}`}
                   className="hover:bg-rose-50 hover:text-rose-600"
                   icon={<Trash2 className="h-4 w-4" />}
                 />

@@ -1,6 +1,7 @@
 // frontend/src/services/api.ts - Updated with separated image handling
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import toast from 'react-hot-toast';
+import { translate, currentLanguage } from '@/i18n';
 import {
   User,
   Recipe,
@@ -59,7 +60,7 @@ api.interceptors.response.use(
     console.error('API Error:', error);
 
     if (error.code === 'ECONNABORTED') {
-      toast.error('Request timeout. Please try again.');
+      toast.error(translate(currentLanguage(), 'net.timeout'));
     } else if (error.response?.status === 401) {
       // Report it and let the auth store decide. This used to toast "Session
       // expired" and set window.location.href = '/login' for *any* 401 - and
@@ -70,11 +71,11 @@ api.interceptors.response.use(
       // PrivateRoute already sends the routes that do need one to /login.
       onUnauthorized?.();
     } else if (error.response?.status === 429) {
-      toast.error('Too many requests. Please slow down.');
+      toast.error(translate(currentLanguage(), 'net.rateLimited'));
     } else if ((error.response?.status ?? 0) >= 500) {
-      toast.error('Server error. Please try again later.');
+      toast.error(translate(currentLanguage(), 'net.serverError'));
     } else if (!error.response) {
-      toast.error('Network error. Please check your connection.');
+      toast.error(translate(currentLanguage(), 'net.offline'));
     }
 
     return Promise.reject(error);
@@ -317,7 +318,7 @@ class ApiService {
       } catch (error) {
         console.warn('Failed to upload images:', error);
         // Don't fail the whole operation if images fail
-        toast.error('Recipe created but some images failed to upload');
+        toast.error(translate(currentLanguage(), 'form.imagesFailed'));
       }
     }
 
@@ -341,7 +342,7 @@ class ApiService {
         uploadedImagesCount = imageResponse.data?.images?.length || 0;
       } catch (error) {
         console.warn('Failed to upload images:', error);
-        toast.error('Recipe updated but some images failed to upload');
+        toast.error(translate(currentLanguage(), 'form.imagesFailed'));
       }
     }
 

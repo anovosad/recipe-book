@@ -6,6 +6,7 @@ import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Tag } from '@/types';
 import { cn } from '@/utils';
+import { useTranslation } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -20,6 +21,7 @@ const TAG_COLORS = [
 
 export const TagsPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
   const [tags, setTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -45,11 +47,11 @@ export const TagsPage: React.FC = () => {
       setTags(data);
     } catch (error) {
       console.error('Failed to load tags:', error);
-      toast.error('Failed to load tags');
+      toast.error(t('tags.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadTags happens after an await,
@@ -61,7 +63,7 @@ export const TagsPage: React.FC = () => {
 
   const handleAddTag = async () => {
     if (!newTagName.trim()) {
-      toast.error('Tag name is required');
+      toast.error(t('tags.nameRequired'));
       return;
     }
 
@@ -70,7 +72,7 @@ export const TagsPage: React.FC = () => {
     );
 
     if (exists) {
-      toast.error('This tag already exists');
+      toast.error(t('tags.exists'));
       return;
     }
 
@@ -87,19 +89,19 @@ export const TagsPage: React.FC = () => {
         setNewTagName('');
         setNewTagColor(TAG_COLORS[0]);
         setShowModal(false);
-        toast.success(response.message || 'Tag added successfully');
+        toast.success(t('tags.added'));
       } else {
-        toast.error(response.error || 'Failed to add tag');
+        toast.error(response.error || t('tags.addFailed'));
       }
     } catch {
-      toast.error('Failed to add tag');
+      toast.error(t('tags.addFailed'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteTag = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"? This will remove it from your recipes.`)) {
+    if (!window.confirm(t('tags.deleteConfirm', { name }))) {
       return;
     }
 
@@ -108,15 +110,15 @@ export const TagsPage: React.FC = () => {
       if (response.success) {
         await loadTags();
         invalidate('tags', 'recipes');
-        toast.success(response.message || 'Tag deleted successfully');
+        toast.success(t('tags.deleted'));
       } else {
-        toast.error(response.error || 'Failed to delete tag');
+        toast.error(response.error || t('tags.deleteFailed'));
       }
     } catch (error: any) {
       console.error('Delete tag error:', error);
       // The API explains why a delete was refused (for example the tag is still
       // on other users' recipes); showing a fixed string would hide that.
-      toast.error(error.error || 'Failed to delete tag');
+      toast.error(error.error || t('tags.deleteFailed'));
     }
   };
 
@@ -141,16 +143,14 @@ export const TagsPage: React.FC = () => {
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
             <TagIcon className="h-8 w-8 text-brand-500" />
-            Tags
+            {t('tags.title')}
           </h1>
-          <p className="mt-2 text-ink-500">
-            {filteredTags.length} tag{filteredTags.length !== 1 ? 's' : ''} for sorting the collection
-          </p>
+          <p className="mt-2 text-ink-500">{t('tags.count', { count: filteredTags.length })}</p>
         </div>
 
         {isAuthenticated && (
           <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
-            Add Tag
+            {t('tags.add')}
           </Button>
         )}
       </header>
@@ -162,10 +162,10 @@ export const TagsPage: React.FC = () => {
           <input
             type="search"
             className="field pl-11"
-            placeholder="Search tags…"
+            placeholder={t('tags.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search tags"
+            aria-label={t('tags.searchPlaceholder')}
           />
         </div>
       </div>
@@ -184,44 +184,44 @@ export const TagsPage: React.FC = () => {
       ) : (
         <EmptyState
           icon={<TagIcon className="h-7 w-7" />}
-          title="No tags found"
+          title={t('tags.emptyTitle')}
           description={
             searchQuery
-              ? `No tags match "${searchQuery}". Try a different search term.`
+              ? t('tags.emptySearch', { query: searchQuery })
               : isAuthenticated
-              ? 'Add some tags to organize your recipes!'
-              : 'Please log in to manage tags.'
+              ? t('tags.emptyAuthed')
+              : t('tags.emptyAnon')
           }
           action={
             isAuthenticated && !searchQuery ? (
               <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
-                Add Your First Tag
+                {t('tags.addFirst')}
               </Button>
             ) : null
           }
         />
       )}
 
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add New Tag">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('tags.newTitle')}>
         <div className="space-y-5">
           <Input
-            label="Tag Name"
+            label={t('form.newTagName')}
             value={newTagName}
             onChange={(e) => setNewTagName(e.target.value)}
-            placeholder="e.g., Dessert, Quick & Easy, Vegetarian"
+            placeholder={t('tags.namePlaceholder')}
             onKeyDown={handleKeyPress}
             autoFocus
           />
 
           <div className="space-y-2">
-            <span className="block text-sm font-medium text-ink-700">Colour</span>
+            <span className="block text-sm font-medium text-ink-700">{t('form.tagColor')}</span>
             <div className="flex flex-wrap gap-2">
               {TAG_COLORS.map(color => (
                 <button
                   key={color}
                   type="button"
                   onClick={() => setNewTagColor(color)}
-                  aria-label={`Use colour ${color}`}
+                  aria-label={t('tags.useColour', { colour: color })}
                   aria-pressed={color === newTagColor}
                   className={cn(
                     'h-8 w-8 rounded-full transition-transform',
@@ -237,14 +237,14 @@ export const TagsPage: React.FC = () => {
 
           {newTagName.trim() && (
             <div className="flex items-center gap-2 text-sm text-ink-500">
-              Preview
+              {t('form.preview')}
               <TagChip tag={{ name: newTagName.trim(), color: newTagColor }} dot />
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" size="sm" onClick={() => setShowModal(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
@@ -253,7 +253,7 @@ export const TagsPage: React.FC = () => {
               loading={isSubmitting}
               disabled={!newTagName.trim()}
             >
-              Add Tag
+              {t('tags.add')}
             </Button>
           </div>
         </div>
@@ -268,7 +268,12 @@ interface TagCardProps {
   onDelete: (id: number, name: string) => void;
 }
 
-const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => (
+const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => {
+  const { t } = useTranslation();
+  const viewLabel = t('tags.viewRecipes', { name: tag.name });
+  const deleteLabel = t('tags.deleteLabel', { name: tag.name });
+
+  return (
   // `relative` here plus `after:absolute after:inset-0` on the link is the
   // stretched-link pattern: the anchor's own pseudo-element covers the whole
   // card, so the entire tile is the hit target and its hover state follows.
@@ -283,7 +288,7 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
     <Link
       to={`/?tag=${tag.id}`}
       className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-brand-600 after:absolute after:inset-0"
-      title={`View all ${tag.name} recipes`}
+      title={viewLabel}
     >
       {tag.name}
     </Link>
@@ -292,13 +297,14 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
       <button
         onClick={() => onDelete(tag.id, tag.name)}
         className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
-        title="Delete tag"
-        aria-label={`Delete tag ${tag.name}`}
+        title={deleteLabel}
+        aria-label={deleteLabel}
       >
         <Trash2 className="h-4 w-4" />
       </button>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 export default TagsPage;

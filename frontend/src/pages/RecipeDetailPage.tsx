@@ -19,7 +19,8 @@ import { useAppStore } from '@/store/appStore';
 import { invalidate } from '@/hooks/useOptimizedData';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
-import { formatTime, formatDate, formatCookingQuantity, parseInstructions, cn } from '@/utils';
+import { formatCookingQuantity, parseInstructions, cn } from '@/utils';
+import { useTranslation, useFormatters } from '@/i18n';
 import { Card, Button, LoadingSpinner, Alert, TagChip } from '@/components/ui';
 import RecipeImageGallery from '@/components/RecipeImageGallery';
 import toast from 'react-hot-toast';
@@ -30,6 +31,8 @@ const RecipeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { t } = useTranslation();
+  const { formatDuration, formatDate, formatServings } = useFormatters();
   const setCurrentRecipe = useAppStore(state => state.setCurrentRecipe);
   const deleteRecipeFromStore = useAppStore(state => state.deleteRecipe);
 
@@ -74,7 +77,7 @@ const RecipeDetailPage: React.FC = () => {
   const handleDeleteRecipe = useCallback(async () => {
     if (!recipe) return;
 
-    if (!window.confirm(`Are you sure you want to delete "${recipe.title}"? This action cannot be undone.`)) {
+    if (!window.confirm(t('recipe.deleteConfirm', { title: recipe.title }))) {
       return;
     }
 
@@ -83,16 +86,16 @@ const RecipeDetailPage: React.FC = () => {
       if (response.success) {
         deleteRecipeFromStore(recipe.id);
         invalidate('recipes');
-        toast.success(response.message || 'Recipe deleted successfully');
+        toast.success(t('recipes.deleted'));
         navigate('/');
       } else {
-        toast.error(response.error || 'Failed to delete recipe');
+        toast.error(response.error || t('recipes.deleteFailed'));
       }
     } catch (err: any) {
       console.error('Delete recipe error:', err);
-      toast.error(err?.error || 'Failed to delete recipe. Please try again.');
+      toast.error(err?.error || t('recipes.deleteFailed'));
     }
-  }, [recipe, deleteRecipeFromStore, navigate]);
+  }, [recipe, deleteRecipeFromStore, navigate, t]);
 
   const handleServingsChange = (newServings: number) => {
     if (newServings > 0 && newServings <= MAX_SERVINGS) {
@@ -116,12 +119,12 @@ const RecipeDetailPage: React.FC = () => {
   if (error || !recipe) {
     return (
       <div className="mx-auto max-w-md space-y-4">
-        <Alert type="error" title="Recipe not found">
-          The recipe you're looking for doesn't exist or has been removed.
+        <Alert type="error" title={t('recipe.notFound')}>
+          {t('recipe.notFoundBody')}
         </Alert>
         <div className="text-center">
           <Button as={Link} to="/" variant="secondary" icon={<ArrowLeft className="h-4 w-4" />}>
-            Back to Recipes
+            {t('recipe.back')}
           </Button>
         </div>
       </div>
@@ -134,16 +137,16 @@ const RecipeDetailPage: React.FC = () => {
   const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0);
 
   const stats = [
-    { icon: Clock, label: 'Prep Time', value: recipe.prep_time > 0 ? formatTime(recipe.prep_time) : '—' },
-    { icon: Flame, label: 'Cook Time', value: recipe.cook_time > 0 ? formatTime(recipe.cook_time) : '—' },
-    { icon: Users, label: 'Servings', value: recipe.servings > 0 ? `${recipe.servings} ${recipe.serving_unit}` : '—' },
-    { icon: Timer, label: 'Total Time', value: totalTime > 0 ? formatTime(totalTime) : '—' }
+    { icon: Clock, label: t('recipe.prepTime'), value: formatDuration(recipe.prep_time) },
+    { icon: Flame, label: t('recipe.cookTime'), value: formatDuration(recipe.cook_time) },
+    { icon: Users, label: t('recipe.servings'), value: recipe.servings > 0 ? formatServings(recipe.servings, recipe.serving_unit) : t('common.notSpecified') },
+    { icon: Timer, label: t('recipe.totalTime'), value: formatDuration(totalTime) }
   ];
 
   return (
     <div className="mx-auto max-w-5xl space-y-7">
       <Button as={Link} to="/" variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />}>
-        Back to Recipes
+        {t('recipe.back')}
       </Button>
 
       {/* Above the fold and full width. It used to be a row of thumbnails in a
@@ -162,9 +165,9 @@ const RecipeDetailPage: React.FC = () => {
             )}
             <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-300">
               <Calendar className="h-4 w-4" />
-              <span>Created {formatDate(recipe.created_at)}</span>
+              <span>{t('recipe.created', { date: formatDate(recipe.created_at) })}</span>
               <span aria-hidden="true">•</span>
-              <span>by {recipe.author_name}</span>
+              <span>{t('common.by', { author: recipe.author_name })}</span>
             </p>
           </div>
 
@@ -177,10 +180,10 @@ const RecipeDetailPage: React.FC = () => {
                 variant="secondary"
                 icon={<Edit className="h-4 w-4" />}
               >
-                Edit
+                {t('common.edit')}
               </Button>
               <Button size="sm" variant="danger" onClick={handleDeleteRecipe} icon={<Trash2 className="h-4 w-4" />}>
-                Delete
+                {t('common.delete')}
               </Button>
             </div>
           )}
@@ -211,10 +214,10 @@ const RecipeDetailPage: React.FC = () => {
         <div className="space-y-6 lg:col-span-2">
           <Card padding="lg">
             <div className="mb-5 flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Ingredients</h2>
+              <h2 className="text-xl font-semibold">{t('recipe.ingredients')}</h2>
               {isScaled && (
                 <Button size="sm" variant="ghost" onClick={() => setServings(originalServings)} icon={<RotateCcw className="h-4 w-4" />}>
-                  Reset
+                  {t('common.reset')}
                 </Button>
               )}
             </div>
@@ -225,21 +228,20 @@ const RecipeDetailPage: React.FC = () => {
                   onClick={() => handleServingsChange(servings - 1)}
                   disabled={servings <= 1}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600 transition-colors hover:bg-brand-100 disabled:opacity-40"
-                  aria-label="Decrease servings"
+                  aria-label={t('recipe.decreaseServings')}
                 >
                   <Minus className="h-4 w-4" />
                 </button>
 
                 <div className="min-w-[6rem] text-center">
-                  <span className="text-lg font-semibold text-ink-900">{servings}</span>
-                  <span className="ml-1.5 text-sm text-ink-500">{recipe.serving_unit}</span>
+                  <span className="text-sm font-semibold text-ink-900">{formatServings(servings, recipe.serving_unit)}</span>
                 </div>
 
                 <button
                   onClick={() => handleServingsChange(servings + 1)}
                   disabled={servings >= MAX_SERVINGS}
                   className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600 transition-colors hover:bg-brand-100 disabled:opacity-40"
-                  aria-label="Increase servings"
+                  aria-label={t('recipe.increaseServings')}
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -264,12 +266,15 @@ const RecipeDetailPage: React.FC = () => {
                 ))}
               </ul>
             ) : (
-              <p className="text-ink-300 italic">No ingredients listed</p>
+              <p className="text-ink-300 italic">{t('recipe.noIngredients')}</p>
             )}
 
             {isScaled && (
               <p className="mt-4 border-t border-black/5 pt-4 text-xs text-ink-300">
-                Scaled to {servings} {recipe.serving_unit} (×{scalingRatio.toFixed(2)} of the original)
+                {t('recipe.scaledNote', {
+                  servings: formatServings(servings, recipe.serving_unit),
+                  ratio: scalingRatio.toFixed(2)
+                })}
               </p>
             )}
           </Card>
@@ -278,7 +283,7 @@ const RecipeDetailPage: React.FC = () => {
         {/* Instructions */}
         <div className="lg:col-span-3">
           <Card padding="lg">
-            <h2 className="mb-6 text-xl font-semibold">Instructions</h2>
+            <h2 className="mb-6 text-xl font-semibold">{t('recipe.instructions')}</h2>
 
             {isNumbered ? (
               // The number sits in a fixed-width column of its own, so a step

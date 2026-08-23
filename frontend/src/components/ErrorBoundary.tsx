@@ -1,6 +1,8 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button, Card } from '@/components/ui';
+// A class component, so the hook is out; this reads the language directly.
+import { translate, currentLanguage } from '@/i18n';
 
 interface Props {
   children: ReactNode;
@@ -41,6 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const t = (key: Parameters<typeof translate>[1]) => translate(currentLanguage(), key);
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
           <Card padding="lg" className="w-full max-w-md text-center">
@@ -49,11 +52,11 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <h1 className="mb-2 text-2xl font-bold">
-              Oops! Something went wrong
+              {t('common.somethingWrong')}
             </h1>
 
             <p className="mb-6 text-ink-500">
-              We encountered an unexpected error. This has been logged and we'll look into it.
+              {t('common.unexpectedError')}
             </p>
 
             <div className="space-y-3">
@@ -62,7 +65,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="w-full"
                 icon={<RefreshCw className="w-4 h-4" />}
               >
-                Try Again
+                {t('common.tryAgain')}
               </Button>
               
               <Button 
@@ -71,14 +74,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 className="w-full"
                 icon={<Home className="w-4 h-4" />}
               >
-                Go Home
+                {t('common.goHome')}
               </Button>
             </div>
 
             {import.meta.env.DEV && this.state.error && (
               <details className="mt-6 text-left">
                 <summary className="cursor-pointer text-sm font-medium text-ink-700">
-                  Error Details (Development)
+                  {t('common.errorDetails')}
                 </summary>
                 <pre className="mt-2 overflow-auto rounded-xl bg-black/[0.04] p-3 text-xs text-rose-600">
                   {this.state.error.toString()}

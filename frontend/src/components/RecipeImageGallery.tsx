@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { RecipeImage } from '@/types';
 import { cn } from '@/utils';
+import { useTranslation } from '@/i18n';
 
 interface RecipeImageGalleryProps {
   images: RecipeImage[];
@@ -16,6 +17,7 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
   recipeName,
   className
 }) => {
+  const { t } = useTranslation();
   // Which photo is shown large on the page, as opposed to selectedIndex, which
   // is the one the lightbox is currently on.
   const [activeIndex, setActiveIndex] = useState(0);
@@ -112,11 +114,11 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
           type="button"
           onClick={() => openModal(heroIndex)}
           className="surface group relative block w-full cursor-zoom-in overflow-hidden p-0"
-          title="Open full size"
+          title={t('gallery.openFullSize')}
         >
           <img
             src={`/uploads/${hero.filename}`}
-            alt={hero.caption || `${recipeName} - Photo ${heroIndex + 1}`}
+            alt={hero.caption || `${recipeName} — ${t('gallery.photo', { number: heroIndex + 1 })}`}
             className="aspect-[16/10] w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
           />
 
@@ -144,8 +146,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
                     ? 'ring-brand-400'
                     : 'opacity-65 ring-transparent hover:opacity-100'
                 )}
-                title={image.caption || `Photo ${index + 1}`}
-                aria-label={`Show photo ${index + 1}`}
+                title={image.caption || t('gallery.photo', { number: index + 1 })}
+                aria-label={t('gallery.showPhoto', { number: index + 1 })}
                 aria-current={index === heroIndex}
               >
                 <img
@@ -177,8 +179,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={() => setZoom(prev => Math.max(prev - 0.25, 0.5))}
                 className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
-                title="Zoom out (-)"
-                aria-label="Zoom out"
+                title={`${t('gallery.zoomOut')} (-)`}
+                aria-label={t('gallery.zoomOut')}
               >
                 <ZoomOut className="h-4 w-4" />
               </button>
@@ -190,8 +192,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={() => setZoom(prev => Math.min(prev + 0.25, 3))}
                 className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
-                title="Zoom in (+)"
-                aria-label="Zoom in"
+                title={`${t('gallery.zoomIn')} (+)`}
+                aria-label={t('gallery.zoomIn')}
               >
                 <ZoomIn className="h-4 w-4" />
               </button>
@@ -199,8 +201,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={() => setRotation(prev => (prev + 90) % 360)}
                 className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
-                title="Rotate (R)"
-                aria-label="Rotate"
+                title={`${t('gallery.rotate')} (R)`}
+                aria-label={t('gallery.rotate')}
               >
                 <RotateCw className="h-4 w-4" />
               </button>
@@ -208,8 +210,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={closeModal}
                 className="ml-1 rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
-                title="Close (Esc)"
-                aria-label="Close"
+                title={`${t('common.close')} (Esc)`}
+                aria-label={t('common.close')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -227,7 +229,7 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
             <div className="flex min-h-full items-center justify-center p-4">
               <img
                 src={`/uploads/${images[selectedIndex].filename}`}
-                alt={images[selectedIndex].caption || `${recipeName} - Photo ${selectedIndex + 1}`}
+                alt={images[selectedIndex].caption || `${recipeName} — ${t('gallery.photo', { number: selectedIndex + 1 })}`}
                 className="max-h-[calc(100dvh-9rem)] max-w-full object-contain"
                 style={{ zoom, transform: `rotate(${rotation}deg)` }}
                 onClick={(e) => e.stopPropagation()}
@@ -240,8 +242,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={() => navigateImage(-1)}
                 className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white transition-colors hover:bg-black/80"
-                title="Previous image (left arrow)"
-                aria-label="Previous image"
+                title={t('gallery.previous')}
+                aria-label={t('gallery.previous')}
               >
                 <ChevronLeft className="h-6 w-6" />
               </button>
@@ -249,8 +251,8 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               <button
                 onClick={() => navigateImage(1)}
                 className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white transition-colors hover:bg-black/80"
-                title="Next image (right arrow)"
-                aria-label="Next image"
+                title={t('gallery.next')}
+                aria-label={t('gallery.next')}
               >
                 <ChevronRight className="h-6 w-6" />
               </button>
@@ -263,7 +265,7 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
               {images[selectedIndex].caption}
             </p>
             <span className="hidden text-xs whitespace-nowrap text-white/50 sm:block">
-              ← → navigate · + − zoom · R rotate · Esc close
+              {t('gallery.shortcuts')}
             </span>
           </div>
         </div>,

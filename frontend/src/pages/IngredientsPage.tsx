@@ -6,11 +6,13 @@ import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Ingredient } from '@/types';
+import { useTranslation } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export const IngredientsPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,12 +39,12 @@ export const IngredientsPage: React.FC = () => {
       setIngredients(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load ingredients:', error);
-      toast.error('Failed to load ingredients');
+      toast.error(t('ingredients.loadFailed'));
       setIngredients([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadIngredients happens after an await,
@@ -54,7 +56,7 @@ export const IngredientsPage: React.FC = () => {
 
   const handleAddIngredient = async () => {
     if (!newIngredientName.trim()) {
-      toast.error('Ingredient name is required');
+      toast.error(t('ingredients.nameRequired'));
       return;
     }
 
@@ -64,7 +66,7 @@ export const IngredientsPage: React.FC = () => {
     );
     
     if (exists) {
-      toast.error('This ingredient already exists');
+      toast.error(t('ingredients.exists'));
       return;
     }
 
@@ -76,33 +78,33 @@ export const IngredientsPage: React.FC = () => {
         invalidate('ingredients');
         setNewIngredientName('');
         setShowModal(false);
-        toast.success(response.message || 'Ingredient added successfully');
+        toast.success(t('ingredients.added'));
       } else {
-        toast.error(response.error || 'Failed to add ingredient');
+        toast.error(response.error || t('ingredients.addFailed'));
       }
     } catch (error: any) {
       console.error('Add ingredient error:', error);
-      toast.error(error.error || 'Failed to add ingredient');
+      toast.error(error.error || t('ingredients.addFailed'));
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDeleteIngredient = async (id: number, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
+    if (!window.confirm(t('ingredients.deleteConfirm', { name }))) {
       return;
     }
 
     try {
-      const response = await apiService.deleteIngredient(id);
+      await apiService.deleteIngredient(id);
       await loadIngredients();
       invalidate('ingredients');
-      toast.success(response.message || 'Ingredient deleted successfully');
+      toast.success(t('ingredients.deleted'));
     } catch (error: any) {
       console.error('Delete ingredient error:', error);
       // A refusal arrives as a 409, so it lands here rather than in a false
       // branch above. The API already names the recipes still using it.
-      toast.error(error.error || 'Failed to delete ingredient');
+      toast.error(error.error || t('ingredients.deleteFailed'));
     }
   };
 
@@ -127,16 +129,14 @@ export const IngredientsPage: React.FC = () => {
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
             <Leaf className="h-8 w-8 text-emerald-500" />
-            Ingredients
+            {t('ingredients.title')}
           </h1>
-          <p className="mt-2 text-ink-500">
-            {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} in the pantry
-          </p>
+          <p className="mt-2 text-ink-500">{t('ingredients.count', { count: filteredIngredients.length })}</p>
         </div>
 
         {isAuthenticated && (
           <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
-            Add Ingredient
+            {t('ingredients.add')}
           </Button>
         )}
       </header>
@@ -148,10 +148,10 @@ export const IngredientsPage: React.FC = () => {
           <input
             type="search"
             className="field pl-11"
-            placeholder="Search ingredients…"
+            placeholder={t('ingredients.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Search ingredients"
+            aria-label={t('ingredients.searchPlaceholder')}
           />
         </div>
       </div>
@@ -170,18 +170,18 @@ export const IngredientsPage: React.FC = () => {
       ) : (
         <EmptyState
           icon={<Leaf className="h-7 w-7" />}
-          title="No ingredients found"
+          title={t('ingredients.emptyTitle')}
           description={
             searchQuery
-              ? `No ingredients match "${searchQuery}". Try a different search term.`
+              ? t('ingredients.emptySearch', { query: searchQuery })
               : isAuthenticated
-              ? "Add some ingredients to get started!"
-              : "Please log in to manage ingredients."
+              ? t('ingredients.emptyAuthed')
+              : t('ingredients.emptyAnon')
           }
           action={
             isAuthenticated && !searchQuery ? (
               <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
-                Add Your First Ingredient
+                {t('ingredients.addFirst')}
               </Button>
             ) : null
           }
@@ -192,14 +192,14 @@ export const IngredientsPage: React.FC = () => {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        title="Add New Ingredient"
+        title={t('ingredients.newTitle')}
       >
         <div className="space-y-4">
           <Input
-            label="Ingredient Name"
+            label={t('form.newIngredientName')}
             value={newIngredientName}
             onChange={(e) => setNewIngredientName(e.target.value)}
-            placeholder="e.g., Olive Oil, Chicken Breast, Basil"
+            placeholder={t('ingredients.namePlaceholder')}
             onKeyDown={handleKeyPress}
             autoFocus
           />
@@ -209,7 +209,7 @@ export const IngredientsPage: React.FC = () => {
               size="sm"
               onClick={() => setShowModal(false)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleAddIngredient}
@@ -217,7 +217,7 @@ export const IngredientsPage: React.FC = () => {
               loading={isSubmitting}
               disabled={!newIngredientName.trim()}
             >
-              Add Ingredient
+              {t('ingredients.add')}
             </Button>
           </div>
         </div>
@@ -236,7 +236,12 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
   ingredient,
   isAuthenticated,
   onDelete
-}) => (
+}) => {
+  const { t } = useTranslation();
+  const findLabel = t('ingredients.findRecipes', { name: ingredient.name });
+  const deleteLabel = t('ingredients.deleteLabel', { name: ingredient.name });
+
+  return (
   // Stretched link, same as the tag tiles: the anchor's pseudo-element covers
   // the card so the whole tile is clickable, and the delete button sits above
   // it on z-10 to keep its own.
@@ -250,7 +255,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
     <Link
       to={`/?ingredient=${ingredient.id}`}
       className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-emerald-600 after:absolute after:inset-0"
-      title={`Find recipes using ${ingredient.name}`}
+      title={findLabel}
     >
       {ingredient.name}
     </Link>
@@ -259,13 +264,14 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
       <button
         onClick={() => onDelete(ingredient.id, ingredient.name)}
         className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
-        title="Delete ingredient"
-        aria-label={`Delete ingredient ${ingredient.name}`}
+        title={deleteLabel}
+        aria-label={deleteLabel}
       >
         <Trash2 className="h-4 w-4" />
       </button>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 export default IngredientsPage;

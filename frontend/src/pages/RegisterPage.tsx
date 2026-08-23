@@ -4,11 +4,13 @@ import { useForm } from 'react-hook-form';
 import { UserPlus, User, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { RegisterForm } from '@/types';
+import { useTranslation } from '@/i18n';
 import { Card, Button } from '@/components/ui';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { register: registerUser, isLoading } = useAuthStore();
+  const { t } = useTranslation();
   
   const {
     register,
@@ -42,37 +44,37 @@ const RegisterPage: React.FC = () => {
           <div className="btn-brand mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl">
             <UserPlus className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold">Create Account</h1>
-          <p className="mt-2 text-ink-500">Join Recipe Book to save and share your favorite recipes</p>
+          <h1 className="text-2xl font-bold">{t('auth.createAccount')}</h1>
+          <p className="mt-2 text-ink-500">{t('auth.registerSubtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Username Field */}
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Username *
+              {t('auth.username')} *
             </label>
             <div className="relative">
               <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('username', {
-                  required: 'Username is required',
+                  required: t('auth.usernameRequired'),
                   minLength: {
                     value: 3,
-                    message: 'Username must be at least 3 characters'
+                    message: t('auth.usernameShort')
                   },
                   maxLength: {
                     value: 30,
-                    message: 'Username must be no more than 30 characters'
+                    message: t('auth.usernameLong')
                   },
                   pattern: {
                     value: /^[a-zA-Z0-9_]+$/,
-                    message: 'Username can only contain letters, numbers, and underscores'
+                    message: t('auth.usernameChars')
                   }
                 })}
                 type="text"
                 className="field pl-11"
-                placeholder="Choose a username"
+                placeholder={t('auth.usernamePlaceholder')}
                 autoComplete="username"
               />
             </div>
@@ -87,25 +89,25 @@ const RegisterPage: React.FC = () => {
           {/* Email Field */}
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Email Address *
+              {t('auth.email')} *
             </label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('email', {
-                  required: 'Email is required',
+                  required: t('auth.emailRequired'),
                   pattern: {
                     value: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-                    message: 'Please enter a valid email address'
+                    message: t('auth.emailInvalid')
                   },
                   maxLength: {
                     value: 254,
-                    message: 'Email address is too long'
+                    message: t('auth.emailInvalid')
                   }
                 })}
                 type="email"
                 className="field pl-11"
-                placeholder="Enter your email"
+                placeholder={t('auth.emailPlaceholder')}
                 autoComplete="email"
               />
             </div>
@@ -120,27 +122,27 @@ const RegisterPage: React.FC = () => {
           {/* Password Field */}
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Password *
+              {t('auth.password')} *
             </label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('password', {
-                  required: 'Password is required',
+                  required: t('auth.passwordRequired'),
                   minLength: {
                     value: 6,
-                    message: 'Password must be at least 6 characters'
+                    message: t('auth.passwordShort')
                   },
                   maxLength: {
                     value: 128,
-                    message: 'Password is too long'
+                    message: t('auth.passwordShort')
                   },
                   validate: {
                     hasLetterAndNumber: (value) => {
                       const hasLetter = /[a-zA-Z]/.test(value);
                       const hasNumber = /[0-9]/.test(value);
                       if (!hasLetter || !hasNumber) {
-                        return 'Password must contain at least one letter and one number';
+                        return t('auth.passwordRules');
                       }
                       return true;
                     }
@@ -148,7 +150,7 @@ const RegisterPage: React.FC = () => {
                 })}
                 type="password"
                 className="field pl-11"
-                placeholder="Create a password"
+                placeholder={t('auth.passwordPlaceholder')}
                 autoComplete="new-password"
               />
             </div>
@@ -180,19 +182,19 @@ const RegisterPage: React.FC = () => {
             loading={isLoading}
             disabled={isLoading}
           >
-            {isLoading ? 'Creating Account...' : 'Create Account'}
+            {isLoading ? t('auth.registering') : t('auth.createAccount')}
           </Button>
         </form>
 
         {/* Login Link */}
         <div className="mt-6 text-center">
           <p className="text-ink-500">
-            Already have an account?{' '}
+            {t('auth.haveAccount')}{' '}
             <Link
               to="/login"
               className="font-medium text-brand-600 transition-colors hover:text-brand-700"
             >
-              Sign in here
+              {t('auth.signInInstead')}
             </Link>
           </p>
         </div>

@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { LogIn, User, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { LoginForm } from '@/types';
+import { useTranslation } from '@/i18n';
 import { Card, Button } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -11,6 +12,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { login, isLoading } = useAuthStore();
+  const { t } = useTranslation();
   
   const {
     register,
@@ -51,37 +53,37 @@ const LoginPage: React.FC = () => {
           <div className="btn-brand mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl">
             <LogIn className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold">Welcome Back</h1>
-          <p className="mt-2 text-ink-500">Sign in to your Recipe Book account</p>
+          <h1 className="text-2xl font-bold">{t('auth.welcomeBack')}</h1>
+          <p className="mt-2 text-ink-500">{t('auth.signInSubtitle')}</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Username Field */}
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Username
+              {t('auth.username')}
             </label>
             <div className="relative">
               <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('username', {
-                  required: 'Username is required',
+                  required: t('auth.usernameRequired'),
                   minLength: {
                     value: 3,
-                    message: 'Username must be at least 3 characters'
+                    message: t('auth.usernameShort')
                   },
                   maxLength: {
                     value: 30,
-                    message: 'Username must be no more than 30 characters'
+                    message: t('auth.usernameLong')
                   },
                   pattern: {
                     value: /^[a-zA-Z0-9_]+$/,
-                    message: 'Username can only contain letters, numbers, and underscores'
+                    message: t('auth.usernameChars')
                   }
                 })}
                 type="text"
                 className="field pl-11"
-                placeholder="Enter your username"
+                placeholder={t('auth.usernamePlaceholder')}
                 autoComplete="username"
               />
             </div>
@@ -96,21 +98,21 @@ const LoginPage: React.FC = () => {
           {/* Password Field */}
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Password
+              {t('auth.password')}
             </label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('password', {
-                  required: 'Password is required',
+                  required: t('auth.passwordRequired'),
                   minLength: {
                     value: 6,
-                    message: 'Password must be at least 6 characters'
+                    message: t('auth.passwordShort')
                   }
                 })}
                 type="password"
                 className="field pl-11"
-                placeholder="Enter your password"
+                placeholder={t('auth.passwordPlaceholder')}
                 autoComplete="current-password"
               />
             </div>
@@ -129,19 +131,19 @@ const LoginPage: React.FC = () => {
             loading={isLoading}
             disabled={isLoading}
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? t('auth.signingIn') : t('auth.signIn')}
           </Button>
         </form>
 
         {/* Registration Link */}
         <div className="mt-7 text-center">
           <p className="text-ink-500">
-            Don't have an account?{' '}
+            {t('auth.noAccount')}{' '}
             <Link
               to="/register"
               className="font-medium text-brand-600 transition-colors hover:text-brand-700"
             >
-              Create one here
+              {t('auth.createOne')}
             </Link>
           </p>
         </div>

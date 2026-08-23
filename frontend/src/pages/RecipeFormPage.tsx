@@ -16,6 +16,7 @@ import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { Recipe, Ingredient, Tag, RecipeForm, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
 import { validateImageFile, getErrorMessage, cn } from '@/utils';
+import { useTranslation } from '@/i18n';
 import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal, TagChip } from '@/components/ui';
 import { invalidate } from '@/hooks/useOptimizedData';
 import toast from 'react-hot-toast';
@@ -28,6 +29,7 @@ const RecipeFormPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
+  const { t } = useTranslation();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -108,7 +110,7 @@ const RecipeFormPage: React.FC = () => {
             setRecipe(recipeData);
           } catch (error) {
             console.error('Failed to load recipe:', error);
-            toast.error('Recipe not found');
+            toast.error(t('recipe.notFound'));
             navigate('/');
             return;
           }
@@ -117,7 +119,7 @@ const RecipeFormPage: React.FC = () => {
         setIsFormReady(true);
       } catch (error) {
         console.error('Failed to load data:', error);
-        toast.error('Failed to load form data');
+        toast.error(t('form.loadFailed'));
         if (isEditMode) {
           navigate('/');
         }
@@ -127,7 +129,7 @@ const RecipeFormPage: React.FC = () => {
     };
 
     loadData();
-  }, [id, isEditMode, navigate]);
+  }, [id, isEditMode, navigate, t]);
 
   // Populate form when recipe and reference data are loaded.
   //
@@ -205,7 +207,7 @@ const RecipeFormPage: React.FC = () => {
       );
 
       if (validIngredients.length === 0) {
-        toast.error('Please add at least one ingredient');
+        toast.error(t('form.needIngredient'));
         setIsLoading(false);
         return;
       }
@@ -239,13 +241,13 @@ const RecipeFormPage: React.FC = () => {
             await applyChosenCover(imageResponse.data?.images);
           } catch (error) {
             console.warn('Failed to upload images:', error);
-            toast.error('Recipe updated but some images failed to upload');
+            toast.error(t('form.imagesFailed'));
           }
         }
         
-        let message = 'Recipe updated successfully!';
+        let message = t('form.updated');
         if (uploadedImages > 0) {
-          message += ` ${uploadedImages} image(s) uploaded.`;
+          message += ' ' + t('form.imagesUploaded', { count: uploadedImages });
         }
         toast.success(message);
       } else {
@@ -266,13 +268,13 @@ const RecipeFormPage: React.FC = () => {
             await applyChosenCover(imageResponse.data?.images);
           } catch (error) {
             console.warn('Failed to upload images:', error);
-            toast.error('Recipe created but some images failed to upload');
+            toast.error(t('form.imagesFailed'));
           }
         }
         
-        let message = 'Recipe created successfully!';
+        let message = t('form.created');
         if (uploadedImages > 0) {
-          message += ` ${uploadedImages} image(s) uploaded.`;
+          message += ' ' + t('form.imagesUploaded', { count: uploadedImages });
         }
         toast.success(message);
       }
@@ -301,7 +303,7 @@ const RecipeFormPage: React.FC = () => {
       await apiService.setImageCover(chosen.id);
     } catch (error) {
       console.warn('Failed to set the cover image:', error);
-      toast.error('Images uploaded, but the cover could not be set');
+      toast.error(t('form.coverFailed'));
     }
   };
 
@@ -312,9 +314,9 @@ const RecipeFormPage: React.FC = () => {
       if (response.success) {
         setRecipe({ ...recipe, images: response.data ?? recipe.images });
         invalidate('recipes');
-        toast.success('Cover image updated');
+        toast.success(t('form.coverUpdated'));
       } else {
-        toast.error(response.error || 'Could not set the cover image');
+        toast.error(response.error || t('form.coverFailed'));
       }
     } catch (error: any) {
       toast.error(getErrorMessage(error));
@@ -334,7 +336,7 @@ const RecipeFormPage: React.FC = () => {
 
   const handleAddIngredient = async () => {
     if (!newIngredientName.trim()) {
-      toast.error('Ingredient name is required');
+      toast.error(t('ingredients.nameRequired'));
       return;
     }
 
@@ -347,9 +349,9 @@ const RecipeFormPage: React.FC = () => {
         invalidate('ingredients');
         setNewIngredientName('');
         setShowIngredientModal(false);
-        toast.success('Ingredient added successfully');
+        toast.success(t('ingredients.added'));
       } else {
-        toast.error(response.error || 'Failed to add ingredient');
+        toast.error(response.error || t('ingredients.addFailed'));
       }
     } catch (error: any) {
       toast.error(getErrorMessage(error));
@@ -358,7 +360,7 @@ const RecipeFormPage: React.FC = () => {
 
   const handleAddTag = async () => {
     if (!newTagName.trim()) {
-      toast.error('Tag name is required');
+      toast.error(t('tags.nameRequired'));
       return;
     }
 
@@ -376,9 +378,9 @@ const RecipeFormPage: React.FC = () => {
         setNewTagName('');
         setNewTagColor('#ff6b6b');
         setShowTagModal(false);
-        toast.success('Tag added successfully');
+        toast.success(t('tags.added'));
       } else {
-        toast.error(response.error || 'Failed to add tag');
+        toast.error(response.error || t('tags.addFailed'));
       }
     } catch (error: any) {
       toast.error(getErrorMessage(error));
@@ -408,14 +410,14 @@ const RecipeFormPage: React.FC = () => {
           size="sm"
           icon={<ArrowLeft className="w-4 h-4" />}
         >
-          Back
+          {t('form.back')}
         </Button>
         <div>
           <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
-            {isEditMode ? 'Edit Recipe' : 'Create New Recipe'}
+            {isEditMode ? t('form.editTitle') : t('form.createTitle')}
           </h1>
           {isEditMode && recipe && (
-            <p className="text-ink-500">Editing: {recipe.title}</p>
+            <p className="text-ink-500">{t('form.editing', { title: recipe.title })}</p>
           )}
         </div>
       </div>
@@ -423,31 +425,31 @@ const RecipeFormPage: React.FC = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Basic Information */}
         <Card>
-          <h2 className="mb-5 text-xl font-semibold">Basic Information</h2>
+          <h2 className="mb-5 text-xl font-semibold">{t('form.basics')}</h2>
           <div className="space-y-4">
             <Input
-              label="Recipe Title"
+              label={t('form.title')}
               {...register('title', {
-                required: 'Recipe title is required',
+                required: t('valid.titleRequired'),
                 maxLength: {
                   value: 200,
-                  message: 'Title must be no more than 200 characters'
+                  message: t('valid.titleTooLong')
                 }
               })}
               error={errors.title?.message}
-              placeholder="Enter a descriptive title for your recipe"
+              placeholder={t('form.titlePlaceholder')}
             />
 
             <Textarea
-              label="Description"
+              label={t('form.description')}
               {...register('description', {
                 maxLength: {
                   value: 1000,
-                  message: 'Description must be no more than 1000 characters'
+                  message: t('valid.descriptionTooLong')
                 }
               })}
               error={errors.description?.message}
-              placeholder="Brief description of your recipe (optional)"
+              placeholder={t('form.descriptionPlaceholder')}
               rows={3}
             />
           </div>
@@ -457,16 +459,16 @@ const RecipeFormPage: React.FC = () => {
         <Card>
           <h2 className="mb-5 flex items-center gap-2 text-xl font-semibold">
             <Clock className="w-5 h-5" />
-            Recipe Details
+            {t('form.details')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input
-              label="Prep Time (minutes)"
+              label={t('form.prepTime')}
               type="number"
               min="0"
               {...register('prep_time', {
-                min: { value: 0, message: 'Prep time cannot be negative' },
-                max: { value: 1440, message: 'Prep time cannot exceed 24 hours' },
+                min: { value: 0, message: t('valid.timeNegative') },
+                max: { value: 1440, message: t('valid.timeTooLong') },
                 valueAsNumber: true
               })}
               error={errors.prep_time?.message}
@@ -474,12 +476,12 @@ const RecipeFormPage: React.FC = () => {
             />
 
             <Input
-              label="Cook Time (minutes)"
+              label={t('form.cookTime')}
               type="number"
               min="0"
               {...register('cook_time', {
-                min: { value: 0, message: 'Cook time cannot be negative' },
-                max: { value: 1440, message: 'Cook time cannot exceed 24 hours' },
+                min: { value: 0, message: t('valid.timeNegative') },
+                max: { value: 1440, message: t('valid.timeTooLong') },
                 valueAsNumber: true
               })}
               error={errors.cook_time?.message}
@@ -487,14 +489,14 @@ const RecipeFormPage: React.FC = () => {
             />
 
             <Input
-              label="Servings"
+              label={t('form.servings')}
               type="number"
               min="1"
               max="100"
               {...register('servings', {
-                required: 'Number of servings is required',
-                min: { value: 1, message: 'Must serve at least 1' },
-                max: { value: 100, message: 'Cannot exceed 100 servings' },
+                required: t('valid.servingsRequired'),
+                min: { value: 1, message: t('valid.servingsMin') },
+                max: { value: 100, message: t('valid.servingsMax') },
                 valueAsNumber: true
               })}
               error={errors.servings?.message}
@@ -502,7 +504,7 @@ const RecipeFormPage: React.FC = () => {
             />
 
             <Select
-              label="Serving Unit"
+              label={t('form.servingUnit')}
               {...register('serving_unit')}
               options={SERVING_UNITS.map(unit => ({
                 value: unit.value,
@@ -518,7 +520,7 @@ const RecipeFormPage: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="flex items-center gap-2 text-xl font-semibold">
               <ChefHat className="w-5 h-5" />
-              Ingredients
+              {t('form.ingredients')}
             </h2>
             <Button
               type="button"
@@ -527,7 +529,7 @@ const RecipeFormPage: React.FC = () => {
               onClick={() => setShowIngredientModal(true)}
               icon={<Plus className="w-4 h-4" />}
             >
-              Add New Ingredient
+              {t('form.addNewIngredient')}
             </Button>
           </div>
 
@@ -536,13 +538,13 @@ const RecipeFormPage: React.FC = () => {
               <div key={field.id} className="flex items-end gap-3">
                 <div className="flex-1">
                   <Select
-                    label={index === 0 ? "Ingredient" : ""}
+                    label={index === 0 ? t('form.ingredient') : ''}
                     {...register(`ingredients.${index}.ingredient_id` as const, {
-                      required: 'Please select an ingredient',
+                      required: t('valid.ingredientRequired'),
                       valueAsNumber: true
                     })}
                     options={[
-                      { value: '0', label: 'Select ingredient...' },
+                      { value: '0', label: t('form.selectIngredient') },
                       ...ingredients.map(ing => ({
                         value: ing.id.toString(),
                         label: ing.name
@@ -554,14 +556,14 @@ const RecipeFormPage: React.FC = () => {
 
                 <div className="w-24">
                   <Input
-                    label={index === 0 ? "Quantity" : ""}
+                    label={index === 0 ? t('form.quantity') : ''}
                     type="number"
                     step="0.1"
                     min="0"
                     {...register(`ingredients.${index}.quantity` as const, {
-                      required: 'Quantity is required',
-                      min: { value: 0.1, message: 'Must be greater than 0' },
-                      max: { value: 10000, message: 'Quantity too large' },
+                      required: t('valid.quantityRequired'),
+                      min: { value: 0.1, message: t('valid.quantityMin') },
+                      max: { value: 10000, message: t('valid.quantityMax') },
                       valueAsNumber: true
                     })}
                     error={errors.ingredients?.[index]?.quantity?.message}
@@ -571,12 +573,12 @@ const RecipeFormPage: React.FC = () => {
 
                 <div className="w-32">
                   <Select
-                    label={index === 0 ? "Unit" : ""}
+                    label={index === 0 ? t('form.unit') : ''}
                     {...register(`ingredients.${index}.unit` as const, {
-                      required: 'Please select a unit'
+                      required: t('valid.unitRequired')
                     })}
                     options={[
-                      { value: '', label: 'Select unit...' },
+                      { value: '', label: t('form.selectUnit') },
                       ...MEASUREMENT_UNITS.reduce((acc, unit) => {
                         const category = acc.find(g => g.label === unit.category);
                         if (category) {
@@ -617,7 +619,7 @@ const RecipeFormPage: React.FC = () => {
             icon={<Plus className="w-4 h-4" />}
             className="mt-3"
           >
-            Add Ingredient
+            {t('form.addIngredientRow')}
           </Button>
         </Card>
 
@@ -626,7 +628,7 @@ const RecipeFormPage: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <h2 className="flex items-center gap-2 text-xl font-semibold">
               <TagIcon className="w-5 h-5" />
-              Categories & Tags
+              {t('form.tags')}
             </h2>
             <Button
               type="button"
@@ -635,7 +637,7 @@ const RecipeFormPage: React.FC = () => {
               onClick={() => setShowTagModal(true)}
               icon={<Plus className="w-4 h-4" />}
             >
-              Add New Tag
+              {t('form.addNewTag')}
             </Button>
           </div>
 
@@ -655,7 +657,7 @@ const RecipeFormPage: React.FC = () => {
           </div>
 
           <p className="mt-3 text-sm text-ink-500">
-            Click tags to select or deselect them for your recipe.
+            {t('form.tagsHint')}
           </p>
         </Card>
 
@@ -663,18 +665,18 @@ const RecipeFormPage: React.FC = () => {
         <Card>
           <h2 className="mb-5 flex items-center gap-2 text-xl font-semibold">
             <ImageIcon className="w-5 h-5" />
-            Recipe Images
+            {t('form.images')}
           </h2>
           
           <div className="space-y-4">
             <div>
               <Input
-                label="Add Images"
+                label={t('form.addImages')}
                 type="file"
                 multiple
                 accept="image/*"
                 {...register('images')}
-                helperText="Select up to 5 images. Supported formats: JPG, PNG, GIF, WebP. Max size: 5MB per image."
+                helperText={t('form.imagesHelp')}
               />
             </div>
 
@@ -682,8 +684,8 @@ const RecipeFormPage: React.FC = () => {
               <div className="space-y-2">
                 <p className="text-sm text-ink-500">
                   {isEditMode
-                    ? 'Ready to upload. Pick one as the cover if it should replace the current one.'
-                    : 'Ready to upload. Pick which one should be the cover — otherwise the first is used.'}
+                    ? t('form.pendingUploadEdit')
+                    : t('form.pendingUploadNew')}
                 </p>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   {imagePreview.map((preview, index) => (
@@ -700,7 +702,7 @@ const RecipeFormPage: React.FC = () => {
                         type="button"
                         onClick={() => setCoverPreviewIndex(current => (current === index ? null : index))}
                         aria-pressed={coverPreviewIndex === index}
-                        title={coverPreviewIndex === index ? 'This will be the cover' : 'Use as cover'}
+                        title={coverPreviewIndex === index ? t('form.coverWillBe') : t('form.setCover')}
                         className={cn(
                           'absolute left-2 top-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium shadow-sm transition-all',
                           coverPreviewIndex === index
@@ -709,7 +711,7 @@ const RecipeFormPage: React.FC = () => {
                         )}
                       >
                         <Star className={cn('h-3.5 w-3.5', coverPreviewIndex === index && 'fill-current')} />
-                        {coverPreviewIndex === index ? 'Cover' : 'Set cover'}
+                        {coverPreviewIndex === index ? t('form.cover') : t('form.setCover')}
                       </button>
                     </div>
                   ))}
@@ -719,9 +721,9 @@ const RecipeFormPage: React.FC = () => {
 
             {isEditMode && recipe?.images && recipe.images.length > 0 && (
               <div>
-                <h3 className="mb-1 font-medium text-ink-900">Current Images</h3>
+                <h3 className="mb-1 font-medium text-ink-900">{t('form.currentImages')}</h3>
                 <p className="mb-3 text-sm text-ink-500">
-                  The cover is the one shown on the recipe list and at the top of the recipe.
+                  {t('form.coverExplainer')}
                 </p>
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                   {recipe.images.map((image, index) => (
@@ -741,17 +743,17 @@ const RecipeFormPage: React.FC = () => {
                       {index === 0 ? (
                         <span className="btn-brand absolute left-2 top-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium">
                           <Star className="h-3.5 w-3.5 fill-current" />
-                          Cover
+                          {t('form.cover')}
                         </span>
                       ) : (
                         <button
                           type="button"
                           onClick={() => handleSetCover(image.id)}
-                          title="Use as cover"
+                          title={t('form.setCover')}
                           className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-ink-500 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:text-brand-600 focus-visible:opacity-100"
                         >
                           <Star className="h-3.5 w-3.5" />
-                          Set cover
+                          {t('form.setCover')}
                         </button>
                       )}
 
@@ -764,13 +766,13 @@ const RecipeFormPage: React.FC = () => {
                             const updatedRecipe = await apiService.getRecipe(recipe.id);
                             setRecipe(updatedRecipe);
                             invalidate('recipes');
-                            toast.success('Image deleted');
+                            toast.success(t('form.imageDeleted'));
                           } catch {
-                            toast.error('Failed to delete image');
+                            toast.error(t('form.imageDeleteFailed'));
                           }
                         }}
-                        title="Delete image"
-                        aria-label="Delete image"
+                        title={t('form.deleteImage')}
+                        aria-label={t('form.deleteImage')}
                         className="absolute right-2 top-2 rounded-full bg-rose-500 p-1.5 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                       >
                         <X className="w-4 h-4" />
@@ -785,18 +787,18 @@ const RecipeFormPage: React.FC = () => {
 
         {/* Instructions */}
         <Card>
-          <h2 className="mb-5 text-xl font-semibold">Cooking Instructions</h2>
+          <h2 className="mb-5 text-xl font-semibold">{t('form.instructions')}</h2>
           <Textarea
             {...register('instructions', {
-              required: 'Cooking instructions are required',
+              required: t('valid.instructionsRequired'),
               maxLength: {
                 value: 10000,
-                message: 'Instructions must be no more than 10,000 characters'
+                message: t('valid.instructionsTooLong')
               }
             })}
             rows={12}
             error={errors.instructions?.message}
-            placeholder="Step-by-step cooking instructions..."
+            placeholder={t('form.instructionsPlaceholder')}
           />
         </Card>
 
@@ -809,16 +811,16 @@ const RecipeFormPage: React.FC = () => {
               as={Link}
               to={isEditMode && recipe ? `/recipe/${recipe.id}` : '/'}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
               loading={isLoading}
               disabled={isLoading}
             >
-              {isLoading 
-                ? (isEditMode ? 'Updating...' : 'Creating...') 
-                : (isEditMode ? 'Update Recipe' : 'Create Recipe')
+              {isLoading
+                ? (isEditMode ? t('form.updating') : t('form.creating'))
+                : (isEditMode ? t('form.update') : t('form.create'))
               }
             </Button>
           </div>
@@ -829,14 +831,14 @@ const RecipeFormPage: React.FC = () => {
       <Modal
         isOpen={showIngredientModal}
         onClose={() => setShowIngredientModal(false)}
-        title="Add New Ingredient"
+        title={t('ingredients.newTitle')}
       >
         <div className="space-y-4">
           <Input
-            label="Ingredient Name"
+            label={t('form.newIngredientName')}
             value={newIngredientName}
             onChange={(e) => setNewIngredientName(e.target.value)}
-            placeholder="e.g., Olive Oil, Chicken Breast"
+            placeholder={t('form.newIngredientPlaceholder')}
           />
           <div className="flex justify-end gap-2">
             <Button
@@ -844,13 +846,13 @@ const RecipeFormPage: React.FC = () => {
               variant="secondary"
               onClick={() => setShowIngredientModal(false)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
               onClick={handleAddIngredient}
             >
-              Add Ingredient
+              {t('ingredients.add')}
             </Button>
           </div>
         </div>
@@ -859,18 +861,18 @@ const RecipeFormPage: React.FC = () => {
       <Modal
         isOpen={showTagModal}
         onClose={() => setShowTagModal(false)}
-        title="Add New Tag"
+        title={t('tags.newTitle')}
       >
         <div className="space-y-4">
           <Input
-            label="Tag Name"
+            label={t('form.newTagName')}
             value={newTagName}
             onChange={(e) => setNewTagName(e.target.value)}
-            placeholder="e.g., Dessert, Quick & Easy"
+            placeholder={t('form.newTagPlaceholder')}
           />
           <div>
             <label className="mb-2 block text-sm font-medium text-ink-700">
-              Tag Color
+              {t('form.tagColor')}
             </label>
             <input
               type="color"
@@ -885,13 +887,13 @@ const RecipeFormPage: React.FC = () => {
               variant="secondary"
               onClick={() => setShowTagModal(false)}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="button"
               onClick={handleAddTag}
             >
-              Add Tag
+              {t('tags.add')}
             </Button>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Loader2, X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '@/utils';
 import { Tag } from '@/types';
+import { translate, currentLanguage } from '@/i18n';
 
 // Loading Spinner Component
 interface LoadingSpinnerProps {
@@ -154,6 +155,10 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, [isOpen, onClose]);
 
+  // Not the hook: this is the only string Modal owns, and reading the language
+  // directly keeps it out of the render path of every dialog in the app.
+  const closeLabel = translate(currentLanguage(), 'common.close');
+
   if (!isOpen) return null;
 
   // Into <body>, not wherever the caller happens to sit. An ancestor with a
@@ -179,7 +184,7 @@ export const Modal: React.FC<ModalProps> = ({
             <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
             <button
               onClick={onClose}
-              aria-label="Close"
+              aria-label={closeLabel}
               className="-mr-1 rounded-full p-1.5 text-ink-500 transition-colors hover:bg-black/5 hover:text-ink-900"
             >
               <X className="w-5 h-5" />

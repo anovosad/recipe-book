@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Input validation patterns
@@ -20,14 +21,18 @@ var (
 	// Recipe title: 1-200 chars, allow most characters but not HTML
 	RecipeTitleRegex = regexp.MustCompile(`^[^<>]{1,200}$`)
 
-	// Tag name: 1-50 chars, letters, numbers, spaces, hyphens
+	// Tag name: 1-50 characters, letters, numbers, spaces, hyphens.
+	// \p{L} rather than a-zA-Z: the collection is used in Czech, and an ASCII
+	// class rejects "Předkrm" and "Hlavní jídlo" outright.
 	// '&' is allowed because the app seeds "Quick & Easy" itself; without it that
 	// default tag failed its own validator and was silently dropped, leaving the
 	// sample recipe that references it untagged.
-	TagNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-&]{1,50}$`)
+	TagNameRegex = regexp.MustCompile(`^[\p{L}\p{N}\s\-&]{1,50}$`)
 
-	// Ingredient name: 1-100 chars, letters, numbers, spaces, basic punctuation
-	IngredientNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-'.,()]{1,100}$`)
+	// Ingredient name: 1-100 characters, letters, numbers, spaces, basic
+	// punctuation. \p{L} for the same reason as tags - "Máslo" and "Žampiony"
+	// are ordinary ingredient names.
+	IngredientNameRegex = regexp.MustCompile(`^[\p{L}\p{N}\s\-'.,()]{1,100}$`)
 
 	// SQL injection patterns (more comprehensive)
 	SQLInjectionPatterns = []*regexp.Regexp{
@@ -166,11 +171,11 @@ func ValidatePassword(password string) ValidationResult {
 func ValidateRecipeTitle(title string) ValidationResult {
 	title = strings.TrimSpace(title)
 
-	if len(title) == 0 {
+	if utf8.RuneCountInString(title) == 0 {
 		return ValidationResult{false, "Recipe title is required", "title"}
 	}
 
-	if len(title) > 200 {
+	if utf8.RuneCountInString(title) > 200 {
 		return ValidationResult{false, "Recipe title is too long (maximum 200 characters)", "title"}
 	}
 
@@ -193,7 +198,7 @@ func ValidateRecipeTitle(title string) ValidationResult {
 func ValidateRecipeDescription(description string) ValidationResult {
 	description = strings.TrimSpace(description)
 
-	if len(description) > 1000 {
+	if utf8.RuneCountInString(description) > 1000 {
 		return ValidationResult{false, "Recipe description is too long (maximum 1000 characters)", "description"}
 	}
 
@@ -209,11 +214,11 @@ func ValidateRecipeDescription(description string) ValidationResult {
 func ValidateRecipeInstructions(instructions string) ValidationResult {
 	instructions = strings.TrimSpace(instructions)
 
-	if len(instructions) == 0 {
+	if utf8.RuneCountInString(instructions) == 0 {
 		return ValidationResult{false, "Recipe instructions are required", "instructions"}
 	}
 
-	if len(instructions) > 10000 {
+	if utf8.RuneCountInString(instructions) > 10000 {
 		return ValidationResult{false, "Recipe instructions are too long (maximum 10,000 characters)", "instructions"}
 	}
 
@@ -229,11 +234,11 @@ func ValidateRecipeInstructions(instructions string) ValidationResult {
 func ValidateTagName(name string) ValidationResult {
 	name = strings.TrimSpace(name)
 
-	if len(name) == 0 {
+	if utf8.RuneCountInString(name) == 0 {
 		return ValidationResult{false, "Tag name is required", "name"}
 	}
 
-	if len(name) > 50 {
+	if utf8.RuneCountInString(name) > 50 {
 		return ValidationResult{false, "Tag name is too long (maximum 50 characters)", "name"}
 	}
 
@@ -252,11 +257,11 @@ func ValidateTagName(name string) ValidationResult {
 func ValidateIngredientName(name string) ValidationResult {
 	name = strings.TrimSpace(name)
 
-	if len(name) == 0 {
+	if utf8.RuneCountInString(name) == 0 {
 		return ValidationResult{false, "Ingredient name is required", "name"}
 	}
 
-	if len(name) > 100 {
+	if utf8.RuneCountInString(name) > 100 {
 		return ValidationResult{false, "Ingredient name is too long (maximum 100 characters)", "name"}
 	}
 
@@ -275,7 +280,7 @@ func ValidateIngredientName(name string) ValidationResult {
 func ValidateSearchQuery(query string) ValidationResult {
 	query = strings.TrimSpace(query)
 
-	if len(query) > 200 {
+	if utf8.RuneCountInString(query) > 200 {
 		return ValidationResult{false, "Search query is too long", "search"}
 	}
 

@@ -4,8 +4,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Home, ArrowLeft } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
+import { useTranslation } from '@/i18n';
 
 export const NotFoundPage: React.FC = () => {
+  const { t } = useTranslation();
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <Card padding="lg" className="max-w-md text-center">
@@ -14,17 +16,16 @@ export const NotFoundPage: React.FC = () => {
         </div>
 
         <h1 className="mb-2 text-2xl font-bold">
-          Recipe Not Found
+          {t('notFound.title')}
         </h1>
 
         <p className="mb-8 text-ink-500">
-          Oops! The page you're looking for seems to have been eaten. 
-          Maybe it was just too delicious to resist!
+          {t('notFound.body')}
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button as={Link} to="/" icon={<Home className="h-4 w-4" />}>
-            Go to Recipes
+            {t('notFound.goToRecipes')}
           </Button>
 
           <Button
@@ -32,7 +33,7 @@ export const NotFoundPage: React.FC = () => {
             variant="secondary"
             icon={<ArrowLeft className="h-4 w-4" />}
           >
-            Go Back
+            {t('notFound.goBack')}
           </Button>
         </div>
       </Card>

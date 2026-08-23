@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { KeyRound } from 'lucide-react';
 import apiService from '@/services/api';
 import { Modal, Input, Button, Alert } from '@/components/ui';
+import { useTranslation } from '@/i18n';
 import toast from 'react-hot-toast';
 
 interface ChangePasswordModalProps {
@@ -12,6 +13,7 @@ interface ChangePasswordModalProps {
 const EMPTY = { current_password: '', new_password: '', confirm_password: '' };
 
 export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose }) => {
+  const { t } = useTranslation();
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +37,7 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
     e.preventDefault();
 
     if (form.new_password !== form.confirm_password) {
-      setError('The two new passwords do not match');
+      setError(t('auth.passwordsDiffer'));
       return;
     }
 
@@ -43,13 +45,13 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
     try {
       const response = await apiService.changePassword(form.current_password, form.new_password);
       if (response.success) {
-        toast.success(response.message || 'Password changed');
+        toast.success(t('auth.changePassword'));
         close();
       } else {
-        setError(response.error || 'Could not change the password');
+        setError(response.error || t('auth.changePasswordFailed'));
       }
     } catch (err: any) {
-      setError(err?.error || 'Could not change the password');
+      setError(err?.error || t('auth.changePasswordFailed'));
     } finally {
       setIsSubmitting(false);
     }
@@ -62,10 +64,10 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
     !isSubmitting;
 
   return (
-    <Modal isOpen={isOpen} onClose={close} title="Change password">
+    <Modal isOpen={isOpen} onClose={close} title={t('auth.changePassword')}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Current password"
+          label={t('auth.currentPassword')}
           type="password"
           value={form.current_password}
           onChange={set('current_password')}
@@ -75,17 +77,17 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
         />
 
         <Input
-          label="New password"
+          label={t('auth.newPassword')}
           type="password"
           value={form.new_password}
           onChange={set('new_password')}
           autoComplete="new-password"
-          helperText="At least 6 characters, with a letter and a number."
+          helperText={t('auth.passwordRules')}
           required
         />
 
         <Input
-          label="Repeat new password"
+          label={t('auth.repeatNewPassword')}
           type="password"
           value={form.confirm_password}
           onChange={set('confirm_password')}
@@ -97,15 +99,15 @@ export const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen
 
         <p className="flex items-start gap-2 text-sm text-ink-500">
           <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-brand-400" />
-          Changing it signs out every other device. This one stays signed in.
+          {t('auth.changePasswordNote')}
         </p>
 
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" size="sm" onClick={close}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="submit" size="sm" loading={isSubmitting} disabled={!canSubmit}>
-            Change password
+            {t('auth.changePassword')}
           </Button>
         </div>
       </form>

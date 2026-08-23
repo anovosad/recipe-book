@@ -7,6 +7,7 @@ import { useAppStore, filterRecipes } from '@/store/appStore';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
 import RecipeCard from '@/components/RecipeCard';
+import { useTranslation } from '@/i18n';
 import { Button, LoadingSpinner, EmptyState, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -29,6 +30,7 @@ const parseIds = (raw: string | null): number[] => {
 const RecipesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
+  const { t } = useTranslation();
 
   const { recipes, isLoading: recipesLoading, loadRecipes } = useOptimizedRecipes();
   const { tags, loadTags } = useOptimizedTags();
@@ -155,22 +157,22 @@ const RecipesPage: React.FC = () => {
   };
 
   const handleDeleteRecipe = useCallback(async (recipe: Recipe) => {
-    if (!window.confirm(`Are you sure you want to delete "${recipe.title}"?`)) return;
+    if (!window.confirm(t('recipes.deleteConfirm', { title: recipe.title }))) return;
 
     try {
       const response = await apiService.deleteRecipe(recipe.id);
       if (response.success) {
         deleteRecipeFromStore(recipe.id);
         invalidate('recipes');
-        toast.success(response.message || 'Recipe deleted successfully');
+        toast.success(t('recipes.deleted'));
       } else {
-        toast.error(response.error || 'Failed to delete recipe');
+        toast.error(response.error || t('recipes.deleteFailed'));
       }
     } catch (error: any) {
       console.error('Delete recipe error:', error);
-      toast.error(error?.error || 'Failed to delete recipe. Please try again.');
+      toast.error(error?.error || t('recipes.deleteFailed'));
     }
-  }, [deleteRecipeFromStore]);
+  }, [deleteRecipeFromStore, t]);
 
   if (recipesLoading && recipes.length === 0) {
     return (
@@ -193,18 +195,20 @@ const RecipesPage: React.FC = () => {
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
             <Utensils className="h-8 w-8 text-brand-500" />
-            Recipes
+            {t('recipes.title')}
           </h1>
           <p className="mt-2 text-ink-500">
-            {filteredRecipes.length} recipe{filteredRecipes.length !== 1 ? 's' : ''}
-            {hasFilters ? ' matching your filters' : ' in the collection'}
-            {activeIngredients.length > 1 && ` — with all ${activeIngredients.length} ingredients`}
+            {hasFilters
+              ? t('recipes.countFiltered', { count: filteredRecipes.length })
+              : t('recipes.countPlain', { count: filteredRecipes.length })}
+            {activeIngredients.length > 1 &&
+              ` ${t('recipes.withAllIngredients', { count: activeIngredients.length })}`}
           </p>
         </div>
 
         {isAuthenticated && (
           <Button as={Link} to="/recipe/new" icon={<Plus className="h-4 w-4" />}>
-            Add Recipe
+            {t('recipes.add')}
           </Button>
         )}
       </header>
@@ -217,10 +221,10 @@ const RecipesPage: React.FC = () => {
             <input
               type="search"
               className="field pl-11"
-              placeholder="Search recipes, ingredients, or tags…"
+              placeholder={t('recipes.searchPlaceholder')}
               value={inputValue}
               onChange={handleSearchChange}
-              aria-label="Search recipes"
+              aria-label={t('recipes.searchLabel')}
             />
           </div>
 
@@ -231,7 +235,7 @@ const RecipesPage: React.FC = () => {
               icon={<TagIcon className="h-4 w-4" />}
               aria-expanded={openPanel === 'tags'}
             >
-              Tags
+              {t('recipes.filterTags')}
             </Button>
             <Button
               variant={openPanel === 'ingredients' || activeIngredientIds.length > 0 ? 'primary' : 'secondary'}
@@ -239,12 +243,12 @@ const RecipesPage: React.FC = () => {
               icon={<Leaf className="h-4 w-4" />}
               aria-expanded={openPanel === 'ingredients'}
             >
-              Ingredients
+              {t('recipes.filterIngredients')}
               {activeIngredientIds.length > 0 && ` (${activeIngredientIds.length})`}
             </Button>
             {hasFilters && (
               <Button variant="ghost" onClick={clearFilters} icon={<X className="h-4 w-4" />}>
-                Clear
+                {t('common.clear')}
               </Button>
             )}
           </div>
@@ -273,18 +277,19 @@ const RecipesPage: React.FC = () => {
 
         {openPanel === 'ingredients' && (
           <div className="animate-rise mt-4 space-y-3 border-t border-black/5 pt-4">
-            <p className="text-sm text-ink-500">
-              Pick as many as you like — recipes have to contain <strong className="font-semibold text-ink-700">all</strong> of them.
-            </p>
+            <p
+              className="text-sm text-ink-500 [&_strong]:font-semibold [&_strong]:text-ink-700"
+              dangerouslySetInnerHTML={{ __html: t('recipes.filterIngredientsHint') }}
+            />
 
             {usedIngredients.length > INGREDIENT_SEARCH_THRESHOLD && (
               <input
                 type="search"
                 className="field"
-                placeholder="Find an ingredient…"
+                placeholder={t('recipes.ingredientSearchPlaceholder')}
                 value={ingredientQuery}
                 onChange={(e) => setIngredientQuery(e.target.value)}
-                aria-label="Filter the ingredient list"
+                aria-label={t('recipes.ingredientSearchLabel')}
               />
             )}
 
@@ -305,8 +310,8 @@ const RecipesPage: React.FC = () => {
             ) : (
               <p className="text-sm text-ink-300">
                 {usedIngredients.length === 0
-                  ? 'No recipe lists any ingredients yet.'
-                  : `Nothing matches "${ingredientQuery}".`}
+                  ? t('recipes.noIngredientsAnywhere')
+                  : t('recipes.noIngredientMatch', { query: ingredientQuery })}
               </p>
             )}
           </div>
@@ -315,7 +320,7 @@ const RecipesPage: React.FC = () => {
         {/* What is currently narrowing the list, when the panels are shut. */}
         {openPanel === null && (activeTag || activeIngredients.length > 0) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-500">
-            Filtered by
+            {t('recipes.filteredBy')}
             {activeTag && (
               <TagChip
                 tag={activeTag}
@@ -323,7 +328,7 @@ const RecipesPage: React.FC = () => {
                 type="button"
                 dot
                 onClick={() => applyFilters(searchQuery, null, activeIngredientIds)}
-                title={`Remove the ${activeTag.name} tag filter`}
+                title={t('recipes.removeTagFilter', { name: activeTag.name })}
               />
             )}
             {activeIngredients.map(ingredient => (
@@ -333,7 +338,7 @@ const RecipesPage: React.FC = () => {
                 as="button"
                 type="button"
                 onClick={() => toggleIngredient(ingredient.id)}
-                title={`Remove ${ingredient.name}`}
+                title={t('recipes.removeIngredientFilter', { name: ingredient.name })}
               />
             ))}
           </div>
@@ -355,22 +360,22 @@ const RecipesPage: React.FC = () => {
       ) : (
         <EmptyState
           icon={<Utensils className="h-7 w-7" />}
-          title="No recipes found"
+          title={t('recipes.emptyTitle')}
           description={
             hasFilters
-              ? 'No recipes match your current filters. Try adjusting your search or clearing the tags.'
+              ? t('recipes.emptyFiltered')
               : isAuthenticated
-              ? 'Be the first to add a delicious recipe!'
-              : 'Please log in to add recipes.'
+              ? t('recipes.emptyAuthed')
+              : t('recipes.emptyAnon')
           }
           action={
             hasFilters ? (
               <Button onClick={clearFilters} variant="secondary">
-                Clear Filters
+                {t('common.clear')}
               </Button>
             ) : isAuthenticated ? (
               <Button as={Link} to="/recipe/new" icon={<Plus className="h-4 w-4" />}>
-                Add Your First Recipe
+                {t('recipes.addFirst')}
               </Button>
             ) : null
           }

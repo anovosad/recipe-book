@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import toast from 'react-hot-toast';
 import { LoginForm, RegisterForm, AuthState } from '@/types';
 import apiService, { setUnauthorizedHandler } from '@/services/api';
+import { translate, currentLanguage } from '@/i18n';
 
 interface AuthStore extends AuthState {
   initialize: () => Promise<void>;
@@ -67,7 +68,7 @@ export const useAuthStore = create<AuthStore>()(
               isLoading: false 
             });
             
-            toast.success(response.message || 'Welcome back!');
+            toast.success(response.message || translate(currentLanguage(), 'auth.welcomeBack'));
             return true;
           } else {
             set({ isLoading: false });
@@ -113,7 +114,7 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false, 
             isLoading: false 
           });
-          toast.success('Logged out successfully');
+          toast.success(translate(currentLanguage(), 'auth.loggedOut'));
         } catch {
           // Even if API call fails, clear local state
           set({ 
@@ -121,7 +122,7 @@ export const useAuthStore = create<AuthStore>()(
             isAuthenticated: false, 
             isLoading: false 
           });
-          toast.success('Logged out successfully');
+          toast.success(translate(currentLanguage(), 'auth.loggedOut'));
         }
       },
 
@@ -151,5 +152,5 @@ export const useAuthStore = create<AuthStore>()(
 setUnauthorizedHandler(() => {
   if (!useAuthStore.getState().isAuthenticated) return;
   useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
-  toast.error('Session expired. Please log in again.');
+  toast.error(translate(currentLanguage(), 'auth.sessionExpired'));
 });
