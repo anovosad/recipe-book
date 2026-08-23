@@ -1,0 +1,86 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A recipe management web app: a Go JSON API backend (Gorilla Mux, SQLite via `modernc.org/sqlite` — CGO-free) serving a React + TypeScript SPA built with Vite. The Go binary serves the built frontend as static files and falls back to `index.html` for client-side routing; there are no server-rendered HTML templates despite what the `PageData` struct in `models/models.go` might suggest (that's a leftover model, unused by the current API-only handlers).
+
+## Common commands
+
+Backend (from repo root):
+```bash
+go run main.go              # run the server directly (serves API only until frontend is built)
+make build                  # go build -o recipe-book -v ./...
+make test                   # go test -v ./...
+make deps                   # go mod download && go mod tidy
+```
+
+Frontend (from `frontend/`):
+```bash
+npm install
+npm run dev                 # Vite dev server on :3000, proxies /api and /uploads to :8080
+npm run build                # tsc && vite build -> outputs to ../static/dist (consumed by the Go server)
+npm run type-check           # tsc --noEmit
+npm run lint                 # eslint . --report-unused-disable-directives --max-warnings 0
+```
+
+Tooling lives under `~/.local` (Go in `~/.local/go`, Node 22 LTS in `~/.local/node`, both linked from `~/.local/bin`, which `.bashrc` puts on PATH). Note that a non-interactive shell skips `.bashrc`, so scripts may need the path set explicitly.
+
+Vite 8 requires Node `^20.19.0 || >=22.12.0`; `build.sh` checks this before running `npm install`, and `frontend/package.json` declares it under `engines`.
+
+ESLint config is `frontend/eslint.config.js` (flat config — ESLint 10 removed `.eslintrc` support entirely). The lint script and the plugins were in `package.json` from the start but no config file ever was, so `npm run lint` only ever reported "couldn't find a configuration file". Three rules are deliberately off or suppressed, each with the reasoning in a comment at the site:
+- `@typescript-eslint/no-explicit-any` — the codebase predates the linter and uses `any` widely, so enabling it would mean 30+ failures on untouched files; worth doing, but as its own change.
+- `react-hooks/incompatible-library` — react-hook-form's proxies make the React Compiler skip those components. The project doesn't run the compiler, so the report isn't actionable.
+- `react-hooks/set-state-in-effect` — suppressed per line in four places: two fetch-on-mount effects (every `setState` is behind an `await`, so there's no synchronous cascade) and two that synchronise state *from* the URL, where the values stay user-editable and so can't just be derived during render. Everywhere else the rule is on, and it is what caught the derived-state effects on the tags/ingredients pages.
+
+Full build (backend + frontend together): `./build.sh` (or `./build.sh frontend` / `./build.sh backend` / `./build.sh clean` / `./build.sh dev`). This is what CI/deploy expects — the Go server refuses to serve pages until `static/dist/index.html` exists.
+
+Docker / deployment: `./deploy.sh setup|deploy|logs|backup|restore|update|security|monitor|health|stop|restart|status` orchestrates the full stack (app + Nginx + fail2ban) via `docker-compose.yml`. `docker-compose-portainer.yml` is a Portainer-specific variant.
+
+`make` isn't installed on this machine — run the underlying `go` commands directly. The Makefile's `PKGS` filters `/node_modules/` out of `go list ./...`: `frontend/node_modules` sits inside this Go module and some npm packages ship Go sources (eslint's `flatted`), which `./...` would otherwise build and vet as if they were ours. `make build` also builds `.` rather than a package list, since `go build -o <file>` refuses to write more than one package to a single output.
+
+Single test: `go test -run TestName ./middleware/...`. Coverage is thin: `middleware/security_test.go` (client-IP resolution behind a proxy, rate-limit violation counting), `apiresp/apiresp_test.go` (the response contract) and `main_test.go` (API routing, 404 vs 405).
+
+## Architecture
+
+**Request flow (`main.go`):** global middleware chain (panic recovery → CORS → security headers → cache headers → compression → request logging → security context → SQL-injection protection → general rate limit) wraps a Gorilla Mux router. The database is initialised synchronously before the server starts listening — handlers dereference `database.DB` and the prepared statements, so serving before init is a nil-pointer panic. Three route groups:
+- `/api/login`, `/api/register`, `/api/search` each get their own dedicated rate-limit subrouter (see `middleware/security.go`'s `SecurityManager`) in addition to the general limit.
+- `/api/*` — the rest of the JSON API (recipes, ingredients, tags, images), handled in `handlers/api.go`, on a `PathPrefix("/api").Subrouter()`.
+- Filtered collections are dispatched *inside* `GetRecipesHandler` (`?q=` → search, `?tag=` → by tag), not through mux `Queries()` routes: a failing `Queries` matcher clears mux's record of a method mismatch, which silently turns every 405 on that path into a 404. `?q=` is wrapped in `SearchRateLimitIfQuery` so a search carries the tighter search limit while a plain listing keeps the general one. `/api/search` and `/api/recipes/tag/{id}` still work.
+- 404 vs 405: `apiNotFoundHandler` (in `main.go`) probes the router with the other methods and emits `Allow`, because mux only reports a method mismatch when the mismatched route happens to be registered last. `main_test.go` covers this.
+- Everything else falls through to `setupStaticRoutes`/`setupSPAFallback`, which serves `static/dist/` (the Vite build output) and returns `index.html` for any non-API, non-file path (SPA client-side routing). The SPA handler is the router's `NotFoundHandler`, not a `PathPrefix("/")` route - as a route it matched every path, so mux never got to answer 405.
+
+**API response contract (`apiresp/`):** every `/api` response is one of two shapes - `{"success": true, "data": ..., "message"?, "meta"?}` or `{"success": false, "error": "...", "code": "...", "details"?}` - and `code` is derived from the HTTP status by `apiresp.Code`, so no call site invents its own vocabulary. `data` always holds the resource or collection the endpoint is about: a `POST` answers 201 with the created resource and a `Location` header, a `PUT` answers with the updated one. The package is separate from `handlers` because the middleware answers requests too (a rate limit or a rejected body never reaches a handler) and `handlers` already imports `middleware`. Add new endpoints through `sendJSON*` in `handlers/helpers.go`, never by writing to the `ResponseWriter` directly; `middleware.respondError` is the equivalent for the middleware and falls back to plain text off `/api`. `apiresp/apiresp_test.go` pins the shape.
+
+**Auth:** JWT (HS256) stored in an HTTP-only `auth_token` cookie, 24h expiry. `auth.GetUserFromToken(r)` is the standard way handlers resolve the current user. Ownership checks (e.g. only a recipe's creator can edit/delete it) are enforced at the database layer via `database.UserOwnsRecipe` / the `*Secure` query functions, not just in handlers — `WHERE id = ? AND created_by = ?` clauses.
+
+**Database layer (`database/database.go`):** single `*sql.DB` global, prepared statements created once at startup (`prepareStatements`), WAL mode enabled. Schema is created idempotently on every startup (`createTables`, `CREATE TABLE IF NOT EXISTS` + small ad-hoc migrations like `migrateServingUnits`), and a fresh database is seeded with default ingredients/tags/an admin user/sample recipes (`insertDefault*`). Prefer the `*Secure` / `*Tx` functions (`DeleteRecipeSecure`, `CreateRecipeTx`, `DeleteTagSecure`, etc.) when adding backend logic — they validate input via `utils/` before touching the DB; avoid ad-hoc `DB.Exec`/`DB.Query` for anything user-facing. List queries deliberately return initialised empty slices so the JSON is `[]`, never `null`.
+
+**Recipe writes:** `database.CreateRecipeTx` / `UpdateRecipeTx` do validation, the recipe row and the tag/ingredient rows in one transaction, and return a `*database.ValidationError` (test with `database.IsValidationError`) for caller-input problems versus a raw error for internal ones — handlers use that split to decide between a 400 echoing the message and a generic 500. Add new recipe-write logic there rather than issuing separate `DB.Exec` calls from a handler.
+
+**Validation (`utils/security.go`, `utils/utils.go`):** centralized input validators (`ValidateUsername`, `ValidateRecipeTitle`, `ValidateSearchQuery`, etc.) return a `Validation{Valid, Message}` struct. Add new validators here rather than inlining regex/length checks in handlers.
+
+**Security middleware (`middleware/security.go`, `middleware/performance.go`):** `SecurityManager` implements per-IP rate limiting (separate limiters for login/register/search/general) with automatic temporary IP blocking on repeated violations, plus SQL-injection pattern detection. Violations are debounced by `violationCooldown`: the general limiter runs on every matched route, so one page load that overruns the burst produces a stream of denials that must count as a single violation, otherwise a single overload blocks the IP outright. Rate limit numbers are defined in `DefaultRateLimitConfig()`/`LightRateLimitConfig()`. There's a parallel layer of protection at the Nginx level (`nginx/conf.d/recipe-book.conf`) and fail2ban jails (`fail2ban/jail.d/recipe-book.conf`) for production deployments — when changing rate limits, consider whether both layers need updating.
+
+**Listing recipes:** `GetAllRecipes` / `SearchRecipes` / `GetRecipesByTag` fetch only recipe rows, then hand the slice to `attachRelations`, which loads ingredients, images and tags for the whole page in three `IN (...)` queries. Do not reintroduce per-recipe lookups inside those loops — that was a 3N+1 pattern. The single-recipe getters still use `GetRecipeIngredients`/`GetRecipeImages`/`GetRecipeTags` directly, which is fine for one row.
+
+**Authorization rules that are not obvious:** recipes are owner-only for edit/delete (enforced in the SQL `WHERE`). Ingredients and tags are a *shared* taxonomy any signed-in user can add to. Deleting an ingredient is refused while any recipe uses it; deleting a tag cascades to `recipe_tags` and is refused only when a recipe belonging to *someone else* carries it (`database.TagUsageByOthers`) — otherwise one user could strip tags off strangers' recipes.
+
+**Models (`models/models.go`):** core domain types are `User`, `Recipe` (with nested `Ingredients`, `Images`, `Tags`), `Ingredient`, `Tag`, `RecipeImage`. Recipes have a many-to-many relationship with both ingredients (via `recipe_ingredients`, carrying quantity+unit) and tags (via `recipe_tags`).
+
+**Frontend contract (`frontend/src/services/api.ts`):** the service layer is the only place that knows about the envelope. `request()` returns it whole (mutations, whose callers read `success`/`message`), `requestData()` unwraps `data` (collections and single resources). Failures are thrown as the error envelope, so callers read `error.error`, `error.code` and `error.details`. Keep that split when adding a method - the pages must not learn the envelope.
+
+**Frontend (`frontend/src/`):** React Router SPA. State is split between two Zustand stores: `store/authStore.ts` (current user/session) and `store/appStore.ts` (app data). `services/api.ts` wraps Axios for all backend calls. Pages live in `pages/` (one per route: recipes list, recipe detail, recipe form for create/edit, ingredients, tags, login/register). `components/LazyComponents.tsx` centralizes React.lazy() route-level code splitting — check it when adding a new page. Vite's `codeSplitting.groups` config (`vite.config.ts`) splits vendor bundles by library group (react, router, forms, ui, http, state); keep that in mind if adding a heavy new dependency. Groups are matched in order and the first hit wins, so the `react-*` libraries must stay listed above the `react` group that would otherwise swallow them.
+
+## Notes when modifying
+
+- Vite 8 bundles with Rolldown, not Rollup/esbuild. Three consequences in `vite.config.ts`: the object form of `rollupOptions.output.manualChunks` is gone (use `codeSplitting.groups`), the config is loaded as real ESM so `__dirname` doesn't exist (use `import.meta.dirname`), and `terser` is a declared devDependency because `minify: 'terser'` needs it and nothing pulls it in transitively any more. Vite no longer ships esbuild at all, so `cssMinify: 'esbuild'` would mean re-adding the package the upgrade removed.
+- Tailwind is loaded from `https://cdn.tailwindcss.com` in `frontend/index.html`; there is no `tailwindcss` dependency and no PostCSS step. That means the `@tailwind` and `@apply` directives in `src/styles/index.css` are never expanded — they have always been dead, and Vite 8's Lightning CSS minifier now says so out loud on every build ("Unknown at rule: @apply"). Wiring Tailwind up as a real build step is a separate change, and not a small one: `@apply border-border` / `bg-background` / `text-foreground` reference theme tokens that don't exist in stock Tailwind, so a proper install needs a config defining them.
+- `frontend/vite.config.ts` builds into `../static/dist` — this is not configurable per-environment; the Go server hardcodes `./static/dist/` as its static root.
+- Auth config is environment-driven: `JWT_SECRET` is required when `ENVIRONMENT=production` (the process refuses to start without it) and falls back to a random per-process key in development, so restarting dev invalidates sessions. `ENVIRONMENT=production` also turns on the `Secure` cookie flag. `ALLOWED_ORIGINS` (comma-separated) overrides the CORS allowlist, which otherwise defaults to the localhost dev origins and to *nothing* in production (same-origin needs no CORS headers).
+- Database path is configurable via `DB_PATH` env var (defaults to `./recipes.db`); uploaded recipe images go to `./uploads/`, served at `/uploads/`.
+- `TRUSTED_PROXIES` (comma-separated IPs, CIDRs or hostnames) decides which peers may set the client address via `X-Forwarded-For`/`X-Real-IP`; anything else is keyed on the peer address. It defaults to loopback plus the RFC1918 ranges, and `none` disables header handling. `docker-compose.yml` sets it explicitly because the compose network uses `172.32.0.0/16`, which is outside RFC1918. Rate limits and the security log both key on `middleware.ClientIP` - do not reintroduce a local copy that reads the headers unconditionally, since nginx appends to whatever the client sent (`$proxy_add_x_forwarded_for`) and the leftmost entry is therefore attacker-controlled.
+- The `admin` account is seeded only when the database is created. `ADMIN_PASSWORD` (and `ADMIN_EMAIL`) set it; otherwise a random password is generated and logged **once** on that run. There is no shipped default password.
+- SQLite pragmas are passed in the DSN (`?_pragma=foreign_keys(1)&…`) because pragmas are per-connection and `database/sql` pools connections — a single `Exec` of them after `Open` configures only one connection and leaves `foreign_keys` OFF everywhere else, silently disabling every `ON DELETE CASCADE`. `openDatabase` falls back to a plain path plus a one-connection pool if a driver build rejects that DSN form, and `InitDB` reads `PRAGMA foreign_keys` back and warns if it is off.
+- Schema changes for existing databases go in a `migrate*` function called from `createTables()`, which runs before `prepareStatements()` so statements never compile against a table that is about to be rebuilt. `migrateRecipeIngredientsKey` is the model: copy → verify row count → swap, all in one transaction that rolls back on any failure.

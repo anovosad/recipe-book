@@ -189,21 +189,48 @@ type PageData struct {
 
 ## API Endpoints
 
+Every `/api` response uses the same envelope, so a client never has to know
+which endpoint it called to find the payload or the reason for a failure:
+
+```json
+{ "success": true,  "data": {}, "message": "...", "meta": {} }
+{ "success": false, "error": "human readable", "code": "machine_readable", "details": {} }
+```
+
+`data` holds the resource or collection the endpoint is about. `code` follows the
+HTTP status (`bad_request`, `unauthorized`, `forbidden`, `not_found`,
+`method_not_allowed`, `conflict`, `payload_too_large`, `rate_limited`,
+`internal_error`). `details` carries structured context for a refusal - which
+recipes still use an ingredient, how long a rate-limit block still has to run.
+A `POST` answers `201` with the created resource and a `Location` header; a `PUT`
+answers with the updated one.
+
 ### Authentication
 - `POST /api/register` - Register new user
 - `POST /api/login` - User login
+- `POST /api/logout` - End the session
+- `GET /api/auth/check` - Current user
 
 ### Recipes
 - `GET /api/recipes` - Get all recipes
+- `GET /api/recipes?q={query}` - Search recipes (also `GET /api/search?q=`)
+- `GET /api/recipes?tag={id}` - Recipes carrying a tag (also `GET /api/recipes/tag/{id}`)
 - `POST /api/recipes` - Create new recipe (auth required)
 - `GET /api/recipes/{id}` - Get specific recipe
 - `PUT /api/recipes/{id}` - Update recipe (auth required, owner only)
 - `DELETE /api/recipes/{id}` - Delete recipe (auth required, owner only)
-- `GET /api/recipes/search?q={query}` - Search recipes
 
-### Ingredients
+### Images
+- `POST /api/recipes/{id}/images` - Attach images (auth required, owner only)
+- `DELETE /api/images/{id}` - Delete an image (auth required, owner only)
+
+### Ingredients and tags
 - `GET /api/ingredients` - Get all ingredients
 - `POST /api/ingredients` - Create new ingredient (auth required)
+- `DELETE /api/ingredients/{id}` - Delete an ingredient (refused while a recipe uses it)
+- `GET /api/tags` - Get all tags
+- `POST /api/tags` - Create new tag (auth required)
+- `DELETE /api/tags/{id}` - Delete a tag (refused while another user's recipe carries it)
 
 ## Database Schema
 
@@ -694,10 +721,12 @@ docker-compose logs nginx | grep -E "(429|403|blocked)"
 
 ## 🛡️ Security Best Practices
 
-### Default Credentials
-⚠️ **Important**: Change default admin credentials immediately:
-- Username: `admin`
-- Password: `admin123`
+### Admin Account
+The `admin` account is created the first time the database is initialised.
+- Set `ADMIN_PASSWORD` (and optionally `ADMIN_EMAIL`) before that first run to choose the password.
+- Leave it unset and a random password is generated and written to the server log **once**, on the run that creates the database.
+
+There is no longer a shipped default password.
 
 ### Regular Maintenance
 1. **Update dependencies** regularly
