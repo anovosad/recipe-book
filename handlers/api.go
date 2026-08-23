@@ -172,7 +172,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set secure cookie
-	auth.SetAuthCookie(w, tokenString)
+	auth.SetAuthCookie(w, r, tokenString)
 	utils.LogSecurityEvent("LOGIN_SUCCESS", clientIP, req.Username)
 
 	sendJSONSuccess(w, "Login successful", map[string]interface{}{
@@ -233,7 +233,7 @@ func ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
 		sendJSONError(w, http.StatusInternalServerError, "Password changed, but the session could not be renewed - please log in again")
 		return
 	}
-	auth.SetAuthCookie(w, tokenString)
+	auth.SetAuthCookie(w, r, tokenString)
 
 	utils.LogSecurityEvent("PASSWORD_CHANGED", clientIP, user.Username)
 	sendJSONSuccess(w, "Password changed. Any other sessions have been signed out.", nil)
@@ -249,7 +249,7 @@ func LogoutHandler(w http.ResponseWriter, r *http.Request) {
 		utils.LogSecurityEvent("ANONYMOUS_LOGOUT", clientIP, "")
 	}
 
-	auth.ClearAuthCookie(w)
+	auth.ClearAuthCookie(w, r)
 	sendJSONSuccess(w, "Logged out successfully", nil)
 }
 

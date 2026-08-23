@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Clock,
@@ -19,7 +19,7 @@ import { useAppStore } from '@/store/appStore';
 import { invalidate } from '@/hooks/useOptimizedData';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
-import { formatTime, formatDate, formatCookingQuantity, cn } from '@/utils';
+import { formatTime, formatDate, formatCookingQuantity, parseInstructions, cn } from '@/utils';
 import { Card, Button, LoadingSpinner, Alert, TagChip } from '@/components/ui';
 import RecipeImageGallery from '@/components/RecipeImageGallery';
 import toast from 'react-hot-toast';
@@ -38,6 +38,10 @@ const RecipeDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [servings, setServings] = useState<number>(0);
   const [originalServings, setOriginalServings] = useState<number>(0);
+
+  // Above the loading and error returns: hooks cannot sit behind them.
+  const steps = useMemo(() => parseInstructions(recipe?.instructions ?? ''), [recipe?.instructions]);
+  const isNumbered = steps.some(step => step.number !== undefined);
 
   useEffect(() => {
     const loadRecipe = async () => {
@@ -276,10 +280,33 @@ const RecipeDetailPage: React.FC = () => {
         {/* Instructions */}
         <div className="lg:col-span-3">
           <Card padding="lg">
-            <h2 className="mb-5 text-xl font-semibold">Instructions</h2>
-            <div className="text-[0.9375rem] leading-[1.75] whitespace-pre-wrap text-ink-700">
-              {recipe.instructions}
-            </div>
+            <h2 className="mb-6 text-xl font-semibold">Instructions</h2>
+
+            {isNumbered ? (
+              // The number sits in a fixed-width column of its own, so a step
+              // that wraps lines up under its own text rather than under the
+              // digit. space-y-6 is what separates one step from the next -
+              // the whole block used to be a single pre-wrapped paragraph, so
+              // the gap between steps was just a line break.
+              <ol className="space-y-6">
+                {steps.map((step, index) => (
+                  <li key={index} className="flex gap-4">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold tabular-nums text-brand-600">
+                      {step.number}
+                    </span>
+                    <p className="flex-1 text-[0.9375rem] leading-[1.75] text-ink-700">
+                      {step.text}
+                    </p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <div className="space-y-4 text-[0.9375rem] leading-[1.75] text-ink-700">
+                {steps.map((step, index) => (
+                  <p key={index}>{step.text}</p>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
       </div>

@@ -17,6 +17,7 @@
     "analyze-bundle": "npx vite-bundle-analyzer ../static/dist"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.12.0",
     "axios": "^1.6.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.290.0",
@@ -24,6 +25,7 @@
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.47.0",
     "react-hot-toast": "^2.4.1",
+    "react-redux": "^9.3.0",
     "react-router-dom": "^7.18.2",
     "tailwind-merge": "^3.6.0",
     "zustand": "^4.4.0"

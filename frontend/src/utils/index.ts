@@ -106,6 +106,50 @@ export function formatCookingQuantity(quantity: number): string {
   }
 }
 
+export interface InstructionStep {
+  /** The number as it was written, when the line started with one. */
+  number?: string;
+  text: string;
+}
+
+/**
+ * Splits free-text instructions into steps so they can be laid out as a list.
+ *
+ * The recipes in this database are stored as "1. …\r\n2. …", but nothing
+ * enforces that, so anything without leading numbers comes back as one step
+ * per paragraph and is rendered as plain prose instead. A line that carries no
+ * number and follows a step directly is treated as that step wrapping.
+ */
+export function parseInstructions(raw: string): InstructionStep[] {
+  const steps: InstructionStep[] = [];
+  let startNew = true;
+
+  for (const line of (raw ?? '').replace(/\r\n?/g, '\n').split('\n')) {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      startNew = true;
+      continue;
+    }
+
+    const numbered = trimmed.match(/^(\d{1,3})\s*[.)]\s*(.*)$/);
+    if (numbered) {
+      steps.push({ number: numbered[1], text: numbered[2] });
+      startNew = false;
+      continue;
+    }
+
+    if (startNew || steps.length === 0) {
+      steps.push({ text: trimmed });
+      startNew = false;
+    } else {
+      steps[steps.length - 1].text += ' ' + trimmed;
+    }
+  }
+
+  return steps.filter(step => step.text.length > 0);
+}
+
 /**
  * Validate file type and size for image uploads
  */

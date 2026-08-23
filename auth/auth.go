@@ -8,7 +8,10 @@ import (
 	"net/http"
 	"os"
 	"recipe-book/database"
+	"recipe-book/middleware"
 	"recipe-book/models"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -126,27 +129,57 @@ func CreateToken(user *models.User) (string, error) {
 	return tokenString, nil
 }
 
-func SetAuthCookie(w http.ResponseWriter, tokenString string) {
+var warnPlainHTTPOnce sync.Once
+
+// cookieSecure decides whether the session cookie may carry Secure.
+//
+// This was isProduction(), which broke authentication outright on a production
+// deployment served over plain HTTP: a browser refuses to store a Secure cookie
+// that arrived over http://, so logging in appeared to work - the API answered
+// 200 and the UI believed it - and then every write came back 401. Reads are
+// public, so the site looked healthy right up until you tried to save.
+//
+// Following the connection instead means the flag turns itself on the day TLS
+// is put in front. COOKIE_SECURE forces it either way, for a proxy that
+// terminates TLS without forwarding X-Forwarded-Proto.
+func cookieSecure(r *http.Request) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("COOKIE_SECURE"))) {
+	case "true", "1", "yes":
+		return true
+	case "false", "0", "no":
+		return false
+	}
+
+	secure := middleware.ForwardedProto(r) == "https"
+	if !secure && isProduction() {
+		warnPlainHTTPOnce.Do(func() {
+			log.Println("⚠️  ENVIRONMENT=production but requests are arriving over plain HTTP - the session cookie is issued without Secure, and passwords cross the network in the clear. Put TLS in front; set COOKIE_SECURE=true once you have.")
+		})
+	}
+	return secure
+}
+
+func SetAuthCookie(w http.ResponseWriter, r *http.Request, tokenString string) {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    tokenString,
 		Expires:  expirationTime,
 		HttpOnly: true,
-		Secure:   isProduction(),
+		Secure:   cookieSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})
 }
 
-func ClearAuthCookie(w http.ResponseWriter) {
+func ClearAuthCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_token",
 		Value:    "",
 		Expires:  time.Now().Add(-time.Hour),
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   isProduction(),
+		Secure:   cookieSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 	})

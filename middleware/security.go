@@ -233,6 +233,31 @@ func isTrustedProxy(ip net.IP) bool {
 	return false
 }
 
+// ForwardedProto reports the scheme the client actually used: r.TLS when the
+// connection is direct, and X-Forwarded-Proto only when the peer is a trusted
+// proxy. Anything else is "" - an untrusted client must not be able to talk the
+// server into believing its plain request arrived over TLS.
+func ForwardedProto(r *http.Request) string {
+	if r.TLS != nil {
+		return "https"
+	}
+
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		peer = host
+	}
+	if !isTrustedProxy(net.ParseIP(peer)) {
+		return ""
+	}
+
+	// A chain of proxies appends, so the leftmost entry is the original scheme.
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if comma := strings.Index(proto, ","); comma >= 0 {
+		proto = proto[:comma]
+	}
+	return strings.ToLower(strings.TrimSpace(proto))
+}
+
 // getClientIP resolves the address a rate limit should be keyed on.
 func (sm *SecurityManager) getClientIP(r *http.Request) string {
 	return ClientIP(r)
