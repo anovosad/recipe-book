@@ -70,7 +70,8 @@ apply() {
             printf 'https'
         fi
     else
-        rm -f "$GENERATED/https.conf" "$GENERATED/hsts.inc"
+        rm -f "$GENERATED/https.conf"
+        printf '# No certificate: nothing to promise.\n' > "$GENERATED/hsts.inc"
         printf 'include /etc/nginx/conf.d/app.inc;\n' > "$GENERATED/http-mode.inc"
         printf 'http'
     fi

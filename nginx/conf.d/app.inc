@@ -53,6 +53,9 @@ location ~* \.(css|js|jpg|jpeg|png|gif|ico|svg|woff|woff2|ttf|eot)$ {
     expires 1y;
     add_header Cache-Control "public, immutable";
     include /etc/nginx/conf.d/security-headers.inc;
+    # HSTS too, for the same reason: this location's own add_header replaced
+    # everything the server sends, so assets were going out without it.
+    include /etc/nginx/tls/hsts.inc;
 }
 
 location / {
