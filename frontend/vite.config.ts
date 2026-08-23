@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      // import.meta.dirname, not __dirname: Vite 8 loads this config natively
+      // (as ESM) rather than pre-bundling it, so the CJS globals are gone.
+      '@': path.resolve(import.meta.dirname, './src'),
     }
   },
   build: {
@@ -14,14 +16,19 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Vendor libraries
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-router': ['react-router-dom'],
-          'vendor-forms': ['react-hook-form'],
-          'vendor-ui': ['lucide-react', 'react-hot-toast'],
-          'vendor-http': ['axios'],
-          'vendor-state': ['zustand']
+        // Vite 8 bundles with Rolldown, which dropped the object form of
+        // `manualChunks` in favour of `codeSplitting.groups`. Groups are tried
+        // in order and the first match wins, so the react-* libraries have to be
+        // listed before the `react` group itself would swallow them.
+        codeSplitting: {
+          groups: [
+            { name: 'vendor-router', test: /[\\/]node_modules[\\/]react-router(-dom)?[\\/]/ },
+            { name: 'vendor-forms', test: /[\\/]node_modules[\\/]react-hook-form[\\/]/ },
+            { name: 'vendor-ui', test: /[\\/]node_modules[\\/](lucide-react|react-hot-toast|goober)[\\/]/ },
+            { name: 'vendor-http', test: /[\\/]node_modules[\\/](axios|follow-redirects)[\\/]/ },
+            { name: 'vendor-state', test: /[\\/]node_modules[\\/]zustand[\\/]/ },
+            { name: 'vendor-react', test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+          ]
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',

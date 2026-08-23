@@ -10,9 +10,16 @@ GOMOD=$(GOCMD) mod
 BINARY_NAME=recipe-book
 BINARY_UNIX=$(BINARY_NAME)_unix
 
-# Build the application
+# frontend/node_modules is inside this module, and some npm packages ship Go
+# sources (eslint's `flatted`, for one), which `./...` would otherwise compile
+# and vet as if they were ours.
+PKGS=$(shell $(GOCMD) list ./... | grep -v /node_modules/)
+
+# Build the application. Only the main package: `go build -o <file>` refuses to
+# write more than one package to a single output, so passing every package here
+# (which is what ./... did) failed outright.
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./...
+	$(GOBUILD) -o $(BINARY_NAME) -v .
 
 # Run the application
 run:
@@ -26,7 +33,7 @@ clean:
 
 # Test the application
 test:
-	$(GOTEST) -v ./...
+	$(GOTEST) -v $(PKGS)
 
 # Download dependencies
 deps:
@@ -41,8 +48,15 @@ build-linux:
 docker-build:
 	docker build -t recipe-book:latest .
 
+# The image bakes ENVIRONMENT=production, so it needs a JWT_SECRET. The volumes
+# have to match DB_PATH (/app/data) and the upload directory (/app/uploads);
+# mounting /data left the database outside the volume and lost it on removal.
 docker-run:
-	docker run -p 8080:8080 -v recipe_data:/data recipe-book:latest
+	docker run -p 8080:8080 \
+		-e JWT_SECRET=$$(openssl rand -hex 32) \
+		-v recipe_data:/app/data \
+		-v recipe_uploads:/app/uploads \
+		recipe-book:latest
 
 # Docker Compose commands
 docker-compose-up:

@@ -41,13 +41,23 @@ check_prerequisites() {
     GO_VERSION=$(go version | awk '{print $3}')
     print_success "Go found: $GO_VERSION"
     
-    # Check Node.js
+    # Check Node.js. Vite 8 requires ^20.19.0 || >=22.12.0 - an older Node
+    # fails deep inside the bundler with an unhelpful error, so reject it here.
     if ! command -v node &> /dev/null; then
-        print_error "Node.js is not installed. Please install Node.js 18+ and npm."
+        print_error "Node.js is not installed. Please install Node.js 20.19+ or 22.12+ and npm."
         exit 1
     fi
     
     NODE_VERSION=$(node --version)
+    NODE_MAJOR=$(echo "${NODE_VERSION#v}" | cut -d. -f1)
+    NODE_MINOR=$(echo "${NODE_VERSION#v}" | cut -d. -f2)
+    if [ "$NODE_MAJOR" -lt 20 ] || \
+       { [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -lt 19 ]; } || \
+       { [ "$NODE_MAJOR" -eq 21 ]; } || \
+       { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 12 ]; }; then
+        print_error "Node.js $NODE_VERSION is too old for Vite 8. Install 20.19+ or 22.12+."
+        exit 1
+    fi
     print_success "Node.js found: $NODE_VERSION"
     
     # Check npm
@@ -70,9 +80,9 @@ setup_directories() {
     mkdir -p data
     
     # Set permissions
-    chmod 755 uploads
+    chmod 750 uploads
     chmod 755 static/dist
-    chmod 755 data
+    chmod 750 data
     
     print_success "Directories created and permissions set"
 }
@@ -133,7 +143,7 @@ build_backend() {
     print_status "Building Go backend..."
     
     # Build for current platform
-    CGO_ENABLED=1 go build -o recipe-book main.go
+    CGO_ENABLED=0 go build -o recipe-book .
     if [ $? -ne 0 ]; then
         print_error "Failed to build backend"
         exit 1
@@ -191,11 +201,10 @@ main() {
     echo "🌐 Then open your browser to:"
     echo "   http://localhost:8080"
     echo ""
-    echo "👤 Default login credentials:"
+    echo "👤 Admin account:"
     echo "   Username: admin"
-    echo "   Password: admin123"
-    echo ""
-    print_warning "⚠️  Remember to change the default password in production!"
+    echo "   Password: set ADMIN_PASSWORD before the first run, or read the"
+    echo "             generated one from the server log on first startup."
 }
 
 # Handle script arguments
