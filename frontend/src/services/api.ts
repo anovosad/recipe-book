@@ -39,22 +39,35 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+/**
+ * Called when the API answers 401. The auth store registers the handler at
+ * module load - a callback rather than an import, because the store already
+ * imports this module and a cycle between the two is not worth the trouble.
+ */
+type UnauthorizedHandler = () => void;
+let onUnauthorized: UnauthorizedHandler | null = null;
+
+export const setUnauthorizedHandler = (handler: UnauthorizedHandler) => {
+  onUnauthorized = handler;
+};
+
 // Response interceptor
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error: AxiosError) => {
     console.error('API Error:', error);
-    
+
     if (error.code === 'ECONNABORTED') {
       toast.error('Request timeout. Please try again.');
     } else if (error.response?.status === 401) {
-      // Handle unauthorized - redirect to login if needed
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
-        toast.error('Session expired. Please log in again.');
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 1000);
-      }
+      // Report it and let the auth store decide. This used to toast "Session
+      // expired" and set window.location.href = '/login' for *any* 401 - and
+      // the first request an anonymous visitor makes is GET /api/auth/check,
+      // which correctly answers 401. So every reload of a public page threw
+      // the reader onto the login screen, even though reading needs no
+      // account. The store only reacts when a session actually existed, and
+      // PrivateRoute already sends the routes that do need one to /login.
+      onUnauthorized?.();
     } else if (error.response?.status === 429) {
       toast.error('Too many requests. Please slow down.');
     } else if ((error.response?.status ?? 0) >= 500) {
@@ -62,7 +75,7 @@ api.interceptors.response.use(
     } else if (!error.response) {
       toast.error('Network error. Please check your connection.');
     }
-    
+
     return Promise.reject(error);
   }
 );

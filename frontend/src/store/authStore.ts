@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import toast from 'react-hot-toast';
 import { LoginForm, RegisterForm, AuthState } from '@/types';
-import apiService from '@/services/api';
+import apiService, { setUnauthorizedHandler } from '@/services/api';
 
 interface AuthStore extends AuthState {
   initialize: () => Promise<void>;
@@ -144,3 +144,12 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 );
+
+// A 401 means the cookie is gone or expired. Drop the session so the UI stops
+// claiming to be signed in - but say nothing when there was no session to
+// lose, which is the case for every anonymous visitor loading a public page.
+setUnauthorizedHandler(() => {
+  if (!useAuthStore.getState().isAuthenticated) return;
+  useAuthStore.setState({ user: null, isAuthenticated: false, isLoading: false });
+  toast.error('Session expired. Please log in again.');
+});
