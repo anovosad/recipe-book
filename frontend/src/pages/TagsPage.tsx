@@ -281,7 +281,7 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
     <span className="swatch" aria-hidden="true" />
 
     <Link
-      to={`/recipes?tag=${tag.id}`}
+      to={`/?tag=${tag.id}`}
       className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-brand-600 after:absolute after:inset-0"
       title={`View all ${tag.name} recipes`}
     >

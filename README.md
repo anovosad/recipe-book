@@ -232,6 +232,81 @@ answers with the updated one.
 - `POST /api/tags` - Create new tag (auth required)
 - `DELETE /api/tags/{id}` - Delete a tag (refused while another user's recipe carries it)
 
+## MCP (AI access)
+
+The collection is available over the [Model Context Protocol](https://modelcontextprotocol.io)
+so an AI client can read and add recipes — hand a chat a recipe URL and let it
+store the result.
+
+**It is off until you give it a token.** Set `MCP_TOKEN` (32+ random characters)
+in the environment; without it the `/mcp` route is not mounted at all. Writes are
+attributed to `MCP_USER`, which defaults to `admin`.
+
+```bash
+MCP_TOKEN=$(openssl rand -base64 32)
+MCP_USER=admin
+```
+
+Point a client at it — for Claude Code:
+
+```bash
+claude mcp add --transport http recipe-book http://your-host/mcp \
+  --header "Authorization: Bearer $MCP_TOKEN"
+```
+
+or in a client that takes JSON config:
+
+```json
+{
+  "mcpServers": {
+    "recipe-book": {
+      "type": "http",
+      "url": "http://your-host/mcp",
+      "headers": { "Authorization": "Bearer YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+### Tools
+
+| Tool | What it does |
+| --- | --- |
+| `list_recipes` | Everything in the collection, optionally narrowed by a search |
+| `get_recipe` | One recipe in full |
+| `list_ingredients` | Every known ingredient |
+| `list_tags` | Every tag, with its colour |
+| `create_recipe` | Adds a recipe |
+| `update_recipe` | Changes one; omitted fields keep their value |
+
+`create_recipe` takes ingredient and tag **names**, not ids, and creates whatever
+is missing — matching is case- and whitespace-insensitive, so `olive oil` finds
+the existing `Olive Oil` rather than making a second one. That is what lets a
+model pass on a recipe it just read without looking anything up first:
+
+```json
+{
+  "title": "Šúľance s makom",
+  "instructions": "1. Boil the potatoes…\n2. …",
+  "servings": 4,
+  "ingredients": [
+    { "name": "Potatoes", "quantity": 600, "unit": "g" },
+    { "name": "Ground poppy seed", "quantity": 80, "unit": "g" }
+  ],
+  "tags": ["Dessert"],
+  "source_url": "https://example.com/recipe"
+}
+```
+
+`source_url` is recorded with the description, since there is no column for it.
+
+### A word on exposure
+
+The token is the only thing guarding a write endpoint. Over plain HTTP it
+crosses the network in the clear, exactly like a password does — put TLS in
+front before exposing this beyond a trusted network, and unset `MCP_TOKEN` to
+turn the endpoint off again.
+
 ## Database Schema
 
 ### Users Table

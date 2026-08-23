@@ -109,7 +109,7 @@ const RecipeFormPage: React.FC = () => {
           } catch (error) {
             console.error('Failed to load recipe:', error);
             toast.error('Recipe not found');
-            navigate('/recipes');
+            navigate('/');
             return;
           }
         }
@@ -119,7 +119,7 @@ const RecipeFormPage: React.FC = () => {
         console.error('Failed to load data:', error);
         toast.error('Failed to load form data');
         if (isEditMode) {
-          navigate('/recipes');
+          navigate('/');
         }
       } finally {
         setIsLoadingData(false);
@@ -403,7 +403,7 @@ const RecipeFormPage: React.FC = () => {
       <div className="flex items-center gap-4">
         <Button
           as={Link}
-          to={isEditMode && recipe ? `/recipe/${recipe.id}` : '/recipes'}
+          to={isEditMode && recipe ? `/recipe/${recipe.id}` : '/'}
           variant="ghost"
           size="sm"
           icon={<ArrowLeft className="w-4 h-4" />}
@@ -807,7 +807,7 @@ const RecipeFormPage: React.FC = () => {
               type="button"
               variant="secondary"
               as={Link}
-              to={isEditMode && recipe ? `/recipe/${recipe.id}` : '/recipes'}
+              to={isEditMode && recipe ? `/recipe/${recipe.id}` : '/'}
             >
               Cancel
             </Button>

@@ -44,7 +44,12 @@ const RecipesPage: React.FC = () => {
   const activeIngredientIds = parseIds(searchParams.get('ingredient'));
   const ingredientKey = activeIngredientIds.join(',');
 
-  const [openPanel, setOpenPanel] = useState<'tags' | 'ingredients' | null>(null);
+  // Open on whatever the URL is already filtering by. Arriving from the
+  // ingredients page used to land on a filtered list with the panel shut, so
+  // adding a second ingredient meant hunting for the button first.
+  const [openPanel, setOpenPanel] = useState<'tags' | 'ingredients' | null>(
+    activeIngredientIds.length > 0 ? 'ingredients' : activeTagId ? 'tags' : null
+  );
   const [ingredientQuery, setIngredientQuery] = useState('');
   const [inputValue, setInputValue] = useState(searchQuery);
   const [syncedQuery, setSyncedQuery] = useState(searchQuery);
@@ -97,9 +102,21 @@ const RecipesPage: React.FC = () => {
 
   const visibleIngredients = useMemo(() => {
     const query = ingredientQuery.trim().toLowerCase();
-    if (!query) return usedIngredients;
-    return usedIngredients.filter(ingredient => ingredient.name.toLowerCase().includes(query));
-  }, [usedIngredients, ingredientQuery]);
+    const matching = query
+      ? usedIngredients.filter(ingredient => ingredient.name.toLowerCase().includes(query))
+      : usedIngredients;
+
+    // Chosen ones first: with a long list they would otherwise scroll out of
+    // sight the moment you pick one, and picking the next means finding them
+    // again to see what is already on.
+    const chosen = new Set(activeIngredientIds);
+    return [...matching].sort((a, b) => {
+      const diff = Number(chosen.has(b.id)) - Number(chosen.has(a.id));
+      return diff !== 0 ? diff : a.name.localeCompare(b.name);
+    });
+    // activeIngredientIds is rebuilt every render; ingredientKey is its content.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usedIngredients, ingredientQuery, ingredientKey]);
 
   const applyFilters = useCallback((
     search: string,

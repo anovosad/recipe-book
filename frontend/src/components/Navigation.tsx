@@ -18,7 +18,7 @@ import { cn } from '@/utils';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 const navLinks = [
-  { path: '/recipes', label: 'Recipes', icon: List },
+  { path: '/', label: 'Recipes', icon: List },
   { path: '/ingredients', label: 'Ingredients', icon: Leaf },
   { path: '/tags', label: 'Tags', icon: Tags }
 ];
@@ -48,7 +48,7 @@ const Navigation: React.FC = () => {
   // unhighlighted as soon as you opened one.
   const isActivePath = (path: string): boolean =>
     location.pathname === path ||
-    (path === '/recipes' && location.pathname.startsWith('/recipe'));
+    (path === '/' && location.pathname.startsWith('/recipe'));
 
   const desktopLink = (path: string) =>
     cn(

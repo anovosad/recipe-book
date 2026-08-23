@@ -1,5 +1,5 @@
 import React, { useEffect, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 // Store imports
@@ -10,7 +10,6 @@ import Navigation from './components/Navigation';
 import LoadingSpinner from './components/LoadingSpinner';
 import ErrorBoundary from './components/ErrorBoundary';
 import PrivateRoute from './components/PrivateRoute';
-import HomePage from './pages/HomePage';
 
 // Lazy imports for code splitting
 import {
@@ -24,6 +23,14 @@ import {
   PageLoader
 } from './components/LazyComponents';
 import NotFoundPage from './pages/NotFoundPage';
+
+// /recipes was where the list lived before the home page was dropped. Keeping
+// it as a redirect means bookmarks and any link someone already shared - filters
+// included - still land on the list.
+const RecipesRedirect: React.FC = () => {
+  const { search } = useLocation();
+  return <Navigate to={{ pathname: '/', search }} replace />;
+};
 
 const App: React.FC = () => {
   const { initialize, isLoading, isAuthenticated } = useAuthStore();
@@ -52,9 +59,9 @@ const App: React.FC = () => {
           <main className="container mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                {/* Public routes */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/recipes" element={<RecipesPage />} />
+                {/* Public routes. The recipe list is the front page. */}
+                <Route path="/" element={<RecipesPage />} />
+                <Route path="/recipes" element={<RecipesRedirect />} />
                 <Route path="/recipe/:id" element={<RecipeDetailPage />} />
                 <Route path="/ingredients" element={<IngredientsPage />} />
                 <Route path="/tags" element={<TagsPage />} />
@@ -63,13 +70,13 @@ const App: React.FC = () => {
                 <Route 
                   path="/login" 
                   element={
-                    isAuthenticated ? <Navigate to="/recipes" replace /> : <LoginPage />
+                    isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />
                   } 
                 />
                 <Route 
                   path="/register" 
                   element={
-                    isAuthenticated ? <Navigate to="/recipes" replace /> : <RegisterPage />
+                    isAuthenticated ? <Navigate to="/" replace /> : <RegisterPage />
                   } 
                 />
                 

@@ -40,6 +40,9 @@ services:
       # X-Forwarded-For / X-Real-IP. This is the compose network subnet
       # below, which is outside RFC1918 and so is not trusted by default.
       - TRUSTED_PROXIES=172.32.0.0/16
+      # Model Context Protocol endpoint at /mcp. Unset means it is not mounted.
+      - MCP_TOKEN=${MCP_TOKEN:-}
+      - MCP_USER=${MCP_USER:-admin}
     restart: unless-stopped
     networks:
       - recipe-network

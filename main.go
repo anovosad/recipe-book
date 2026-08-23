@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"recipe-book/database"
 	"recipe-book/handlers"
+	"recipe-book/mcp"
 	"recipe-book/middleware"
 	"strings"
 	"time"
@@ -54,6 +55,13 @@ func main() {
 
 	// API routes with specific rate limiting
 	setupAPIRoutes(r, securityManager)
+
+	// The Model Context Protocol endpoint, so an AI client can read and write
+	// recipes directly. Mounted only when MCP_TOKEN is set - it writes to the
+	// database and is reachable by anything that can reach the site.
+	if handler, enabled := mcp.Handler(); enabled {
+		r.Handle("/mcp", handler)
+	}
 
 	// Static file serving with caching
 	setupStaticRoutes(r)

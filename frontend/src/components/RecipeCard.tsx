@@ -101,7 +101,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
         {shownTags.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {shownTags.map(tag => (
-              <TagChip key={tag.id} tag={tag} as={Link} to={`/recipes?tag=${tag.id}`} dot />
+              <TagChip key={tag.id} tag={tag} as={Link} to={`/?tag=${tag.id}`} dot />
             ))}
             {hiddenTagCount > 0 && (
               <span className="chip">+{hiddenTagCount}</span>

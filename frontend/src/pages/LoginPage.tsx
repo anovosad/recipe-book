@@ -40,7 +40,7 @@ const LoginPage: React.FC = () => {
       // Straight through. This used to sit on a 1s setTimeout "to show the
       // success message" - the toast outlives the navigation anyway, so all
       // the delay bought was a second of staring at the form.
-      navigate('/recipes', { replace: true });
+      navigate('/', { replace: true });
     }
   };
 

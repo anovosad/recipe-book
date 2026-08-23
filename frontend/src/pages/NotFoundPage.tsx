@@ -23,7 +23,7 @@ export const NotFoundPage: React.FC = () => {
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button as={Link} to="/recipes" icon={<Home className="h-4 w-4" />}>
+          <Button as={Link} to="/" icon={<Home className="h-4 w-4" />}>
             Go to Recipes
           </Button>
 

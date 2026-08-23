@@ -84,7 +84,7 @@ const RecipeDetailPage: React.FC = () => {
         deleteRecipeFromStore(recipe.id);
         invalidate('recipes');
         toast.success(response.message || 'Recipe deleted successfully');
-        navigate('/recipes');
+        navigate('/');
       } else {
         toast.error(response.error || 'Failed to delete recipe');
       }
@@ -120,7 +120,7 @@ const RecipeDetailPage: React.FC = () => {
           The recipe you're looking for doesn't exist or has been removed.
         </Alert>
         <div className="text-center">
-          <Button as={Link} to="/recipes" variant="secondary" icon={<ArrowLeft className="h-4 w-4" />}>
+          <Button as={Link} to="/" variant="secondary" icon={<ArrowLeft className="h-4 w-4" />}>
             Back to Recipes
           </Button>
         </div>
@@ -142,7 +142,7 @@ const RecipeDetailPage: React.FC = () => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-7">
-      <Button as={Link} to="/recipes" variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />}>
+      <Button as={Link} to="/" variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />}>
         Back to Recipes
       </Button>
 
@@ -200,7 +200,7 @@ const RecipeDetailPage: React.FC = () => {
           <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-black/5 pt-6">
             <TagIcon className="h-4 w-4 text-ink-300" />
             {recipe.tags.map(tag => (
-              <TagChip key={tag.id} tag={tag} as={Link} to={`/recipes?tag=${tag.id}`} dot />
+              <TagChip key={tag.id} tag={tag} as={Link} to={`/?tag=${tag.id}`} dot />
             ))}
           </div>
         )}
