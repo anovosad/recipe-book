@@ -267,6 +267,23 @@ docker run --rm \
 Add `--dry-run` first if you want to check the plumbing without spending one of
 Let's Encrypt's five-per-week duplicate certificates.
 
+### Port 443 has to be reachable too
+
+Getting a certificate only proves port **80** reaches this host — that is all
+the ACME challenge uses. Port 443 is a separate forward, and if it is missing
+the redirect sends every visitor somewhere they cannot arrive. `TLS_REDIRECT`
+is the switch for that:
+
+| `TLS_REDIRECT` | Port 80 | Port 443 | HSTS |
+| --- | --- | --- | --- |
+| `off` | serves the app | serves the app | not sent |
+| `on` (default) | 301 to HTTPS | serves the app | one year |
+
+Leave it `off` until `openssl s_client -connect your.domain:443` shows *your*
+certificate rather than the router's, then set it to `on`. HSTS follows the same
+switch on purpose: pinning a browser to an HTTPS that does not answer is the
+version of this mistake that lasts a year.
+
 nginx picks it up within six hours on its own; to see it immediately:
 
 ```bash

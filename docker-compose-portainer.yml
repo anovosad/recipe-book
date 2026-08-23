@@ -37,6 +37,9 @@ services:
       - TZ=${TIMEZONE:-UTC}
       # Which certificate to prefer when certbot holds more than one.
       - DOMAIN=${DOMAIN:-}
+      # off keeps HTTP serving the app even once a certificate exists, and
+      # withholds HSTS. Use it until port 443 is actually reachable.
+      - TLS_REDIRECT=${TLS_REDIRECT:-on}
     depends_on:
       recipe-app:
         condition: service_healthy

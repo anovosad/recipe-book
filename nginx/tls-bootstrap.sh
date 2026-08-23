@@ -5,7 +5,14 @@
 # script looks for a certificate and decides what nginx actually serves:
 #
 #   no certificate  -> port 80 serves the app, there is no HTTPS server
-#   certificate     -> port 80 redirects to HTTPS, the HTTPS server is enabled
+#   certificate     -> the HTTPS server is enabled
+#
+# Whether port 80 then *redirects* - and whether HSTS is sent - is a separate
+# switch, TLS_REDIRECT. Holding a certificate is not the same as port 443 being
+# reachable: forwarding 80 is enough to get a certificate issued, and if 443 is
+# still closed at the router then redirecting sends everyone somewhere they
+# cannot arrive. HSTS follows the same switch, because pinning a browser to an
+# HTTPS that does not answer is the version of this mistake that lasts a year.
 #
 # So nginx starts either way. The previous config pointed ssl_certificate
 # straight at a file that did not exist; nginx crash-looped and took the whole
@@ -49,22 +56,35 @@ apply() {
         ln -sf "$live/fullchain.pem" "$CERT_DIR/fullchain.pem"
         ln -sf "$live/privkey.pem" "$CERT_DIR/privkey.pem"
         cp "$AVAILABLE/https-server.conf" "$GENERATED/https.conf"
-        printf 'location / { return 301 https://$host$request_uri; }\n' \
-            > "$GENERATED/http-mode.inc"
-        printf 'https'
+
+        if [ "${TLS_REDIRECT:-on}" = "off" ]; then
+            printf '# TLS_REDIRECT=off: HTTPS is served, but HTTP still serves the app.\n' \
+                > "$GENERATED/hsts.inc"
+            printf 'include /etc/nginx/conf.d/app.inc;\n' > "$GENERATED/http-mode.inc"
+            printf 'https-optional'
+        else
+            printf 'add_header Strict-Transport-Security "max-age=31536000" always;\n' \
+                > "$GENERATED/hsts.inc"
+            printf 'location / { return 301 https://$host$request_uri; }\n' \
+                > "$GENERATED/http-mode.inc"
+            printf 'https'
+        fi
     else
-        rm -f "$GENERATED/https.conf"
+        rm -f "$GENERATED/https.conf" "$GENERATED/hsts.inc"
         printf 'include /etc/nginx/conf.d/app.inc;\n' > "$GENERATED/http-mode.inc"
         printf 'http'
     fi
 }
 
 mode=$(apply)
-if [ "$mode" = "https" ]; then
-    echo "🔒 TLS certificate found - serving HTTPS and redirecting HTTP to it"
-else
-    echo "🌐 No TLS certificate yet - serving HTTP, and /.well-known/acme-challenge/ is ready for certbot"
-fi
+case "$mode" in
+    https)
+        echo "🔒 TLS certificate found - serving HTTPS, redirecting HTTP to it, HSTS on" ;;
+    https-optional)
+        echo "🔓 TLS certificate found, but TLS_REDIRECT=off - HTTP and HTTPS both serve the app, no HSTS" ;;
+    *)
+        echo "🌐 No TLS certificate yet - serving HTTP, and /.well-known/acme-challenge/ is ready for certbot" ;;
+esac
 
 # Renewal happens in the certbot container, which cannot reach into this one to
 # reload nginx. Re-checking here covers both that and the first issuance.
