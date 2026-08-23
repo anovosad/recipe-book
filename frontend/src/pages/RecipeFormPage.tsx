@@ -15,7 +15,8 @@ import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { Recipe, Ingredient, Tag, RecipeForm, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
 import { validateImageFile, getErrorMessage } from '@/utils';
-import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal } from '@/components/ui';
+import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal, TagChip } from '@/components/ui';
+import { invalidate } from '@/hooks/useOptimizedData';
 import toast from 'react-hot-toast';
 
 interface FormData extends Omit<RecipeForm, 'images'> {
@@ -124,9 +125,15 @@ const RecipeFormPage: React.FC = () => {
     loadData();
   }, [id, isEditMode, navigate]);
 
-  // Populate form when recipe and reference data are loaded
+  // Populate form when recipe and reference data are loaded.
+  //
+  // `isFormReady` already means "ingredients, tags and the recipe have all
+  // been fetched". The old condition also demanded that the ingredient and tag
+  // lists were non-empty, so on an install with no tags defined yet the edit
+  // form never populated at all - it showed empty fields for an existing
+  // recipe, and saving that wrote the empty values back.
   useEffect(() => {
-    if (recipe && isFormReady && ingredients.length > 0 && tags.length > 0) {
+    if (recipe && isFormReady) {
       // Reset form with recipe data
       reset({
         title: recipe.title || '',
@@ -154,7 +161,7 @@ const RecipeFormPage: React.FC = () => {
         setSelectedTags(new Set());
       }
     }
-  }, [recipe, isFormReady, ingredients.length, tags.length, reset]);
+  }, [recipe, isFormReady, reset]);
 
   // Handle image preview
   useEffect(() => {
@@ -262,6 +269,7 @@ const RecipeFormPage: React.FC = () => {
         toast.success(message);
       }
 
+      invalidate('recipes');
       navigate(`/recipe/${recipeId}`);
     } catch (error: any) {
       console.error('Recipe form error:', error);
@@ -294,6 +302,7 @@ const RecipeFormPage: React.FC = () => {
         // Refresh ingredients list
         const updatedIngredients = await apiService.getIngredients();
         setIngredients(updatedIngredients);
+        invalidate('ingredients');
         setNewIngredientName('');
         setShowIngredientModal(false);
         toast.success('Ingredient added successfully');
@@ -321,6 +330,7 @@ const RecipeFormPage: React.FC = () => {
         // Refresh tags list
         const updatedTags = await apiService.getTags();
         setTags(updatedTags);
+        invalidate('tags');
         setNewTagName('');
         setNewTagColor('#ff6b6b');
         setShowTagModal(false);
@@ -339,14 +349,14 @@ const RecipeFormPage: React.FC = () => {
 
   if (isLoadingData) {
     return (
-      <div className="flex justify-center items-center min-h-[400px]">
+      <div className="flex min-h-[24rem] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -359,11 +369,11 @@ const RecipeFormPage: React.FC = () => {
           Back
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold tracking-tight lg:text-3xl">
             {isEditMode ? 'Edit Recipe' : 'Create New Recipe'}
           </h1>
           {isEditMode && recipe && (
-            <p className="text-gray-600">Editing: {recipe.title}</p>
+            <p className="text-ink-500">Editing: {recipe.title}</p>
           )}
         </div>
       </div>
@@ -371,7 +381,7 @@ const RecipeFormPage: React.FC = () => {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Basic Information */}
         <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
+          <h2 className="mb-5 text-xl font-semibold">Basic Information</h2>
           <div className="space-y-4">
             <Input
               label="Recipe Title"
@@ -403,7 +413,7 @@ const RecipeFormPage: React.FC = () => {
 
         {/* Recipe Details */}
         <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h2 className="mb-5 flex items-center gap-2 text-xl font-semibold">
             <Clock className="w-5 h-5" />
             Recipe Details
           </h2>
@@ -464,7 +474,7 @@ const RecipeFormPage: React.FC = () => {
         {/* Ingredients */}
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="flex items-center gap-2 text-xl font-semibold">
               <ChefHat className="w-5 h-5" />
               Ingredients
             </h2>
@@ -572,7 +582,7 @@ const RecipeFormPage: React.FC = () => {
         {/* Tags */}
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+            <h2 className="flex items-center gap-2 text-xl font-semibold">
               <TagIcon className="w-5 h-5" />
               Categories & Tags
             </h2>
@@ -589,29 +599,27 @@ const RecipeFormPage: React.FC = () => {
 
           <div className="flex flex-wrap gap-2">
             {tags.map(tag => (
-              <button
+              <TagChip
                 key={tag.id}
+                tag={tag}
+                as="button"
                 type="button"
+                dot
+                selected={selectedTags.has(tag.id)}
+                aria-pressed={selectedTags.has(tag.id)}
                 onClick={() => handleTagToggle(tag.id)}
-                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
-                  selectedTags.has(tag.id)
-                    ? 'bg-red-600 text-white border-red-600'
-                    : 'bg-white text-gray-700 border-gray-300 hover:border-red-300 hover:text-red-600'
-                }`}
-              >
-                {tag.name}
-              </button>
+              />
             ))}
           </div>
-          
-          <p className="text-sm text-gray-500 mt-2">
-            Click tags to select/deselect them for your recipe.
+
+          <p className="mt-3 text-sm text-ink-500">
+            Click tags to select or deselect them for your recipe.
           </p>
         </Card>
 
         {/* Images */}
         <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <h2 className="mb-5 flex items-center gap-2 text-xl font-semibold">
             <ImageIcon className="w-5 h-5" />
             Recipe Images
           </h2>
@@ -635,7 +643,7 @@ const RecipeFormPage: React.FC = () => {
                     <img
                       src={preview}
                       alt={`Preview ${index + 1}`}
-                      className="w-full h-32 object-cover rounded-lg shadow-sm"
+                      className="aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]"
                     />
                   </div>
                 ))}
@@ -644,14 +652,14 @@ const RecipeFormPage: React.FC = () => {
 
             {isEditMode && recipe?.images && recipe.images.length > 0 && (
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Current Images</h4>
+                <h3 className="mb-3 font-medium text-ink-900">Current Images</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {recipe.images.map(image => (
                     <div key={image.id} className="relative group">
                       <img
                         src={`/uploads/${image.filename}`}
                         alt={image.caption || recipe.title}
-                        className="w-full h-32 object-cover rounded-lg shadow-sm"
+                        className="aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]"
                       />
                       <button
                         type="button"
@@ -666,7 +674,7 @@ const RecipeFormPage: React.FC = () => {
                             toast.error('Failed to delete image');
                           }
                         }}
-                        className="absolute top-2 right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute right-2 top-2 rounded-full bg-rose-500 p-1.5 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -680,7 +688,7 @@ const RecipeFormPage: React.FC = () => {
 
         {/* Instructions */}
         <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Cooking Instructions</h2>
+          <h2 className="mb-5 text-xl font-semibold">Cooking Instructions</h2>
           <Textarea
             {...register('instructions', {
               required: 'Cooking instructions are required',
@@ -764,14 +772,14 @@ const RecipeFormPage: React.FC = () => {
             placeholder="e.g., Dessert, Quick & Easy"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-medium text-ink-700">
               Tag Color
             </label>
             <input
               type="color"
               value={newTagColor}
               onChange={(e) => setNewTagColor(e.target.value)}
-              className="w-16 h-10 border border-gray-300 rounded cursor-pointer"
+              className="h-10 w-16 cursor-pointer rounded-lg border border-black/10"
             />
           </div>
           <div className="flex justify-end gap-2">

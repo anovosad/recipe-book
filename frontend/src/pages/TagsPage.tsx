@@ -1,12 +1,22 @@
-// TagsPage.tsx - Compact version without colors
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Tag as TagIcon, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
+import { Tag as TagIcon, Plus, Trash2, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
+import { invalidate } from '@/hooks/useOptimizedData';
 import { Tag } from '@/types';
-import { Card, Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
+import { cn } from '@/utils';
+import { Button, Input, LoadingSpinner, EmptyState, Modal, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
+
+// The palette the seeded tags already use, so a new tag lands in the same
+// family instead of the flat grey this page used to write for every one of
+// them - it sent color: '#6b7280' on create and drew nothing at all.
+const TAG_COLORS = [
+  '#ff6b6b', '#ff8e53', '#fab005', '#ffd93d',
+  '#69db7c', '#4ecdc4', '#a8e6cf', '#74c0fc',
+  '#9775fa', '#f06292', '#ff5722', '#9aa1ae'
+];
 
 export const TagsPage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
@@ -15,6 +25,7 @@ export const TagsPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Derived during render rather than mirrored into state by an effect. The
@@ -54,11 +65,10 @@ export const TagsPage: React.FC = () => {
       return;
     }
 
-    // Check for duplicates
     const exists = tags.some(
       tag => tag.name.toLowerCase() === newTagName.trim().toLowerCase()
     );
-    
+
     if (exists) {
       toast.error('This tag already exists');
       return;
@@ -68,12 +78,14 @@ export const TagsPage: React.FC = () => {
     try {
       const response = await apiService.createTag({
         name: newTagName.trim(),
-        color: '#6b7280' // Default gray color to maintain backend compatibility
+        color: newTagColor
       });
-      
+
       if (response.success) {
         await loadTags();
+        invalidate('tags');
         setNewTagName('');
+        setNewTagColor(TAG_COLORS[0]);
         setShowModal(false);
         toast.success(response.message || 'Tag added successfully');
       } else {
@@ -95,6 +107,7 @@ export const TagsPage: React.FC = () => {
       const response = await apiService.deleteTag(id);
       if (response.success) {
         await loadTags();
+        invalidate('tags', 'recipes');
         toast.success(response.message || 'Tag deleted successfully');
       } else {
         toast.error(response.error || 'Failed to delete tag');
@@ -115,57 +128,54 @@ export const TagsPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[400px]">
+      <div className="flex min-h-[24rem] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <TagIcon className="w-6 h-6 text-blue-600" />
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
+            <TagIcon className="h-8 w-8 text-brand-500" />
             Tags
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {filteredTags.length} tag{filteredTags.length !== 1 ? 's' : ''} available
+          <p className="mt-2 text-ink-500">
+            {filteredTags.length} tag{filteredTags.length !== 1 ? 's' : ''} for sorting the collection
           </p>
         </div>
 
         {isAuthenticated && (
-          <Button
-            onClick={() => setShowModal(true)}
-            size="sm"
-            icon={<Plus className="w-3 h-3" />}
-          >
+          <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
             Add Tag
           </Button>
         )}
-      </div>
+      </header>
 
       {/* Search */}
-      <Card className="p-3">
+      <div className="surface p-4 sm:p-5">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Search tags..."
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
+          <input
+            type="search"
+            className="field pl-11"
+            placeholder="Search tags…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-9"
+            aria-label="Search tags"
           />
         </div>
-      </Card>
+      </div>
 
-      {/* Tags Grid - More Compact */}
       {filteredTags.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+        <div className="auto-grid-tight">
           {filteredTags.map(tag => (
-            <TagCard 
-              key={tag.id} 
-              tag={tag} 
+            <TagCard
+              key={tag.id}
+              tag={tag}
               isAuthenticated={isAuthenticated}
               onDelete={handleDeleteTag}
             />
@@ -173,22 +183,18 @@ export const TagsPage: React.FC = () => {
         </div>
       ) : (
         <EmptyState
-          icon={<TagIcon className="w-12 h-12" />}
+          icon={<TagIcon className="h-7 w-7" />}
           title="No tags found"
           description={
             searchQuery
               ? `No tags match "${searchQuery}". Try a different search term.`
               : isAuthenticated
-              ? "Add some tags to organize your recipes!"
-              : "Please log in to manage tags."
+              ? 'Add some tags to organize your recipes!'
+              : 'Please log in to manage tags.'
           }
           action={
             isAuthenticated && !searchQuery ? (
-              <Button
-                onClick={() => setShowModal(true)}
-                size="sm"
-                icon={<Plus className="w-3 h-3" />}
-              >
+              <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
                 Add Your First Tag
               </Button>
             ) : null
@@ -196,13 +202,8 @@ export const TagsPage: React.FC = () => {
         />
       )}
 
-      {/* Add Tag Modal - Simplified without color picker */}
-      <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Add New Tag"
-      >
-        <div className="space-y-4">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add New Tag">
+        <div className="space-y-5">
           <Input
             label="Tag Name"
             value={newTagName}
@@ -211,13 +212,38 @@ export const TagsPage: React.FC = () => {
             onKeyDown={handleKeyPress}
             autoFocus
           />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setShowModal(false)}
-            >
+
+          <div className="space-y-2">
+            <span className="block text-sm font-medium text-ink-700">Colour</span>
+            <div className="flex flex-wrap gap-2">
+              {TAG_COLORS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setNewTagColor(color)}
+                  aria-label={`Use colour ${color}`}
+                  aria-pressed={color === newTagColor}
+                  className={cn(
+                    'h-8 w-8 rounded-full transition-transform',
+                    color === newTagColor
+                      ? 'ring-2 ring-ink-900/40 ring-offset-2 scale-110'
+                      : 'hover:scale-110'
+                  )}
+                  style={{ background: color }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {newTagName.trim() && (
+            <div className="flex items-center gap-2 text-sm text-ink-500">
+              Preview
+              <TagChip tag={{ name: newTagName.trim(), color: newTagColor }} dot />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
             <Button
@@ -236,47 +262,38 @@ export const TagsPage: React.FC = () => {
   );
 };
 
-// Compact Tag Card Component without colors
 interface TagCardProps {
   tag: Tag;
   isAuthenticated: boolean;
   onDelete: (id: number, name: string) => void;
 }
 
-const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => {
-  return (
-    <div className="group bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all duration-200 hover:border-blue-300">
-      <div className="flex items-center justify-between gap-1">
-        <Link
-          to={`/recipes?tag=${tag.id}`}
-          className="flex-1 text-sm text-gray-900 hover:text-blue-600 font-medium transition-colors truncate"
-          title={`View all ${tag.name} recipes`}
-        >
-          {tag.name}
-        </Link>
-        
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Link
-            to={`/recipes?tag=${tag.id}`}
-            className="p-1 text-blue-600 hover:text-blue-700 transition-colors"
-            title={`View all ${tag.name} recipes`}
-          >
-            <ExternalLink className="w-3 h-3" />
-          </Link>
-          
-          {isAuthenticated && (
-            <button
-              onClick={() => onDelete(tag.id, tag.name)}
-              className="p-1 text-red-600 hover:text-red-700 transition-colors"
-              title="Delete tag"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => (
+  <div
+    className="surface surface-interactive group flex items-center gap-3 p-3"
+    style={{ ['--chip' as string]: tag.color || '#9aa1ae' }}
+  >
+    <span className="swatch" aria-hidden="true" />
+
+    <Link
+      to={`/recipes?tag=${tag.id}`}
+      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-brand-600"
+      title={`View all ${tag.name} recipes`}
+    >
+      {tag.name}
+    </Link>
+
+    {isAuthenticated && (
+      <button
+        onClick={() => onDelete(tag.id, tag.name)}
+        className="shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
+        title="Delete tag"
+        aria-label={`Delete tag ${tag.name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    )}
+  </div>
+);
 
 export default TagsPage;

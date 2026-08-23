@@ -1,324 +1,218 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FixedSizeList as List } from 'react-window';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  X, 
-  Edit, 
-  Trash2, 
-  Clock, 
-  Users,
-  Utensils,
-  Tag as TagIcon
-} from 'lucide-react';
+import { Plus, Search, X, Utensils, SlidersHorizontal } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { useOptimizedRecipes, useOptimizedTags } from '@/hooks/useOptimizedData';
-import { useAppStore } from '@/store/appStore';
+import { useOptimizedRecipes, useOptimizedTags, invalidate } from '@/hooks/useOptimizedData';
+import { useAppStore, filterRecipes } from '@/store/appStore';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
-import { formatTime, debounce } from '@/utils';
-import { Card, Button, Input, LoadingSpinner, EmptyState } from '@/components/ui';
+import RecipeCard from '@/components/RecipeCard';
+import { Button, LoadingSpinner, EmptyState, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
-const ITEM_HEIGHT = 200; // Height of each recipe card
-const CONTAINER_HEIGHT = 600; // Height of virtualized container
+const SEARCH_DEBOUNCE_MS = 250;
 
 const RecipesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
-  
-  // Use optimized data hooks
+
   const { recipes, isLoading: recipesLoading, loadRecipes } = useOptimizedRecipes();
   const { tags, loadTags } = useOptimizedTags();
-  
-  const { 
-    searchQuery, 
-    activeTagId,
-    setSearchQuery, 
-    setActiveTagId,
-    deleteRecipe,
-    getFilteredRecipes
-  } = useAppStore();
+  const deleteRecipeFromStore = useAppStore(state => state.deleteRecipe);
+
+  // The URL is the single source of truth for the filters. They used to be
+  // mirrored into the app store as well, with an effect copying one into the
+  // other on every change - which is what made typing in the box push a value
+  // back into the input a moment later.
+  const searchQuery = searchParams.get('search') ?? '';
+  const tagParam = searchParams.get('tag');
+  const activeTagId = tagParam && !Number.isNaN(Number(tagParam)) ? Number(tagParam) : null;
 
   const [showFilters, setShowFilters] = useState(false);
-  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  const [inputValue, setInputValue] = useState(searchQuery);
+  const [syncedQuery, setSyncedQuery] = useState(searchQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Load data on mount
+  // Adjusting state during render, the pattern React documents for "a prop
+  // changed and this state derives from it". No effect, so the input never
+  // renders one frame behind the URL it is following.
+  if (searchQuery !== syncedQuery) {
+    setSyncedQuery(searchQuery);
+    setInputValue(searchQuery);
+  }
+
   useEffect(() => {
     loadRecipes();
     loadTags();
   }, [loadRecipes, loadTags]);
 
-  // Initialize from URL params
-  useEffect(() => {
-    const search = searchParams.get('search') || '';
-    const tagId = searchParams.get('tag');
-    
-    // The URL is the external system this effect synchronises from, and these
-    // values stay user-editable afterwards, so they cannot simply be derived
-    // during render - which is the alternative the rule is pointing at.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocalSearchQuery(search);
-    setSearchQuery(search);
-    setActiveTagId(tagId ? parseInt(tagId) : null);
-  }, [searchParams, setSearchQuery, setActiveTagId]);
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }, []);
 
-  // Memoized filtered recipes for performance
-  const filteredRecipes = useMemo(() => {
-    return getFilteredRecipes();
-    // getFilteredRecipes reads the store itself, so these do not appear in the
-    // body - they are what makes the result recompute when the data or the
-    // filters change. Dropping them would freeze the list on its first value.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipes, searchQuery, activeTagId, getFilteredRecipes]);
-
-  // Debounced search function
-  const debouncedSearch = useMemo(
-    () => debounce((query: string) => {
-      setSearchQuery(query);
-      updateUrlParams(query, activeTagId);
-    }, 300),
-    // updateUrlParams only closes over setSearchParams, which react-router
-    // keeps stable, so it never goes stale here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setSearchQuery, activeTagId]
+  const filteredRecipes = useMemo(
+    () => filterRecipes(recipes, searchQuery, activeTagId),
+    [recipes, searchQuery, activeTagId]
   );
 
-  // Handle search input changes
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setLocalSearchQuery(value);
-    debouncedSearch(value);
-  };
-
-  // Update URL parameters
-  const updateUrlParams = (search: string, tagId: number | null) => {
+  const applyFilters = useCallback((search: string, tagId: number | null) => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (tagId) params.set('tag', tagId.toString());
-    
-    const paramString = params.toString();
-    setSearchParams(paramString ? params : {}, { replace: true });
+    if (tagId) params.set('tag', String(tagId));
+    setSearchParams(params, { replace: true });
+  }, [setSearchParams]);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => applyFilters(value, activeTagId), SEARCH_DEBOUNCE_MS);
   };
 
-  // Handle tag filter
-  const handleTagFilter = (tagId: number | null) => {
-    setActiveTagId(tagId);
-    updateUrlParams(searchQuery, tagId);
-  };
-
-  // Clear filters
   const clearFilters = () => {
-    setLocalSearchQuery('');
-    setSearchQuery('');
-    setActiveTagId(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setInputValue('');
     setSearchParams({}, { replace: true });
   };
 
-  // Delete recipe handler
-  const handleDeleteRecipe = async (recipeId: number, recipeName: string) => {
-    if (!window.confirm(`Are you sure you want to delete "${recipeName}"?`)) {
-      return;
-    }
+  const handleDeleteRecipe = useCallback(async (recipe: Recipe) => {
+    if (!window.confirm(`Are you sure you want to delete "${recipe.title}"?`)) return;
 
     try {
-      const response = await apiService.deleteRecipe(recipeId);
+      const response = await apiService.deleteRecipe(recipe.id);
       if (response.success) {
-        deleteRecipe(recipeId);
-        toast.success('Recipe deleted successfully');
+        deleteRecipeFromStore(recipe.id);
+        invalidate('recipes');
+        toast.success(response.message || 'Recipe deleted successfully');
       } else {
         toast.error(response.error || 'Failed to delete recipe');
       }
     } catch (error: any) {
       console.error('Delete recipe error:', error);
-      toast.error('Failed to delete recipe. Please try again.');
+      toast.error(error?.error || 'Failed to delete recipe. Please try again.');
     }
-  };
+  }, [deleteRecipeFromStore]);
 
-  // Virtualized row renderer
-  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const recipe = filteredRecipes[index];
-    if (!recipe) return null;
-
+  if (recipesLoading && recipes.length === 0) {
     return (
-      <div style={style} className="px-2 py-1">
-        <RecipeCard
-          recipe={recipe}
-          isOwner={user?.id === recipe.created_by}
-          onDelete={handleDeleteRecipe}
-        />
-      </div>
-    );
-  };
-
-  if (recipesLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[400px]">
+      <div className="flex min-h-[24rem] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   const activeTag = tags.find(tag => tag.id === activeTagId);
+  const hasFilters = Boolean(searchQuery || activeTagId);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Page Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Utensils className="w-8 h-8 text-red-600" />
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
+            <Utensils className="h-8 w-8 text-brand-500" />
             Recipes
           </h1>
-          <p className="text-gray-600 mt-1">
-            {filteredRecipes.length} recipe{filteredRecipes.length !== 1 ? 's' : ''} found
+          <p className="mt-2 text-ink-500">
+            {filteredRecipes.length} recipe{filteredRecipes.length !== 1 ? 's' : ''}
+            {hasFilters ? ' matching your filters' : ' in the collection'}
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            icon={<Filter className="w-4 h-4" />}
-          >
-            Filter
+        {isAuthenticated && (
+          <Button as={Link} to="/recipe/new" icon={<Plus className="h-4 w-4" />}>
+            Add Recipe
           </Button>
-          
-          {isAuthenticated && (
-            <Button
-              as={Link}
-              to="/recipe/new"
-              icon={<Plus className="w-4 h-4" />}
-            >
-              Add Recipe
-            </Button>
-          )}
-        </div>
-      </div>
+        )}
+      </header>
 
       {/* Search and Filters */}
-      <Card>
-        <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search recipes, ingredients, or tags..."
-              value={localSearchQuery}
+      <section className="surface p-4 sm:p-5">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
+            <input
+              type="search"
+              className="field pl-11"
+              placeholder="Search recipes, ingredients, or tags…"
+              value={inputValue}
               onChange={handleSearchChange}
-              className="pl-10"
+              aria-label="Search recipes"
             />
           </div>
 
-          {(showFilters || activeTagId || searchQuery) && (
-            <div className="border-t pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                  <TagIcon className="w-4 h-4" />
-                  Filter by Tags
-                </h3>
-                {(activeTagId || searchQuery) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearFilters}
-                    icon={<X className="w-4 h-4" />}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                {tags.map(tag => (
-                  <button
-                    key={tag.id}
-                    onClick={() => handleTagFilter(tag.id === activeTagId ? null : tag.id)}
-                    className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
-                      tag.id === activeTagId
-                        ? 'bg-red-600 text-white border-red-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-red-300 hover:text-red-600'
-                    }`}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Active Filters Display */}
-          {(activeTag || searchQuery) && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">Active filters:</span>
-              {searchQuery && (
-                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                  Search: "{searchQuery}"
-                </span>
-              )}
-              {activeTag && (
-                <span className="bg-red-100 text-red-800 px-2 py-1 rounded">
-                  Tag: {activeTag.name}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="flex gap-2">
+            <Button
+              variant={showFilters || activeTagId ? 'primary' : 'secondary'}
+              onClick={() => setShowFilters(open => !open)}
+              icon={<SlidersHorizontal className="h-4 w-4" />}
+              aria-expanded={showFilters}
+            >
+              Tags
+            </Button>
+            {hasFilters && (
+              <Button variant="ghost" onClick={clearFilters} icon={<X className="h-4 w-4" />}>
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
-      </Card>
 
-      {/* Recipes List */}
+        {(showFilters || activeTagId) && tags.length > 0 && (
+          <div className="animate-rise mt-4 flex flex-wrap gap-2 border-t border-black/5 pt-4">
+            {tags.map(tag => (
+              <TagChip
+                key={tag.id}
+                tag={tag}
+                as="button"
+                type="button"
+                dot
+                selected={tag.id === activeTagId}
+                onClick={() => applyFilters(searchQuery, tag.id === activeTagId ? null : tag.id)}
+                aria-pressed={tag.id === activeTagId}
+              />
+            ))}
+          </div>
+        )}
+
+        {activeTag && !showFilters && (
+          <p className="mt-3 flex items-center gap-2 text-sm text-ink-500">
+            Filtered by <TagChip tag={activeTag} dot />
+          </p>
+        )}
+      </section>
+
+      {/* Recipes */}
       {filteredRecipes.length > 0 ? (
-        <div className="space-y-4">
-          {/* Use virtualization for large lists */}
-          {filteredRecipes.length > 20 ? (
-            <div>
-              <p className="text-sm text-gray-600 mb-4">
-                Showing {filteredRecipes.length} recipes (virtualized for performance)
-              </p>
-              <List
-                height={CONTAINER_HEIGHT}
-                width="100%"
-                itemCount={filteredRecipes.length}
-                itemSize={ITEM_HEIGHT}
-                className="border rounded-lg"
-              >
-                {Row}
-              </List>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredRecipes.map(recipe => (
-                <RecipeCard
-                  key={recipe.id}
-                  recipe={recipe}
-                  isOwner={user?.id === recipe.created_by}
-                  onDelete={handleDeleteRecipe}
-                />
-              ))}
-            </div>
-          )}
+        <div className="auto-grid">
+          {filteredRecipes.map(recipe => (
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              isOwner={user?.id === recipe.created_by}
+              onDelete={handleDeleteRecipe}
+            />
+          ))}
         </div>
       ) : (
         <EmptyState
-          icon={<Utensils className="w-12 h-12" />}
+          icon={<Utensils className="h-7 w-7" />}
           title="No recipes found"
           description={
-            searchQuery || activeTagId
-              ? "No recipes match your current filters. Try adjusting your search or clearing filters."
+            hasFilters
+              ? 'No recipes match your current filters. Try adjusting your search or clearing the tags.'
               : isAuthenticated
-              ? "Be the first to add a delicious recipe!"
-              : "Please log in to add recipes."
+              ? 'Be the first to add a delicious recipe!'
+              : 'Please log in to add recipes.'
           }
           action={
-            isAuthenticated && !searchQuery && !activeTagId ? (
-              <Button as={Link} to="/recipe/new" icon={<Plus className="w-4 h-4" />}>
-                Add Your First Recipe
-              </Button>
-            ) : (searchQuery || activeTagId) ? (
+            hasFilters ? (
               <Button onClick={clearFilters} variant="secondary">
                 Clear Filters
+              </Button>
+            ) : isAuthenticated ? (
+              <Button as={Link} to="/recipe/new" icon={<Plus className="h-4 w-4" />}>
+                Add Your First Recipe
               </Button>
             ) : null
           }
@@ -327,95 +221,5 @@ const RecipesPage: React.FC = () => {
     </div>
   );
 };
-
-// Optimized Recipe Card Component - FIXED to always show buttons
-interface RecipeCardProps {
-  recipe: Recipe;
-  isOwner: boolean;
-  onDelete: (id: number, name: string) => void;
-}
-
-const RecipeCard: React.FC<RecipeCardProps> = React.memo(({ recipe, isOwner, onDelete }) => {
-  return (
-    <Card className="group hover:shadow-xl transition-shadow duration-300">
-      <div className="space-y-4">
-        {/* Recipe Header */}
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <Link 
-              to={`/recipe/${recipe.id}`}
-              className="text-lg font-semibold text-gray-900 hover:text-red-600 transition-colors line-clamp-2"
-            >
-              {recipe.title}
-            </Link>
-            {recipe.description && (
-              <p className="text-gray-600 text-sm mt-1 line-clamp-2">
-                {recipe.description}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Recipe Meta */}
-        <div className="flex items-center gap-4 text-sm text-gray-500">
-          {recipe.prep_time > 0 && (
-            <div className="flex items-center gap-1">
-              <Clock className="w-4 h-4" />
-              {formatTime(recipe.prep_time)}
-            </div>
-          )}
-          {recipe.servings > 0 && (
-            <div className="flex items-center gap-1">
-              <Users className="w-4 h-4" />
-              {recipe.servings} {recipe.serving_unit}
-            </div>
-          )}
-        </div>
-
-        {/* Tags */}
-        {recipe.tags && recipe.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {recipe.tags.slice(0, 3).map(tag => (
-              <span
-                key={tag.id}
-                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full"
-              >
-                {tag.name}
-              </span>
-            ))}
-            {recipe.tags.length > 3 && (
-              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
-                +{recipe.tags.length - 3} more
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Actions - ALWAYS VISIBLE for owners */}
-        {isOwner && (
-          <div className="flex items-center gap-2 pt-2 border-t">
-            <Button
-              as={Link}
-              to={`/recipe/${recipe.id}/edit`}
-              size="sm"
-              variant="secondary"
-              icon={<Edit className="w-4 h-4" />}
-            >
-              Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => onDelete(recipe.id, recipe.title)}
-              icon={<Trash2 className="w-4 h-4" />}
-            >
-              Delete
-            </Button>
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-});
 
 export default RecipesPage;

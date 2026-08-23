@@ -36,24 +36,24 @@ const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center">
-      <Card className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-            <UserPlus className="w-6 h-6 text-red-600" />
+    <div className="flex min-h-[calc(100vh-14rem)] items-center justify-center">
+      <Card padding="lg" className="animate-rise w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="btn-brand mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl">
+            <UserPlus className="h-6 w-6" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-gray-600 mt-2">Join Recipe Book to save and share your favorite recipes</p>
+          <h1 className="text-2xl font-bold">Create Account</h1>
+          <p className="mt-2 text-ink-500">Join Recipe Book to save and share your favorite recipes</p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Username Field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-medium text-ink-700">
               Username *
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <User className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('username', {
                   required: 'Username is required',
@@ -71,13 +71,13 @@ const RegisterPage: React.FC = () => {
                   }
                 })}
                 type="text"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="field pl-11"
                 placeholder="Choose a username"
                 autoComplete="username"
               />
             </div>
             {errors.username && (
-              <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+              <p className="mt-1.5 flex items-center gap-1 text-sm text-rose-600">
                 <AlertCircle className="w-3 h-3" />
                 {errors.username.message}
               </p>
@@ -86,11 +86,11 @@ const RegisterPage: React.FC = () => {
 
           {/* Email Field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-medium text-ink-700">
               Email Address *
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('email', {
                   required: 'Email is required',
@@ -104,13 +104,13 @@ const RegisterPage: React.FC = () => {
                   }
                 })}
                 type="email"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="field pl-11"
                 placeholder="Enter your email"
                 autoComplete="email"
               />
             </div>
             {errors.email && (
-              <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+              <p className="mt-1.5 flex items-center gap-1 text-sm text-rose-600">
                 <AlertCircle className="w-3 h-3" />
                 {errors.email.message}
               </p>
@@ -119,11 +119,11 @@ const RegisterPage: React.FC = () => {
 
           {/* Password Field */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="mb-2 block text-sm font-medium text-ink-700">
               Password *
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
               <input
                 {...register('password', {
                   required: 'Password is required',
@@ -147,13 +147,13 @@ const RegisterPage: React.FC = () => {
                   }
                 })}
                 type="password"
-                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                className="field pl-11"
                 placeholder="Create a password"
                 autoComplete="new-password"
               />
             </div>
             {errors.password && (
-              <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+              <p className="mt-1.5 flex items-center gap-1 text-sm text-rose-600">
                 <AlertCircle className="w-3 h-3" />
                 {errors.password.message}
               </p>
@@ -186,11 +186,11 @@ const RegisterPage: React.FC = () => {
 
         {/* Login Link */}
         <div className="mt-6 text-center">
-          <p className="text-gray-600">
+          <p className="text-ink-500">
             Already have an account?{' '}
             <Link
               to="/login"
-              className="font-medium text-red-600 hover:text-red-500 transition-colors"
+              className="font-medium text-brand-600 transition-colors hover:text-brand-700"
             >
               Sign in here
             </Link>

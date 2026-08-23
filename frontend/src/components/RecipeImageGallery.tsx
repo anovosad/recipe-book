@@ -97,39 +97,40 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
     <>
       {/* Gallery Grid */}
       <div className={cn("space-y-4", className)}>
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <ZoomIn className="w-5 h-5" />
-          Recipe Photos ({images.length})
-        </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          <ZoomIn className="w-5 h-5 text-brand-500" />
+          Photos
+          <span className="text-sm font-normal text-ink-300">({images.length})</span>
+        </h2>
+
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(14rem,100%),1fr))]">
           {images.map((image, index) => (
             <div
               key={image.id}
-              className="group relative bg-gray-100 rounded-lg overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-lg"
+              className="group relative overflow-hidden rounded-2xl bg-brand-50 ring-1 ring-black/[0.06] transition-shadow duration-200 hover:shadow-lift cursor-zoom-in"
               onClick={() => openModal(index)}
             >
               <img
                 src={`/uploads/${image.filename}`}
                 alt={image.caption || `${recipeName} - Photo ${index + 1}`}
-                className="w-full h-48 object-cover transition-transform duration-200 group-hover:scale-105"
+                className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
                 loading="lazy"
               />
               
               {/* Overlay */}
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-200 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
                 <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
               </div>
               
               {/* Caption */}
               {image.caption && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent p-3">
                   <p className="text-white text-sm truncate">{image.caption}</p>
                 </div>
               )}
               
               {/* Image Counter */}
-              <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+              <div className="absolute top-2 right-2 rounded-full bg-black/45 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
                 {index + 1} / {images.length}
               </div>
             </div>

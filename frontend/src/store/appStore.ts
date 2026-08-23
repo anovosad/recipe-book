@@ -15,7 +15,6 @@ interface AppStore {
   // Search and filters
   searchQuery: string;
   activeTagId: number | null;
-  filteredRecipes: Recipe[];
   
   // Actions
   setLoading: (loading: boolean) => void;
@@ -55,6 +54,49 @@ const normalizeRecipe = (recipe: Recipe): Recipe => ({
   images: recipe.images || []
 });
 
+/**
+ * Pure filter over a recipe list. This used to live inside the store as
+ * `getFilteredRecipes`, which ended with `set({ filteredRecipes })` - and the
+ * recipes page called it from a `useMemo`, so rendering the list wrote to the
+ * store that the same component was subscribed to. Nothing ever read the
+ * `filteredRecipes` slice it maintained, so it is gone.
+ */
+export const filterRecipes = (
+  recipes: Recipe[],
+  searchQuery: string,
+  activeTagId: number | null
+): Recipe[] => {
+  let filtered = recipes;
+
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase().trim();
+    filtered = filtered.filter(recipe => {
+      const title = recipe.title?.toLowerCase() || '';
+      const description = recipe.description?.toLowerCase() || '';
+      const instructions = recipe.instructions?.toLowerCase() || '';
+
+      if (title.includes(query) || description.includes(query) || instructions.includes(query)) {
+        return true;
+      }
+      if (recipe.ingredients?.some(ing => ing.name?.toLowerCase().includes(query))) {
+        return true;
+      }
+      if (recipe.tags?.some(tag => tag.name?.toLowerCase().includes(query))) {
+        return true;
+      }
+      return false;
+    });
+  }
+
+  if (activeTagId) {
+    filtered = filtered.filter(recipe =>
+      recipe.tags?.some(tag => tag.id === activeTagId) || false
+    );
+  }
+
+  return filtered;
+};
+
 export const useAppStore = create<AppStore>((set, get) => ({
   // Initial state
   isLoading: false,
@@ -65,7 +107,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   currentRecipe: null,
   searchQuery: '',
   activeTagId: null,
-  filteredRecipes: [],
 
   // Basic actions
   setLoading: (loading: boolean) => set({ isLoading: loading }),
@@ -75,7 +116,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setRecipes: (recipes: Recipe[]) => {
     const normalizedRecipes = recipes.map(normalizeRecipe);
     set({ recipes: normalizedRecipes });
-    get().getFilteredRecipes();
   },
   
   setCurrentRecipe: (recipe: Recipe | null) => {
@@ -87,9 +127,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const normalizedRecipe = normalizeRecipe(recipe);
     const recipes = [...get().recipes, normalizedRecipe];
     set({ recipes });
-    get().getFilteredRecipes();
   },
-  
+
   updateRecipe: (updatedRecipe: Recipe) => {
     const normalizedRecipe = normalizeRecipe(updatedRecipe);
     
@@ -102,8 +141,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (get().currentRecipe?.id === normalizedRecipe.id) {
       set({ currentRecipe: normalizedRecipe });
     }
-    
-    get().getFilteredRecipes();
   },
   
   deleteRecipe: (id: number) => {
@@ -114,8 +151,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (get().currentRecipe?.id === id) {
       set({ currentRecipe: null });
     }
-    
-    get().getFilteredRecipes();
   },
 
   // Ingredient actions
@@ -146,66 +181,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
     // Clear active tag filter if it's the one being deleted
     if (get().activeTagId === id) {
       set({ activeTagId: null });
-      get().getFilteredRecipes();
     }
   },
 
   // Search and filter actions
-  setSearchQuery: (query: string) => {
-    set({ searchQuery: query });
-    get().getFilteredRecipes();
-  },
-  
-  setActiveTagId: (tagId: number | null) => {
-    set({ activeTagId: tagId });
-    get().getFilteredRecipes();
-  },
-  
-  clearFilters: () => {
-    set({ searchQuery: '', activeTagId: null });
-    get().getFilteredRecipes();
-  },
+  setSearchQuery: (query: string) => set({ searchQuery: query }),
 
-  // Computed filtered recipes
+  setActiveTagId: (tagId: number | null) => set({ activeTagId: tagId }),
+
+  clearFilters: () => set({ searchQuery: '', activeTagId: null }),
+
+  // Reads the current filters and applies them. The body is the exported
+  // helper, so a component can memoise the same computation from props
+  // instead of calling into the store while it renders.
   getFilteredRecipes: () => {
     const { recipes, searchQuery, activeTagId } = get();
-    let filtered = [...recipes];
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(recipe => {
-        // Search in basic fields
-        const title = recipe.title?.toLowerCase() || '';
-        const description = recipe.description?.toLowerCase() || '';
-        const instructions = recipe.instructions?.toLowerCase() || '';
-        
-        if (title.includes(query) || description.includes(query) || instructions.includes(query)) {
-          return true;
-        }
-        
-        // Search in ingredients
-        if (recipe.ingredients?.some(ing => ing.name?.toLowerCase().includes(query))) {
-          return true;
-        }
-        
-        // Search in tags
-        if (recipe.tags?.some(tag => tag.name?.toLowerCase().includes(query))) {
-          return true;
-        }
-        
-        return false;
-      });
-    }
-
-    // Apply tag filter
-    if (activeTagId) {
-      filtered = filtered.filter(recipe => {
-        return recipe.tags?.some(tag => tag.id === activeTagId) || false;
-      });
-    }
-
-    set({ filteredRecipes: filtered });
-    return filtered;
+    return filterRecipes(recipes, searchQuery, activeTagId);
   }
 }));

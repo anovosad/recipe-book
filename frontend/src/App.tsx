@@ -44,10 +44,12 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <Router>
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-red-50 to-pink-50">
+        {/* The page ground is on <body> now, so it covers the whole viewport
+            including the overscroll area rather than stopping at this div. */}
+        <div className="min-h-screen">
           <Navigation />
-          
-          <main className="container mx-auto px-4 py-6">
+
+          <main className="container mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 {/* Public routes */}
@@ -101,35 +103,19 @@ const App: React.FC = () => {
             toastOptions={{
               duration: 4000,
               style: {
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 255, 255, 0.18)',
-                borderRadius: '10px',
-                boxShadow: '0 8px 32px rgba(31, 38, 135, 0.37)',
-                color: '#333'
+                background: 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(14px)',
+                border: '1px solid rgba(255, 255, 255, 0.75)',
+                borderRadius: '1rem',
+                boxShadow: '0 4px 10px rgba(31, 38, 135, 0.06), 0 18px 40px rgba(31, 38, 135, 0.13)',
+                color: '#1d2027',
+                padding: '0.75rem 1rem'
               },
               success: {
-                style: {
-                  borderLeft: '4px solid #10b981'
-                },
-                iconTheme: {
-                  primary: '#10b981',
-                  secondary: '#ffffff'
-                }
+                iconTheme: { primary: '#10b981', secondary: '#ffffff' }
               },
               error: {
-                style: {
-                  borderLeft: '4px solid #ef4444'
-                },
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: '#ffffff'
-                }
-              },
-              loading: {
-                style: {
-                  borderLeft: '4px solid #3b82f6'
-                }
+                iconTheme: { primary: '#ff6b6b', secondary: '#ffffff' }
               }
             }}
           />

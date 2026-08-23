@@ -1,165 +1,85 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Utensils, ChefHat, Heart, Users, BookOpen, Star, ArrowRight } from 'lucide-react';
+import { ChefHat, Heart, Users, BookOpen, Sparkles, ArrowRight } from 'lucide-react';
 import { Card, Button } from '@/components/ui';
 import { useAuthStore } from '@/store/authStore';
+
+const features = [
+  {
+    icon: ChefHat,
+    tint: 'bg-brand-50 text-brand-500',
+    title: 'Create & Share',
+    body: 'Add your own recipes with photos, ingredients and step-by-step instructions.'
+  },
+  {
+    icon: Heart,
+    tint: 'bg-amber-50 text-amber-500',
+    title: 'Organise & Tag',
+    body: 'Sort everything with colour-coded tags and find it again with one search.'
+  },
+  {
+    icon: Sparkles,
+    tint: 'bg-teal-50 text-teal-500',
+    title: 'Cook & Scale',
+    body: 'Change the serving count and every quantity is recalculated for you.'
+  }
+];
 
 export const HomePage: React.FC = () => {
   const { isAuthenticated } = useAuthStore();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12">
-      {/* Hero Section */}
-      <div className="text-center py-12">
-        <div className="mb-8">
-          <Utensils className="w-20 h-20 text-red-600 mx-auto mb-6" />
-          <h1 className="text-4xl lg:text-6xl font-bold text-gray-900 mb-4">
-            Recipe Book
-          </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed">
-            Discover, save, and share your favorite recipes. Create your culinary collection and never lose a great recipe again.
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button
-            as={Link}
-            to="/recipes"
-            size="lg"
-            className="group"
-            icon={<BookOpen className="w-5 h-5 group-hover:scale-110 transition-transform" />}
-          >
+    <div className="mx-auto max-w-5xl space-y-16 lg:space-y-24">
+      {/* Hero */}
+      <section className="animate-rise pt-6 text-center lg:pt-16">
+        <span className="chip mb-6" style={{ ['--chip' as string]: '#ff6b6b' }}>
+          <span className="chip-dot" aria-hidden="true" />
+          Your personal cookbook
+        </span>
+
+        <h1 className="text-4xl leading-[1.1] font-bold tracking-tight text-balance lg:text-6xl">
+          Every recipe worth keeping,{' '}
+          <span className="bg-linear-to-br from-brand-500 to-ember-500 bg-clip-text text-transparent">
+            in one place
+          </span>
+        </h1>
+
+        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-ink-500 text-pretty">
+          Save what you cook, scale it to any number of servings, and find it again in
+          seconds. No clutter, no ten paragraphs before the ingredients.
+        </p>
+
+        <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
+          <Button as={Link} to="/recipes" size="lg" className="group" icon={<BookOpen className="h-5 w-5" />}>
             Browse Recipes
-            <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-          </Button>
-          
-          {!isAuthenticated && (
-            <Button
-              as={Link}
-              to="/register"
-              variant="secondary"
-              size="lg"
-              icon={<Users className="w-5 h-5" />}
-            >
-              Join Community
-            </Button>
-          )}
-          
-          {isAuthenticated && (
-            <Button
-              as={Link}
-              to="/recipe/new"
-              variant="secondary"
-              size="lg"
-              icon={<ChefHat className="w-5 h-5" />}
-            >
-              Create Recipe
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Features */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <Card className="text-center group hover:shadow-xl transition-all duration-300">
-          <ChefHat className="w-12 h-12 text-red-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Create & Share
-          </h3>
-          <p className="text-gray-600">
-            Add your own recipes with photos, ingredients, and step-by-step instructions. Share your culinary creations with the world.
-          </p>
-        </Card>
-
-        <Card className="text-center group hover:shadow-xl transition-all duration-300">
-          <Heart className="w-12 h-12 text-red-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Organize & Tag
-          </h3>
-          <p className="text-gray-600">
-            Use tags and categories to organize your recipes. Find exactly what you're looking for with powerful search.
-          </p>
-        </Card>
-
-        <Card className="text-center group hover:shadow-xl transition-all duration-300">
-          <Star className="w-12 h-12 text-red-600 mx-auto mb-4 group-hover:scale-110 transition-transform" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            Discover & Cook
-          </h3>
-          <p className="text-gray-600">
-            Explore recipes from other cooks, scale ingredients automatically, and cook with confidence.
-          </p>
-        </Card>
-      </div>
-
-      {/* Quick Start Section */}
-      <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-8 border border-white/20">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Get Started</h2>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Whether you're a seasoned chef or just starting out, Recipe Book makes it easy to manage your culinary journey.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Button
-            as={Link}
-            to="/recipes"
-            variant="ghost"
-            className="h-auto p-4 flex-col"
-          >
-            <BookOpen className="w-8 h-8 text-red-600 mb-2" />
-            <span className="font-medium">Browse Recipes</span>
-            <span className="text-sm text-gray-500 mt-1">Explore the collection</span>
-          </Button>
-
-          <Button
-            as={Link}
-            to="/ingredients"
-            variant="ghost"
-            className="h-auto p-4 flex-col"
-          >
-            <Utensils className="w-8 h-8 text-green-600 mb-2" />
-            <span className="font-medium">Ingredients</span>
-            <span className="text-sm text-gray-500 mt-1">Manage your pantry</span>
-          </Button>
-
-          <Button
-            as={Link}
-            to="/tags"
-            variant="ghost"
-            className="h-auto p-4 flex-col"
-          >
-            <Star className="w-8 h-8 text-blue-600 mb-2" />
-            <span className="font-medium">Categories</span>
-            <span className="text-sm text-gray-500 mt-1">Organize by type</span>
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Button>
 
           {isAuthenticated ? (
-            <Button
-              as={Link}
-              to="/recipe/new"
-              variant="ghost"
-              className="h-auto p-4 flex-col"
-            >
-              <ChefHat className="w-8 h-8 text-purple-600 mb-2" />
-              <span className="font-medium">Create Recipe</span>
-              <span className="text-sm text-gray-500 mt-1">Add your own</span>
+            <Button as={Link} to="/recipe/new" variant="secondary" size="lg" icon={<ChefHat className="h-5 w-5" />}>
+              Create a Recipe
             </Button>
           ) : (
-            <Button
-              as={Link}
-              to="/register"
-              variant="ghost"
-              className="h-auto p-4 flex-col"
-            >
-              <Users className="w-8 h-8 text-purple-600 mb-2" />
-              <span className="font-medium">Join Us</span>
-              <span className="text-sm text-gray-500 mt-1">Start creating</span>
+            <Button as={Link} to="/register" variant="secondary" size="lg" icon={<Users className="h-5 w-5" />}>
+              Create an Account
             </Button>
           )}
         </div>
-      </div>
+      </section>
+
+      {/* Features. The old page followed these with a second block of four
+          buttons pointing at the same pages the nav bar already lists. */}
+      <section className="grid grid-cols-1 gap-6 md:grid-cols-3">
+        {features.map(({ icon: Icon, tint, title, body }) => (
+          <Card key={title} interactive className="text-center">
+            <div className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl ${tint}`}>
+              <Icon className="h-6 w-6" />
+            </div>
+            <h2 className="mb-2 text-lg font-semibold">{title}</h2>
+            <p className="leading-relaxed text-ink-500">{body}</p>
+          </Card>
+        ))}
+      </section>
     </div>
   );
 };

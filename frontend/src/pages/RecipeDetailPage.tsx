@@ -1,32 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  Clock, 
-  Users, 
+import {
+  Clock,
+  Users,
   Calendar,
   Edit,
   Trash2,
   ArrowLeft,
-  ChefHat,
+  Flame,
   Tag as TagIcon,
-  Calculator,
+  Timer,
   RotateCcw,
   Minus,
   Plus
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useAppStore } from '@/store/appStore';
+import { invalidate } from '@/hooks/useOptimizedData';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
-import { formatTime, formatDate, formatCookingQuantity } from '@/utils';
-import { Card, Button, LoadingSpinner, Alert } from '@/components/ui';
+import { formatTime, formatDate, formatCookingQuantity, cn } from '@/utils';
+import { Card, Button, LoadingSpinner, Alert, TagChip } from '@/components/ui';
+import RecipeImageGallery from '@/components/RecipeImageGallery';
 import toast from 'react-hot-toast';
+
+const MAX_SERVINGS = 50;
 
 const RecipeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { setCurrentRecipe, deleteRecipe } = useAppStore();
+  const setCurrentRecipe = useAppStore(state => state.setCurrentRecipe);
+  const deleteRecipeFromStore = useAppStore(state => state.deleteRecipe);
 
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,8 +55,8 @@ const RecipeDetailPage: React.FC = () => {
         setOriginalServings(recipeData.servings);
         setCurrentRecipe(recipeData);
         setError(null);
-      } catch (error: any) {
-        console.error('Failed to load recipe:', error);
+      } catch (err) {
+        console.error('Failed to load recipe:', err);
         setError('Recipe not found');
         setRecipe(null);
       } finally {
@@ -62,7 +67,7 @@ const RecipeDetailPage: React.FC = () => {
     loadRecipe();
   }, [id, setCurrentRecipe]);
 
-  const handleDeleteRecipe = async () => {
+  const handleDeleteRecipe = useCallback(async () => {
     if (!recipe) return;
 
     if (!window.confirm(`Are you sure you want to delete "${recipe.title}"? This action cannot be undone.`)) {
@@ -72,26 +77,23 @@ const RecipeDetailPage: React.FC = () => {
     try {
       const response = await apiService.deleteRecipe(recipe.id);
       if (response.success) {
-        deleteRecipe(recipe.id);
+        deleteRecipeFromStore(recipe.id);
+        invalidate('recipes');
         toast.success(response.message || 'Recipe deleted successfully');
         navigate('/recipes');
       } else {
         toast.error(response.error || 'Failed to delete recipe');
       }
-    } catch (error: any) {
-      console.error('Delete recipe error:', error);
-      toast.error('Failed to delete recipe. Please try again.');
+    } catch (err: any) {
+      console.error('Delete recipe error:', err);
+      toast.error(err?.error || 'Failed to delete recipe. Please try again.');
     }
-  };
+  }, [recipe, deleteRecipeFromStore, navigate]);
 
   const handleServingsChange = (newServings: number) => {
-    if (newServings > 0 && newServings <= 50) {
+    if (newServings > 0 && newServings <= MAX_SERVINGS) {
       setServings(newServings);
     }
-  };
-
-  const resetServings = () => {
-    setServings(originalServings);
   };
 
   const getScaledQuantity = (originalQuantity: number): number => {
@@ -101,7 +103,7 @@ const RecipeDetailPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[400px]">
+      <div className="flex min-h-[24rem] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -109,20 +111,12 @@ const RecipeDetailPage: React.FC = () => {
 
   if (error || !recipe) {
     return (
-      <div className="max-w-md mx-auto">
-        <Alert type="error">
-          <strong>Recipe not found</strong>
-          <p className="mt-1">
-            The recipe you're looking for doesn't exist or has been removed.
-          </p>
+      <div className="mx-auto max-w-md space-y-4">
+        <Alert type="error" title="Recipe not found">
+          The recipe you're looking for doesn't exist or has been removed.
         </Alert>
-        <div className="mt-4 text-center">
-          <Button
-            as={Link}
-            to="/recipes"
-            variant="secondary"
-            icon={<ArrowLeft className="w-4 h-4" />}
-          >
+        <div className="text-center">
+          <Button as={Link} to="/recipes" variant="secondary" icon={<ArrowLeft className="h-4 w-4" />}>
             Back to Recipes
           </Button>
         </div>
@@ -132,232 +126,159 @@ const RecipeDetailPage: React.FC = () => {
 
   const isOwner = user?.id === recipe.created_by;
   const scalingRatio = originalServings > 0 ? servings / originalServings : 1;
+  const isScaled = scalingRatio !== 1;
+  const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0);
+
+  const stats = [
+    { icon: Clock, label: 'Prep Time', value: recipe.prep_time > 0 ? formatTime(recipe.prep_time) : '—' },
+    { icon: Flame, label: 'Cook Time', value: recipe.cook_time > 0 ? formatTime(recipe.cook_time) : '—' },
+    { icon: Users, label: 'Servings', value: recipe.servings > 0 ? `${recipe.servings} ${recipe.serving_unit}` : '—' },
+    { icon: Timer, label: 'Total Time', value: totalTime > 0 ? formatTime(totalTime) : '—' }
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Back Button */}
-      <Button
-        as={Link}
-        to="/recipes"
-        variant="ghost"
-        size="sm"
-        icon={<ArrowLeft className="w-4 h-4" />}
-      >
+    <div className="mx-auto max-w-5xl space-y-7">
+      <Button as={Link} to="/recipes" variant="ghost" size="sm" icon={<ArrowLeft className="h-4 w-4" />}>
         Back to Recipes
       </Button>
 
       {/* Recipe Header */}
-      <Card>
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {recipe.title}
-            </h1>
+      <Card padding="lg">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">{recipe.title}</h1>
             {recipe.description && (
-              <p className="text-gray-600 text-lg leading-relaxed">
-                {recipe.description}
-              </p>
+              <p className="mt-3 text-lg leading-relaxed text-ink-500">{recipe.description}</p>
             )}
-            <div className="flex items-center gap-2 mt-3 text-sm text-gray-500">
-              <Calendar className="w-4 h-4" />
+            <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-300">
+              <Calendar className="h-4 w-4" />
               <span>Created {formatDate(recipe.created_at)}</span>
-              <span>•</span>
+              <span aria-hidden="true">•</span>
               <span>by {recipe.author_name}</span>
-            </div>
+            </p>
           </div>
 
           {isOwner && (
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex shrink-0 items-center gap-2">
               <Button
                 as={Link}
                 to={`/recipe/${recipe.id}/edit`}
                 size="sm"
                 variant="secondary"
-                icon={<Edit className="w-4 h-4" />}
+                icon={<Edit className="h-4 w-4" />}
               >
                 Edit
               </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={handleDeleteRecipe}
-                icon={<Trash2 className="w-4 h-4" />}
-              >
+              <Button size="sm" variant="danger" onClick={handleDeleteRecipe} icon={<Trash2 className="h-4 w-4" />}>
                 Delete
               </Button>
             </div>
           )}
         </div>
 
-        {/* Recipe Meta */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6 pt-6 border-t">
-          <div className="text-center">
-            <Clock className="w-6 h-6 text-red-600 mx-auto mb-2" />
-            <div className="font-medium text-gray-900">
-              {recipe.prep_time > 0 ? formatTime(recipe.prep_time) : 'Not specified'}
+        <dl className="mt-7 grid grid-cols-2 gap-3 border-t border-black/5 pt-6 lg:grid-cols-4">
+          {stats.map(({ icon: Icon, label, value }) => (
+            <div key={label} className="rounded-2xl bg-white/60 px-4 py-4 text-center ring-1 ring-inset ring-black/[0.05]">
+              <Icon className="mx-auto mb-2 h-5 w-5 text-brand-500" />
+              <dd className="font-semibold text-ink-900">{value}</dd>
+              <dt className="mt-0.5 text-xs tracking-wide text-ink-300 uppercase">{label}</dt>
             </div>
-            <div className="text-sm text-gray-500">Prep Time</div>
-          </div>
-          <div className="text-center">
-            <ChefHat className="w-6 h-6 text-red-600 mx-auto mb-2" />
-            <div className="font-medium text-gray-900">
-              {recipe.cook_time > 0 ? formatTime(recipe.cook_time) : 'Not specified'}
-            </div>
-            <div className="text-sm text-gray-500">Cook Time</div>
-          </div>
-          <div className="text-center">
-            <Users className="w-6 h-6 text-red-600 mx-auto mb-2" />
-            <div className="font-medium text-gray-900">
-              {recipe.servings > 0 ? `${recipe.servings} ${recipe.serving_unit}` : 'Not specified'}
-            </div>
-            <div className="text-sm text-gray-500">Servings</div>
-          </div>
-          <div className="text-center">
-            <Calculator className="w-6 h-6 text-red-600 mx-auto mb-2" />
-            <div className="font-medium text-gray-900">
-              {recipe.prep_time > 0 && recipe.cook_time > 0 
-                ? formatTime(recipe.prep_time + recipe.cook_time) 
-                : 'Variable'
-              }
-            </div>
-            <div className="text-sm text-gray-500">Total Time</div>
-          </div>
-        </div>
-      </Card>
+          ))}
+        </dl>
 
-      {/* Recipe Images */}
-      {recipe.images && recipe.images.length > 0 && (
-        <Card>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Photos</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {recipe.images.map(image => (
-              <div key={image.id} className="group">
-                <img
-                  src={`/uploads/${image.filename}`}
-                  alt={image.caption || recipe.title}
-                  className="w-full h-48 object-cover rounded-lg shadow-sm group-hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => {
-                    // Open image in modal or new tab
-                    window.open(`/uploads/${image.filename}`, '_blank');
-                  }}
-                />
-                {image.caption && (
-                  <p className="text-sm text-gray-600 mt-2 text-center">
-                    {image.caption}
-                  </p>
-                )}
-              </div>
+        {recipe.tags && recipe.tags.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-black/5 pt-6">
+            <TagIcon className="h-4 w-4 text-ink-300" />
+            {recipe.tags.map(tag => (
+              <TagChip key={tag.id} tag={tag} as={Link} to={`/recipes?tag=${tag.id}`} dot />
             ))}
           </div>
+        )}
+      </Card>
+
+      {/* Photos. The lightbox component already existed - nothing imported it,
+          so clicking a photo opened the raw file in a new browser tab. */}
+      {recipe.images && recipe.images.length > 0 && (
+        <Card padding="lg">
+          <RecipeImageGallery images={recipe.images} recipeName={recipe.title} />
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Ingredients */}
-        <div className="lg:col-span-1">
-          <Card>
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xl font-semibold text-gray-900">Ingredients</h2>
-                {scalingRatio !== 1 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={resetServings}
-                    icon={<RotateCcw className="w-4 h-4" />}
-                  >
-                    Reset
-                  </Button>
-                )}
-              </div>
-              
-              {recipe.servings > 0 && (
-                <div className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-lg">
-                  <button
-                    onClick={() => handleServingsChange(servings - 1)}
-                    disabled={servings <= 1}
-                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-red-700 transition-colors"
-                    title="Decrease servings"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  
-                  <div className="flex items-center gap-2 px-3 py-1 bg-white rounded-md min-w-[80px] justify-center">
-                    <span className="font-semibold text-gray-900">{servings}</span>
-                    <span className="text-sm text-gray-600">{recipe.serving_unit}</span>
-                  </div>
-                  
-                  <button
-                    onClick={() => handleServingsChange(servings + 1)}
-                    disabled={servings >= 50}
-                    className="w-8 h-8 rounded-full bg-red-100 hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-red-700 transition-colors"
-                    title="Increase servings"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
+        <div className="space-y-6 lg:col-span-2">
+          <Card padding="lg">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold">Ingredients</h2>
+              {isScaled && (
+                <Button size="sm" variant="ghost" onClick={() => setServings(originalServings)} icon={<RotateCcw className="h-4 w-4" />}>
+                  Reset
+                </Button>
               )}
             </div>
 
+            {recipe.servings > 0 && (
+              <div className="mb-5 flex items-center justify-center gap-3 rounded-2xl bg-white/60 p-2.5 ring-1 ring-inset ring-black/[0.05]">
+                <button
+                  onClick={() => handleServingsChange(servings - 1)}
+                  disabled={servings <= 1}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600 transition-colors hover:bg-brand-100 disabled:opacity-40"
+                  aria-label="Decrease servings"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+
+                <div className="min-w-[6rem] text-center">
+                  <span className="text-lg font-semibold text-ink-900">{servings}</span>
+                  <span className="ml-1.5 text-sm text-ink-500">{recipe.serving_unit}</span>
+                </div>
+
+                <button
+                  onClick={() => handleServingsChange(servings + 1)}
+                  disabled={servings >= MAX_SERVINGS}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-50 text-brand-600 transition-colors hover:bg-brand-100 disabled:opacity-40"
+                  aria-label="Increase servings"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {recipe.ingredients && recipe.ingredients.length > 0 ? (
-              <ul className="space-y-3">
+              <ul className="divide-y divide-black/5">
                 {recipe.ingredients.map((ingredient, index) => (
-                  <li key={index} className="flex items-center gap-3">
-                    <div className="w-2 h-2 bg-red-600 rounded-full flex-shrink-0"></div>
-                    <div className="flex-1">
-                      <span className={`font-medium ${scalingRatio !== 1 ? 'text-red-600' : 'text-gray-900'}`}>
-                        {formatCookingQuantity(getScaledQuantity(ingredient.quantity))}
-                      </span>
-                      <span className="text-gray-600 ml-1">{ingredient.unit}</span>
-                      <span className="text-gray-900 ml-2">{ingredient.name}</span>
-                    </div>
+                  <li key={index} className="flex items-baseline gap-3 py-2.5">
+                    <span
+                      className={cn(
+                        'min-w-[3.5rem] text-right font-semibold tabular-nums',
+                        isScaled ? 'text-brand-600' : 'text-ink-900'
+                      )}
+                    >
+                      {formatCookingQuantity(getScaledQuantity(ingredient.quantity))}
+                    </span>
+                    <span className="min-w-[3rem] text-sm text-ink-500">{ingredient.unit}</span>
+                    <span className="flex-1 text-ink-900">{ingredient.name}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-gray-500 italic">No ingredients listed</p>
+              <p className="text-ink-300 italic">No ingredients listed</p>
             )}
 
-            {scalingRatio !== 1 && (
-              <div className="mt-4 pt-4 border-t">
-                <p className="text-xs text-gray-500">
-                  Quantities adjusted for {servings} {recipe.serving_unit} 
-                  (×{scalingRatio.toFixed(1)} from original)
-                </p>
-              </div>
+            {isScaled && (
+              <p className="mt-4 border-t border-black/5 pt-4 text-xs text-ink-300">
+                Scaled to {servings} {recipe.serving_unit} (×{scalingRatio.toFixed(2)} of the original)
+              </p>
             )}
           </Card>
-
-          {/* Tags - No colors */}
-          {recipe.tags && recipe.tags.length > 0 && (
-            <Card className="mt-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <TagIcon className="w-5 h-5" />
-                Categories
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {recipe.tags.map(tag => (
-                  <Link
-                    key={tag.id}
-                    to={`/recipes?tag=${tag.id}`}
-                    className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                  >
-                    {tag.name}
-                  </Link>
-                ))}
-              </div>
-            </Card>
-          )}
         </div>
 
         {/* Instructions */}
-        <div className="lg:col-span-2">
-          <Card>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Instructions</h2>
-            <div className="prose prose-sm max-w-none">
-              <div className="whitespace-pre-wrap text-gray-700 leading-relaxed">
-                {recipe.instructions}
-              </div>
+        <div className="lg:col-span-3">
+          <Card padding="lg">
+            <h2 className="mb-5 text-xl font-semibold">Instructions</h2>
+            <div className="text-[0.9375rem] leading-[1.75] whitespace-pre-wrap text-ink-700">
+              {recipe.instructions}
             </div>
           </Card>
         </div>

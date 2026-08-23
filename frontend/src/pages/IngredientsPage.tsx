@@ -1,11 +1,12 @@
 // frontend/src/pages/IngredientsPage.tsx - More compact version
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Plus, Trash2, Search, ExternalLink } from 'lucide-react';
+import { Leaf, Plus, Trash2, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
+import { invalidate } from '@/hooks/useOptimizedData';
 import { Ingredient } from '@/types';
-import { Card, Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
+import { Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 export const IngredientsPage: React.FC = () => {
@@ -72,6 +73,7 @@ export const IngredientsPage: React.FC = () => {
       const response = await apiService.createIngredient({ name: newIngredientName.trim() });
       if (response.success) {
         await loadIngredients();
+        invalidate('ingredients');
         setNewIngredientName('');
         setShowModal(false);
         toast.success(response.message || 'Ingredient added successfully');
@@ -94,6 +96,7 @@ export const IngredientsPage: React.FC = () => {
     try {
       const response = await apiService.deleteIngredient(id);
       await loadIngredients();
+      invalidate('ingredients');
       toast.success(response.message || 'Ingredient deleted successfully');
     } catch (error: any) {
       console.error('Delete ingredient error:', error);
@@ -111,53 +114,50 @@ export const IngredientsPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[400px]">
+      <div className="flex min-h-[24rem] items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Leaf className="w-6 h-6 text-green-600" />
+          <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight lg:text-4xl">
+            <Leaf className="h-8 w-8 text-emerald-500" />
             Ingredients
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} available
+          <p className="mt-2 text-ink-500">
+            {filteredIngredients.length} ingredient{filteredIngredients.length !== 1 ? 's' : ''} in the pantry
           </p>
         </div>
 
         {isAuthenticated && (
-          <Button
-            onClick={() => setShowModal(true)}
-            size="sm"
-            icon={<Plus className="w-3 h-3" />}
-          >
+          <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
             Add Ingredient
           </Button>
         )}
-      </div>
+      </header>
 
       {/* Search */}
-      <Card className="p-3">
+      <div className="surface p-4 sm:p-5">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <Input
-            placeholder="Search ingredients..."
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-300" />
+          <input
+            type="search"
+            className="field pl-11"
+            placeholder="Search ingredients…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 h-9"
+            aria-label="Search ingredients"
           />
         </div>
-      </Card>
+      </div>
 
-      {/* Ingredients Grid - More Compact */}
       {filteredIngredients.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+        <div className="auto-grid-tight">
           {filteredIngredients.map(ingredient => (
             <IngredientCard
               key={ingredient.id}
@@ -169,7 +169,7 @@ export const IngredientsPage: React.FC = () => {
         </div>
       ) : (
         <EmptyState
-          icon={<Leaf className="w-12 h-12" />}
+          icon={<Leaf className="h-7 w-7" />}
           title="No ingredients found"
           description={
             searchQuery
@@ -180,11 +180,7 @@ export const IngredientsPage: React.FC = () => {
           }
           action={
             isAuthenticated && !searchQuery ? (
-              <Button
-                onClick={() => setShowModal(true)}
-                size="sm"
-                icon={<Plus className="w-3 h-3" />}
-              >
+              <Button onClick={() => setShowModal(true)} icon={<Plus className="h-4 w-4" />}>
                 Add Your First Ingredient
               </Button>
             ) : null
@@ -230,51 +226,43 @@ export const IngredientsPage: React.FC = () => {
   );
 };
 
-// Compact Ingredient Card Component
 interface IngredientCardProps {
   ingredient: Ingredient;
   isAuthenticated: boolean;
   onDelete: (id: number, name: string) => void;
 }
 
-const IngredientCard: React.FC<IngredientCardProps> = ({ 
-  ingredient, 
-  isAuthenticated, 
-  onDelete 
-}) => {
-  return (
-    <div className="group bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all duration-200 hover:border-green-300">
-      <div className="flex items-center justify-between gap-1">
-        <Link
-          to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-          className="flex-1 text-sm text-gray-900 hover:text-green-600 font-medium transition-colors truncate"
-          title={`Find recipes using ${ingredient.name}`}
-        >
-          {ingredient.name}
-        </Link>
-        
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Link
-            to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-            className="p-1 text-green-600 hover:text-green-700 transition-colors"
-            title={`Find recipes using ${ingredient.name}`}
-          >
-            <ExternalLink className="w-3 h-3" />
-          </Link>
-          
-          {isAuthenticated && (
-            <button
-              onClick={() => onDelete(ingredient.id, ingredient.name)}
-              className="p-1 text-red-600 hover:text-red-700 transition-colors"
-              title="Delete ingredient"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+const IngredientCard: React.FC<IngredientCardProps> = ({
+  ingredient,
+  isAuthenticated,
+  onDelete
+}) => (
+  <div className="surface surface-interactive group flex items-center gap-3 p-3">
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
+      <Leaf className="h-4 w-4" />
+    </span>
+
+    {/* One link, not two. The row already navigates; the extra arrow next to
+        it went to exactly the same place. */}
+    <Link
+      to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
+      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-emerald-600"
+      title={`Find recipes using ${ingredient.name}`}
+    >
+      {ingredient.name}
+    </Link>
+
+    {isAuthenticated && (
+      <button
+        onClick={() => onDelete(ingredient.id, ingredient.name)}
+        className="shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
+        title="Delete ingredient"
+        aria-label={`Delete ingredient ${ingredient.name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    )}
+  </div>
+);
 
 export default IngredientsPage;

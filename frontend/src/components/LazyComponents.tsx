@@ -10,13 +10,9 @@ export const TagsPage = lazy(() => import('../pages/TagsPage'));
 export const LoginPage = lazy(() => import('../pages/LoginPage'));
 export const RegisterPage = lazy(() => import('../pages/RegisterPage'));
 
-// Lazy load heavy components
-export const RecipeImageGallery = lazy(() => import('./RecipeImageGallery'));
-export const SearchComponent = lazy(() => import('./SearchComponent'));
-
 // Default loading component
 export const PageLoader = () => (
-  <div className="min-h-[60vh] flex items-center justify-center">
+  <div className="flex min-h-[60vh] items-center justify-center">
     <LoadingSpinner size="lg" />
   </div>
 );

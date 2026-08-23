@@ -1,6 +1,7 @@
 import React from 'react';
 import { Loader2, X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '@/utils';
+import { Tag } from '@/types';
 
 // Loading Spinner Component
 interface LoadingSpinnerProps {
@@ -8,9 +9,9 @@ interface LoadingSpinnerProps {
   className?: string;
 }
 
-export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ 
-  size = 'md', 
-  className 
+export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
+  size = 'md',
+  className
 }) => {
   const sizeClasses = {
     sm: 'w-4 h-4',
@@ -19,8 +20,8 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   };
 
   return (
-    <Loader2 
-      className={cn('animate-spin text-red-600', sizeClasses[size], className)} 
+    <Loader2
+      className={cn('animate-spin text-brand-500', sizeClasses[size], className)}
     />
   );
 };
@@ -33,12 +34,12 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: React.ReactNode;
   children?: React.ReactNode; // Made optional
   as?: React.ElementType;
-  
+
   // Props for Link component compatibility
   to?: string;
   replace?: boolean;
-  
-  // Props for anchor element compatibility  
+
+  // Props for anchor element compatibility
   href?: string;
   target?: string;
   rel?: string;
@@ -60,24 +61,35 @@ export const Button: React.FC<ButtonProps> = ({
   rel,
   ...props
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
-  
+  // focus-visible, not focus: a plain `focus:ring` also fires on a mouse click,
+  // so every button just pressed kept a ring until something else took focus.
+  const baseClasses = 'inline-flex items-center justify-center rounded-full font-medium ' +
+    'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ' +
+    'focus-visible:ring-offset-2 disabled:opacity-55 disabled:cursor-not-allowed disabled:shadow-none';
+
   const variantClasses = {
-    primary: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-    secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500',
-    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-    ghost: 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:ring-gray-500'
+    // The coral-to-orange gradient the app used before the rewrite flattened
+    // every action into the same solid red.
+    primary: 'btn-brand',
+    secondary: 'bg-white/80 text-ink-700 ring-1 ring-inset ring-black/[0.08] hover:bg-white hover:text-brand-600 hover:ring-brand-200',
+    danger: 'bg-rose-50/80 text-rose-600 ring-1 ring-inset ring-rose-200 hover:bg-rose-100 hover:text-rose-700',
+    ghost: 'text-ink-500 hover:text-brand-600 hover:bg-brand-50/80'
   };
-  
-  const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm gap-1.5',
-    md: 'px-4 py-2 text-sm gap-2',
-    lg: 'px-6 py-3 text-base gap-2'
-  };
+
+  // An icon with no label is a round button, not a pill with a hole in it.
+  const iconOnly = !children && !!icon;
+
+  const sizeClasses = iconOnly
+    ? { sm: 'p-1.5', md: 'p-2', lg: 'p-2.5' }
+    : {
+        sm: 'min-h-9 px-3.5 py-1.5 text-sm gap-1.5',
+        md: 'min-h-11 px-5 py-2.5 text-sm gap-2',
+        lg: 'min-h-12 px-7 py-3 text-base gap-2.5'
+      };
 
   // Prepare props for the component - include Link and anchor props
   const componentProps: any = { ...props };
-  
+
   if (to !== undefined) componentProps.to = to;
   if (replace !== undefined) componentProps.replace = replace;
   if (href !== undefined) componentProps.href = href;
@@ -96,7 +108,7 @@ export const Button: React.FC<ButtonProps> = ({
       {...componentProps}
     >
       {loading ? (
-        <LoadingSpinner size="sm" />
+        <LoadingSpinner size="sm" className={variant === 'primary' ? 'text-white' : undefined} />
       ) : icon ? (
         icon
       ) : null}
@@ -122,45 +134,54 @@ export const Modal: React.FC<ModalProps> = ({
   className
 }) => {
   React.useEffect(() => {
+    if (!isOpen) return;
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
+    // Restore what was there rather than hard-coding 'unset'. The old cleanup
+    // ran on every close - including closes of a modal that was never open -
+    // and would unlock the page underneath anything else holding the scroll.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape);
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="fixed inset-0 bg-ink-900/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className={cn(
-        'relative bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto',
-        className
-      )}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          'surface animate-rise relative w-full max-w-md max-h-[90vh] overflow-y-auto shadow-lift',
+          className
+        )}
+      >
         {title && (
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <div className="flex items-center justify-between gap-4 px-6 pt-5 pb-4">
+            <h2 className="text-lg font-semibold text-ink-900">{title}</h2>
             <button
               onClick={onClose}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label="Close"
+              className="-mr-1 rounded-full p-1.5 text-ink-500 transition-colors hover:bg-black/5 hover:text-ink-900"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         )}
-        <div className="p-6">{children}</div>
+        <div className={cn('px-6 pb-6', !title && 'pt-6')}>{children}</div>
       </div>
     </div>
   );
@@ -188,39 +209,55 @@ export const Alert: React.FC<AlertProps> = ({
   };
 
   const colors = {
-    info: 'bg-blue-50 border-blue-200 text-blue-800',
-    success: 'bg-green-50 border-green-200 text-green-800',
-    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-    error: 'bg-red-50 border-red-200 text-red-800'
+    info: 'bg-sky-50/80 ring-sky-200 text-sky-900',
+    success: 'bg-emerald-50/80 ring-emerald-200 text-emerald-900',
+    warning: 'bg-amber-50/80 ring-amber-200 text-amber-900',
+    error: 'bg-rose-50/80 ring-rose-200 text-rose-900'
   };
 
   const iconColors = {
-    info: 'text-blue-600',
-    success: 'text-green-600',
-    warning: 'text-yellow-600',
-    error: 'text-red-600'
+    info: 'text-sky-500',
+    success: 'text-emerald-500',
+    warning: 'text-amber-500',
+    error: 'text-rose-500'
   };
 
   const Icon = icons[type];
 
   return (
-    <div className={cn(
-      'border rounded-lg p-4',
-      colors[type],
-      className
-    )}>
-      <div className="flex items-start">
-        <Icon className={cn('w-5 h-5 mt-0.5 mr-3 flex-shrink-0', iconColors[type])} />
-        <div>
-          {title && (
-            <h4 className="font-medium mb-1">{title}</h4>
-          )}
-          <div>{children}</div>
+    <div className={cn('rounded-2xl p-4 ring-1 ring-inset', colors[type], className)}>
+      <div className="flex items-start gap-3">
+        <Icon className={cn('w-5 h-5 mt-0.5 shrink-0', iconColors[type])} />
+        <div className="min-w-0">
+          {title && <h4 className="font-semibold mb-1">{title}</h4>}
+          <div className="text-sm leading-relaxed">{children}</div>
         </div>
       </div>
     </div>
   );
 };
+
+// Shared label + error + helper scaffolding, so the three controls below stay
+// in step instead of each repeating the same markup with small differences.
+const FieldShell: React.FC<{
+  label?: string;
+  required?: boolean;
+  error?: string;
+  helperText?: string;
+  children: React.ReactNode;
+}> = ({ label, required, error, helperText, children }) => (
+  <div className="space-y-1.5">
+    {label && (
+      <label className="block text-sm font-medium text-ink-700">
+        {label}
+        {required && <span className="text-brand-500 ml-1">*</span>}
+      </label>
+    )}
+    {children}
+    {error && <p className="text-sm text-rose-600">{error}</p>}
+    {helperText && !error && <p className="text-sm text-ink-500">{helperText}</p>}
+  </div>
+);
 
 // Input Component
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -235,34 +272,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   helperText,
   className,
   ...props
-}, ref) => {
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700">
-          {label}
-          {props.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-      )}
-      <input
-        ref={ref}
-        className={cn(
-          'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
-          'focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500',
-          error && 'border-red-300 focus:ring-red-500 focus:border-red-500',
-          className
-        )}
-        {...props}
-      />
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
-      {helperText && !error && (
-        <p className="text-sm text-gray-500">{helperText}</p>
-      )}
-    </div>
-  );
-});
+}, ref) => (
+  <FieldShell label={label} required={props.required} error={error} helperText={helperText}>
+    <input
+      ref={ref}
+      aria-invalid={error ? true : undefined}
+      className={cn('field', error && 'field-invalid', className)}
+      {...props}
+    />
+  </FieldShell>
+));
 
 Input.displayName = 'Input';
 
@@ -279,34 +298,16 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(({
   helperText,
   className,
   ...props
-}, ref) => {
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700">
-          {label}
-          {props.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-      )}
-      <textarea
-        ref={ref}
-        className={cn(
-          'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400',
-          'focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500',
-          error && 'border-red-300 focus:ring-red-500 focus:border-red-500',
-          className
-        )}
-        {...props}
-      />
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
-      {helperText && !error && (
-        <p className="text-sm text-gray-500">{helperText}</p>
-      )}
-    </div>
-  );
-});
+}, ref) => (
+  <FieldShell label={label} required={props.required} error={error} helperText={helperText}>
+    <textarea
+      ref={ref}
+      aria-invalid={error ? true : undefined}
+      className={cn('field leading-relaxed', error && 'field-invalid', className)}
+      {...props}
+    />
+  </FieldShell>
+));
 
 Textarea.displayName = 'Textarea';
 
@@ -325,40 +326,28 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(({
   options,
   className,
   ...props
-}, ref) => {
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label className="block text-sm font-medium text-gray-700">
-          {label}
-          {props.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
-      )}
-      <select
-        ref={ref}
-        className={cn(
-          'block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm',
-          'focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500',
-          error && 'border-red-300 focus:ring-red-500 focus:border-red-500',
-          className
-        )}
-        {...props}
-      >
-        {options.map(option => (
-          <option key={option.value} value={option.value} disabled={option.disabled}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      {error && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
-      {helperText && !error && (
-        <p className="text-sm text-gray-500">{helperText}</p>
-      )}
-    </div>
-  );
-});
+}, ref) => (
+  <FieldShell label={label} required={props.required} error={error} helperText={helperText}>
+    <select
+      ref={ref}
+      aria-invalid={error ? true : undefined}
+      className={cn('field appearance-none pr-9 bg-no-repeat', error && 'field-invalid', className)}
+      style={{
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%236b7280' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M6 8l4 4 4-4'/%3E%3C/svg%3E\")",
+        backgroundPosition: 'right 0.65rem center',
+        backgroundSize: '1.1rem'
+      }}
+      {...props}
+    >
+      {options.map(option => (
+        <option key={option.value} value={option.value} disabled={option.disabled}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </FieldShell>
+));
 
 Select.displayName = 'Select';
 
@@ -367,12 +356,15 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   padding?: 'none' | 'sm' | 'md' | 'lg';
+  /** Adds the hover lift. For cards that are themselves a link or a target. */
+  interactive?: boolean;
 }
 
 export const Card: React.FC<CardProps> = ({
   children,
   className,
-  padding = 'md'
+  padding = 'md',
+  interactive = false
 }) => {
   const paddingClasses = {
     none: '',
@@ -382,15 +374,45 @@ export const Card: React.FC<CardProps> = ({
   };
 
   return (
-    <div className={cn(
-      'bg-white/95 backdrop-blur-lg rounded-xl shadow-lg border border-white/20',
-      paddingClasses[padding],
-      className
-    )}>
+    <div className={cn('surface', interactive && 'surface-interactive', paddingClasses[padding], className)}>
       {children}
     </div>
   );
 };
+
+// Tag chip. Every tag carries a colour the API has always returned and the UI
+// never drew - the pages hard-coded grey and one of them even overwrote the
+// stored colour with grey on create.
+interface TagChipProps {
+  tag: Pick<Tag, 'name' | 'color'>;
+  selected?: boolean;
+  dot?: boolean;
+  as?: React.ElementType;
+  to?: string;
+  className?: string;
+  [key: string]: any;
+}
+
+export const TagChip: React.FC<TagChipProps> = ({
+  tag,
+  selected = false,
+  dot = false,
+  as: Component = 'span',
+  className,
+  style,
+  ...props
+}) => (
+  <Component
+    className={cn('chip', selected && 'chip-selected', className)}
+    // The one value the whole chip is derived from; the stylesheet mixes it
+    // into a ground and a label dark enough to stay readable either way.
+    style={{ ['--chip' as string]: tag.color || '#9aa1ae', ...style }}
+    {...props}
+  >
+    {dot && !selected && <span className="chip-dot" aria-hidden="true" />}
+    {tag.name}
+  </Component>
+);
 
 // Empty State Component
 interface EmptyStateProps {
@@ -409,18 +431,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   className
 }) => {
   return (
-    <div className={cn(
-      'text-center py-12',
-      className
-    )}>
+    <div className={cn('surface flex flex-col items-center px-6 py-16 text-center', className)}>
       {icon && (
-        <div className="mx-auto w-12 h-12 text-gray-400 mb-4">
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-400">
           {icon}
         </div>
       )}
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
+      <h3 className="text-lg font-semibold text-ink-900 mb-2">{title}</h3>
       {description && (
-        <p className="text-gray-600 mb-6 max-w-md mx-auto">{description}</p>
+        <p className="text-ink-500 mb-6 max-w-md leading-relaxed">{description}</p>
       )}
       {action}
     </div>

@@ -1,240 +1,146 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  Clock, 
-  Users, 
-  Calendar,
-  Edit,
-  Trash2,
-  ChefHat,
-  Heart,
-} from 'lucide-react';
+import { Clock, Users, Edit, Trash2, ChefHat, Flame } from 'lucide-react';
 import { Recipe } from '@/types';
-import { formatTime, formatDate, cn } from '@/utils';
-import { Button } from '@/components/ui';
+import { formatTime, cn } from '@/utils';
+import { Button, TagChip } from '@/components/ui';
 
 interface RecipeCardProps {
   recipe: Recipe;
   isOwner?: boolean;
-  showActions?: boolean;
-  size?: 'compact' | 'normal' | 'large';
   onEdit?: (recipe: Recipe) => void;
   onDelete?: (recipe: Recipe) => void;
-  onFavorite?: (recipe: Recipe) => void;
-  isFavorited?: boolean;
   className?: string;
 }
 
-export const RecipeCard: React.FC<RecipeCardProps> = ({
+const MAX_TAGS = 3;
+
+export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
   recipe,
   isOwner = false,
-  showActions = true,
-  size = 'normal',
   onEdit,
   onDelete,
-  onFavorite,
-  isFavorited = false,
   className
 }) => {
-  const sizeClasses = {
-    compact: 'p-4',
-    normal: 'p-6',
-    large: 'p-8'
-  };
-
-  const imageClasses = {
-    compact: 'h-32',
-    normal: 'h-48',
-    large: 'h-64'
-  };
-
-  const handleEdit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onEdit?.(recipe);
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (window.confirm(`Are you sure you want to delete "${recipe.title}"?`)) {
-      onDelete?.(recipe);
-    }
-  };
-
-  const handleFavorite = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onFavorite?.(recipe);
-  };
+  const cover = recipe.images?.[0];
+  const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0);
+  const shownTags = recipe.tags?.slice(0, MAX_TAGS) ?? [];
+  const hiddenTagCount = (recipe.tags?.length ?? 0) - shownTags.length;
 
   return (
-    <div className={cn(
-      "bg-white/95 backdrop-blur-lg rounded-xl shadow-lg border border-white/20 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group",
-      sizeClasses[size],
-      className
-    )}>
-      {/* Recipe Image */}
-      {recipe.images && recipe.images.length > 0 && (
-        <div className={cn(
-          "relative rounded-lg overflow-hidden mb-4",
-          imageClasses[size]
-        )}>
-          <Link to={`/recipe/${recipe.id}`}>
-            <img
-              src={`/uploads/${recipe.images[0].filename}`}
-              alt={recipe.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              loading="lazy"
-            />
-          </Link>
-          
-          {/* Image Overlay with Action Buttons */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-            <div className="absolute top-2 right-2 flex gap-1">
-              {onFavorite && (
-                <button
-                  onClick={handleFavorite}
-                  className={cn(
-                    "p-2 rounded-full backdrop-blur-md transition-colors",
-                    isFavorited 
-                      ? "bg-red-500 text-white" 
-                      : "bg-white/20 text-white hover:bg-white/30"
-                  )}
-                >
-                  <Heart className={cn("w-4 h-4", isFavorited && "fill-current")} />
-                </button>
-              )}
-            </div>
+    // h-full plus a column layout, so every card in a row is the same height
+    // and the footers line up. The old card left the footer's `mt-auto` with no
+    // flex parent to push against, so it did nothing.
+    <article className={cn('surface surface-interactive group flex h-full flex-col overflow-hidden', className)}>
+      <Link
+        to={`/recipe/${recipe.id}`}
+        className="relative block aspect-[16/10] overflow-hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        {cover ? (
+          <img
+            src={`/uploads/${cover.filename}`}
+            alt=""
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            loading="lazy"
+          />
+        ) : (
+          // A recipe with no photo still gets a coloured panel, so a mixed grid
+          // does not fall apart into cards of two different shapes.
+          <div className="flex h-full w-full items-center justify-center bg-linear-135 from-brand-100 via-brand-50 to-amber-50">
+            <ChefHat className="h-10 w-10 text-brand-300" />
           </div>
-          
-          {/* Image Count Badge */}
-          {recipe.images.length > 1 && (
-            <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-              +{recipe.images.length - 1} more
+        )}
+
+        {recipe.images && recipe.images.length > 1 && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-ink-900/55 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
+            +{recipe.images.length - 1}
+          </span>
+        )}
+      </Link>
+
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        <div>
+          <h3 className="text-lg leading-snug font-semibold">
+            <Link
+              to={`/recipe/${recipe.id}`}
+              className="line-clamp-2 text-ink-900 transition-colors hover:text-brand-600"
+            >
+              {recipe.title}
+            </Link>
+          </h3>
+          {recipe.description && (
+            <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink-500">
+              {recipe.description}
+            </p>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
+          {totalTime > 0 && (
+            <span className="flex items-center gap-1.5" title="Prep + cook time">
+              <Clock className="h-4 w-4 text-brand-400" />
+              {formatTime(totalTime)}
+            </span>
+          )}
+          {recipe.cook_time > 0 && (
+            <span className="flex items-center gap-1.5" title="Cook time">
+              <Flame className="h-4 w-4 text-ember-500" />
+              {formatTime(recipe.cook_time)}
+            </span>
+          )}
+          {recipe.servings > 0 && (
+            <span className="flex items-center gap-1.5" title="Servings">
+              <Users className="h-4 w-4 text-brand-400" />
+              {recipe.servings} {recipe.serving_unit}
+            </span>
+          )}
+        </div>
+
+        {shownTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {shownTags.map(tag => (
+              <TagChip key={tag.id} tag={tag} as={Link} to={`/recipes?tag=${tag.id}`} dot />
+            ))}
+            {hiddenTagCount > 0 && (
+              <span className="chip">+{hiddenTagCount}</span>
+            )}
+          </div>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-3 border-t border-black/5 pt-3.5 text-xs text-ink-300">
+          <span className="truncate">by {recipe.author_name}</span>
+
+          {isOwner && (onEdit || onDelete) && (
+            <div className="flex shrink-0 items-center gap-1">
+              {onEdit && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onEdit(recipe)}
+                  aria-label={`Edit ${recipe.title}`}
+                  icon={<Edit className="h-4 w-4" />}
+                />
+              )}
+              {onDelete && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => onDelete(recipe)}
+                  aria-label={`Delete ${recipe.title}`}
+                  className="hover:bg-rose-50 hover:text-rose-600"
+                  icon={<Trash2 className="h-4 w-4" />}
+                />
+              )}
             </div>
           )}
         </div>
-      )}
-
-      {/* Recipe Header */}
-      <div className="mb-3">
-        <Link 
-          to={`/recipe/${recipe.id}`}
-          className="block group/title"
-        >
-          <h3 className={cn(
-            "font-bold text-gray-900 group-hover/title:text-red-600 transition-colors line-clamp-2",
-            size === 'compact' ? 'text-lg' : size === 'large' ? 'text-2xl' : 'text-xl'
-          )}>
-            {recipe.title}
-          </h3>
-        </Link>
-        
-        {recipe.description && (
-          <p className={cn(
-            "text-gray-600 mt-2 line-clamp-2",
-            size === 'compact' ? 'text-sm' : 'text-base'
-          )}>
-            {recipe.description}
-          </p>
-        )}
       </div>
-
-      {/* Recipe Meta */}
-      <div className={cn(
-        "flex items-center gap-4 mb-4 text-gray-500",
-        size === 'compact' ? 'text-xs' : 'text-sm'
-      )}>
-        {recipe.prep_time > 0 && (
-          <div className="flex items-center gap-1" title="Prep time">
-            <Clock className="w-4 h-4" />
-            <span>{formatTime(recipe.prep_time)}</span>
-          </div>
-        )}
-        
-        {recipe.cook_time > 0 && (
-          <div className="flex items-center gap-1" title="Cook time">
-            <ChefHat className="w-4 h-4" />
-            <span>{formatTime(recipe.cook_time)}</span>
-          </div>
-        )}
-        
-        {recipe.servings > 0 && (
-          <div className="flex items-center gap-1" title="Servings">
-            <Users className="w-4 h-4" />
-            <span>{recipe.servings} {recipe.serving_unit}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Tags - No colors, more compact */}
-      {recipe.tags && recipe.tags.length > 0 && (
-        <div className="mb-4">
-          <div className="flex flex-wrap gap-1">
-            {recipe.tags.slice(0, size === 'compact' ? 2 : 4).map(tag => (
-              <Link
-                key={tag.id}
-                to={`/recipes?tag=${tag.id}`}
-                className={cn(
-                  "inline-flex items-center px-2 py-1 rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors",
-                  size === 'compact' ? 'text-xs' : 'text-sm'
-                )}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {tag.name}
-              </Link>
-            ))}
-            {recipe.tags.length > (size === 'compact' ? 2 : 4) && (
-              <span className={cn(
-                "inline-flex items-center px-2 py-1 rounded-full bg-gray-100 text-gray-600",
-                size === 'compact' ? 'text-xs' : 'text-sm'
-              )}>
-                +{recipe.tags.length - (size === 'compact' ? 2 : 4)} more
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100">
-        <div className={cn(
-          "text-gray-500 flex items-center gap-1",
-          size === 'compact' ? 'text-xs' : 'text-sm'
-        )}>
-          <Calendar className="w-3 h-3" />
-          <span>{formatDate(recipe.created_at)}</span>
-          <span>•</span>
-          <span>by {recipe.author_name}</span>
-        </div>
-
-        {/* Action Buttons - ALWAYS VISIBLE for owners */}
-        {showActions && isOwner && (onEdit || onDelete) && (
-          <div className="flex items-center gap-1">
-            {onEdit && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleEdit}
-                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                icon={<Edit className="w-4 h-4" />}
-              />
-            )}
-            {onDelete && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleDelete}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                icon={<Trash2 className="w-4 h-4" />}
-              />
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+    </article>
   );
-};
+});
+
+RecipeCard.displayName = 'RecipeCard';
 
 export default RecipeCard;
