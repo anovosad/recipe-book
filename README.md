@@ -232,6 +232,64 @@ answers with the updated one.
 - `POST /api/tags` - Create new tag (auth required)
 - `DELETE /api/tags/{id}` - Delete a tag (refused while another user's recipe carries it)
 
+## TLS / HTTPS
+
+Nothing in the nginx config names a domain or a certificate path. At container
+start `nginx/tls-bootstrap.sh` looks for a Let's Encrypt certificate and picks
+one of two modes:
+
+| Certificate | Port 80 | Port 443 |
+| --- | --- | --- |
+| none | serves the app | nothing listening |
+| present | 301 to HTTPS | serves the app, with HSTS |
+
+So nginx starts either way, and HTTPS switches itself on the moment a
+certificate appears — no redeploy, no config edit. `/.well-known/acme-challenge/`
+is served over plain HTTP and never redirected, because that is how Let's
+Encrypt proves control of the host.
+
+### Getting the first certificate
+
+You need a domain resolving to this machine and port 80 reachable from the
+internet. Set `DOMAIN` and `EMAIL` in the stack environment, then run the
+issuance once by hand — once, and watched, because a failure is something to
+read rather than retry in a loop:
+
+```bash
+docker run --rm \
+  -v recipe-book-letsencrypt:/etc/letsencrypt \
+  -v recipe-book-certbot-webroot:/var/www/certbot \
+  certbot/certbot certonly --webroot -w /var/www/certbot \
+    -d your.domain.example --email you@example.com \
+    --agree-tos --no-eff-email --non-interactive
+```
+
+Add `--dry-run` first if you want to check the plumbing without spending one of
+Let's Encrypt's five-per-week duplicate certificates.
+
+nginx picks it up within six hours on its own; to see it immediately:
+
+```bash
+docker restart recipe-book-nginx
+```
+
+Renewal is handled by the `certbot` service in the stack, which tries twice a
+day and does nothing until a certificate is close to expiring. nginx re-checks
+periodically and reloads, which is how a renewed certificate gets served without
+anything reaching into its container.
+
+### Notes
+
+- **HSTS** is sent as `max-age=31536000`, without `includeSubDomains` and
+  without `preload`. Sibling names may host other things, and preload is close
+  to irreversible.
+- Once HTTPS is live the app starts marking the session cookie `Secure` by
+  itself — it reads `X-Forwarded-Proto` from the proxy. Nothing to configure.
+- To go back to plain HTTP, delete the certificate
+  (`docker run --rm -v recipe-book-letsencrypt:/etc/letsencrypt certbot/certbot delete`)
+  and restart nginx. Note that browsers which already saw the HSTS header will
+  refuse plain HTTP for a year regardless.
+
 ## MCP (AI access)
 
 The collection is available over the [Model Context Protocol](https://modelcontextprotocol.io)

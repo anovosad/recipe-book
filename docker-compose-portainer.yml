@@ -14,20 +14,29 @@ services:
     container_name: recipe-book-nginx
     restart: unless-stopped
     ports:
+      # 80 stays open whatever happens: it is how Let's Encrypt proves control
+      # of this host, and it has to answer before any certificate exists.
       - "${HTTP_PORT:-80}:80"
-      # - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       # Nginx configuration
       - ${CONFIG_PATH:-.}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ${CONFIG_PATH:-.}/nginx/conf.d:/etc/nginx/conf.d:ro
-      # SSL certificates
-      # - ssl_certificates:/etc/nginx/ssl:ro
+      # The HTTPS server block, switched on by the bootstrap script below only
+      # once there is a certificate to point it at.
+      - ${CONFIG_PATH:-.}/nginx/tls-available:/etc/nginx/tls-available:ro
+      - ${CONFIG_PATH:-.}/nginx/tls-bootstrap.sh:/docker-entrypoint.d/40-tls-bootstrap.sh:ro
+      # Certificates and the ACME challenge directory, shared with certbot
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
       # Logs for monitoring
       - nginx_logs:/var/log/nginx
       # Cache for performance
       - nginx_cache:/var/cache/nginx
     environment:
       - TZ=${TIMEZONE:-UTC}
+      # Which certificate to prefer when certbot holds more than one.
+      - DOMAIN=${DOMAIN:-}
     depends_on:
       recipe-app:
         condition: service_healthy
@@ -46,6 +55,26 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+  # Certificate renewal. The first certificate is requested by hand - see the
+  # TLS section of the README - because a failing issuance should be read, not
+  # retried silently in a loop. This service only keeps it alive afterwards;
+  # nginx notices the new file on its own and reloads.
+  certbot:
+    image: certbot/certbot:latest
+    container_name: recipe-book-certbot
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: /bin/sh
+    command: -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+    networks:
+      - recipe-network
+    labels:
+      - "io.portainer.accesscontrol.teams=recipe-book"
+      - "com.recipe-book.service=certbot"
+      - "com.recipe-book.description=Let's Encrypt certificate renewal"
 
   # Main Recipe Book Application
   recipe-app:
@@ -287,13 +316,20 @@ volumes:
   #     o: bind
   #     device: ${CONFIG_PATH:-./config}/nginx
   
-  # ssl_certificates:
-  #   name: recipe-book-ssl
-  #   driver: local
-  #   driver_opts:
-  #     type: none
-  #     o: bind
-  #     device: ${SSL_PATH:-./ssl}
+  # TLS. Docker-managed rather than bind-mounted: private keys have no business
+  # sitting in the repository checkout, and certbot writes here directly.
+  letsencrypt:
+    name: recipe-book-letsencrypt
+    driver: local
+    labels:
+      - "com.recipe-book.volume=tls"
+      - "com.recipe-book.backup=true"
+
+  certbot_webroot:
+    name: recipe-book-certbot-webroot
+    driver: local
+    labels:
+      - "com.recipe-book.volume=acme"
 
   # fail2ban_config:
   #   name: recipe-book-fail2ban-config
@@ -370,7 +406,8 @@ volumes:
 # 
 # OPTIONAL:
 # - HTTP_PORT: HTTP port (default: 80)
-# - HTTPS_PORT: HTTPS port (default: 443) 
+# - HTTPS_PORT: HTTPS port (default: 443)
+# - DOMAIN: the hostname the certificate is for; also picks which one nginx uses
 # - ENVIRONMENT: production/development (default: production)
 # - MCP_TOKEN: bearer token for the /mcp endpoint; unset disables it entirely
 # - MCP_USER: which account MCP writes as (default: admin)
