@@ -9,12 +9,13 @@ import {
   X,
   Tag as TagIcon,
   Clock,
-  ChefHat
+  ChefHat,
+  Star
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { Recipe, Ingredient, Tag, RecipeForm, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
-import { validateImageFile, getErrorMessage } from '@/utils';
+import { validateImageFile, getErrorMessage, cn } from '@/utils';
 import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal, TagChip } from '@/components/ui';
 import { invalidate } from '@/hooks/useOptimizedData';
 import toast from 'react-hot-toast';
@@ -35,6 +36,9 @@ const RecipeFormPage: React.FC = () => {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [selectedTags, setSelectedTags] = useState<Set<number>>(new Set());
   const [imagePreview, setImagePreview] = useState<string[]>([]);
+  // Which of the about-to-be-uploaded files should become the cover. Applied
+  // after the upload, once the new images have ids.
+  const [coverPreviewIndex, setCoverPreviewIndex] = useState<number | null>(null);
   const [isFormReady, setIsFormReady] = useState(false);
   
   // Modal states
@@ -179,13 +183,15 @@ const RecipeFormPage: React.FC = () => {
       }
       
       setImagePreview(previews);
-      
+      setCoverPreviewIndex(null);
+
       // Cleanup
       return () => {
         previews.forEach(url => URL.revokeObjectURL(url));
       };
     } else {
       setImagePreview([]);
+      setCoverPreviewIndex(null);
     }
   }, [watchedImages]);
 
@@ -230,6 +236,7 @@ const RecipeFormPage: React.FC = () => {
           try {
             const imageResponse = await apiService.uploadRecipeImages(recipeId, Array.from(data.images));
             uploadedImages = imageResponse.data?.images?.length || 0;
+            await applyChosenCover(imageResponse.data?.images);
           } catch (error) {
             console.warn('Failed to upload images:', error);
             toast.error('Recipe updated but some images failed to upload');
@@ -256,6 +263,7 @@ const RecipeFormPage: React.FC = () => {
           try {
             const imageResponse = await apiService.uploadRecipeImages(recipeId, Array.from(data.images));
             uploadedImages = imageResponse.data?.images?.length || 0;
+            await applyChosenCover(imageResponse.data?.images);
           } catch (error) {
             console.warn('Failed to upload images:', error);
             toast.error('Recipe created but some images failed to upload');
@@ -276,6 +284,40 @@ const RecipeFormPage: React.FC = () => {
       toast.error(getErrorMessage(error));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // The previews are built from the files that passed validation, and the
+  // server validates the same way, so the two lists line up - but if they do
+  // not, promoting by position would pick the wrong photo, so it is skipped.
+  const applyChosenCover = async (uploaded?: { id: number }[]) => {
+    if (coverPreviewIndex === null || !uploaded) return;
+    if (uploaded.length !== imagePreview.length) return;
+
+    const chosen = uploaded[coverPreviewIndex];
+    if (!chosen) return;
+
+    try {
+      await apiService.setImageCover(chosen.id);
+    } catch (error) {
+      console.warn('Failed to set the cover image:', error);
+      toast.error('Images uploaded, but the cover could not be set');
+    }
+  };
+
+  const handleSetCover = async (imageId: number) => {
+    if (!recipe) return;
+    try {
+      const response = await apiService.setImageCover(imageId);
+      if (response.success) {
+        setRecipe({ ...recipe, images: response.data ?? recipe.images });
+        invalidate('recipes');
+        toast.success('Cover image updated');
+      } else {
+        toast.error(response.error || 'Could not set the cover image');
+      }
+    } catch (error: any) {
+      toast.error(getErrorMessage(error));
     }
   };
 
@@ -637,30 +679,82 @@ const RecipeFormPage: React.FC = () => {
             </div>
 
             {imagePreview.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {imagePreview.map((preview, index) => (
-                  <div key={index} className="relative">
-                    <img
-                      src={preview}
-                      alt={`Preview ${index + 1}`}
-                      className="aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]"
-                    />
-                  </div>
-                ))}
+              <div className="space-y-2">
+                <p className="text-sm text-ink-500">
+                  {isEditMode
+                    ? 'Ready to upload. Pick one as the cover if it should replace the current one.'
+                    : 'Ready to upload. Pick which one should be the cover — otherwise the first is used.'}
+                </p>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                  {imagePreview.map((preview, index) => (
+                    <div key={index} className="group relative">
+                      <img
+                        src={preview}
+                        alt={`Preview ${index + 1}`}
+                        className={cn(
+                          'aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]',
+                          coverPreviewIndex === index && 'ring-2 ring-brand-400'
+                        )}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCoverPreviewIndex(current => (current === index ? null : index))}
+                        aria-pressed={coverPreviewIndex === index}
+                        title={coverPreviewIndex === index ? 'This will be the cover' : 'Use as cover'}
+                        className={cn(
+                          'absolute left-2 top-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium shadow-sm transition-all',
+                          coverPreviewIndex === index
+                            ? 'btn-brand'
+                            : 'bg-white/90 text-ink-500 opacity-0 group-hover:opacity-100 hover:text-brand-600 focus-visible:opacity-100'
+                        )}
+                      >
+                        <Star className={cn('h-3.5 w-3.5', coverPreviewIndex === index && 'fill-current')} />
+                        {coverPreviewIndex === index ? 'Cover' : 'Set cover'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
             {isEditMode && recipe?.images && recipe.images.length > 0 && (
               <div>
-                <h3 className="mb-3 font-medium text-ink-900">Current Images</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {recipe.images.map(image => (
-                    <div key={image.id} className="relative group">
+                <h3 className="mb-1 font-medium text-ink-900">Current Images</h3>
+                <p className="mb-3 text-sm text-ink-500">
+                  The cover is the one shown on the recipe list and at the top of the recipe.
+                </p>
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                  {recipe.images.map((image, index) => (
+                    <div key={image.id} className="group relative">
                       <img
                         src={`/uploads/${image.filename}`}
                         alt={image.caption || recipe.title}
-                        className="aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]"
+                        className={cn(
+                          'aspect-[4/3] w-full rounded-xl object-cover ring-1 ring-black/[0.06]',
+                          index === 0 && 'ring-2 ring-brand-400'
+                        )}
                       />
+
+                      {/* The cover is simply the image that sorts first, so
+                          promoting one is a reorder - which is what the
+                          endpoint does. */}
+                      {index === 0 ? (
+                        <span className="btn-brand absolute left-2 top-2 flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium">
+                          <Star className="h-3.5 w-3.5 fill-current" />
+                          Cover
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSetCover(image.id)}
+                          title="Use as cover"
+                          className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-ink-500 opacity-0 shadow-sm transition-all group-hover:opacity-100 hover:text-brand-600 focus-visible:opacity-100"
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                          Set cover
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={async () => {
@@ -669,11 +763,14 @@ const RecipeFormPage: React.FC = () => {
                             // Refresh recipe data
                             const updatedRecipe = await apiService.getRecipe(recipe.id);
                             setRecipe(updatedRecipe);
+                            invalidate('recipes');
                             toast.success('Image deleted');
                           } catch {
                             toast.error('Failed to delete image');
                           }
                         }}
+                        title="Delete image"
+                        aria-label="Delete image"
                         className="absolute right-2 top-2 rounded-full bg-rose-500 p-1.5 text-white opacity-0 shadow-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                       >
                         <X className="w-4 h-4" />

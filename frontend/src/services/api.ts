@@ -9,6 +9,7 @@ import {
   LoginForm,
   RegisterForm,
   RecipeForm,
+  RecipeImage,
   IngredientForm,
   TagForm,
   ApiResponse,
@@ -255,6 +256,12 @@ class ApiService {
 
   async deleteImage(imageId: number): Promise<ApiResponse> {
     return this.request('DELETE', `/api/images/${imageId}`);
+  }
+
+  // The cover is whichever image sorts first, so this reorders rather than
+  // setting a flag. Answers with the recipe's images in their new order.
+  async setImageCover(imageId: number): Promise<ApiResponse<RecipeImage[]>> {
+    return this.request('PUT', `/api/images/${imageId}/cover`);
   }
 
   // Ingredient API

@@ -248,7 +248,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
     {/* One link, not two. The row already navigates; the extra arrow next to
         it went to exactly the same place. */}
     <Link
-      to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
+      to={`/recipes?ingredient=${ingredient.id}`}
       className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-emerald-600 after:absolute after:inset-0"
       title={`Find recipes using ${ingredient.name}`}
     >

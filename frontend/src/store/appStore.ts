@@ -54,6 +54,15 @@ const normalizeRecipe = (recipe: Recipe): Recipe => ({
   images: recipe.images || []
 });
 
+/** What the recipes page is filtering by. Everything is optional and absent
+ *  means "do not narrow by this". */
+export interface RecipeFilters {
+  search?: string;
+  tagId?: number | null;
+  /** Recipes must contain **every** one of these, not any of them. */
+  ingredientIds?: number[];
+}
+
 /**
  * Pure filter over a recipe list. This used to live inside the store as
  * `getFilteredRecipes`, which ended with `set({ filteredRecipes })` - and the
@@ -61,15 +70,12 @@ const normalizeRecipe = (recipe: Recipe): Recipe => ({
  * store that the same component was subscribed to. Nothing ever read the
  * `filteredRecipes` slice it maintained, so it is gone.
  */
-export const filterRecipes = (
-  recipes: Recipe[],
-  searchQuery: string,
-  activeTagId: number | null
-): Recipe[] => {
+export const filterRecipes = (recipes: Recipe[], filters: RecipeFilters = {}): Recipe[] => {
+  const { search = '', tagId = null, ingredientIds = [] } = filters;
   let filtered = recipes;
 
-  if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase().trim();
+  if (search.trim()) {
+    const query = search.toLowerCase().trim();
     filtered = filtered.filter(recipe => {
       const title = recipe.title?.toLowerCase() || '';
       const description = recipe.description?.toLowerCase() || '';
@@ -88,9 +94,19 @@ export const filterRecipes = (
     });
   }
 
-  if (activeTagId) {
+  if (tagId) {
     filtered = filtered.filter(recipe =>
-      recipe.tags?.some(tag => tag.id === activeTagId) || false
+      recipe.tags?.some(tag => tag.id === tagId) || false
+    );
+  }
+
+  // every, not some: picking two ingredients means "what can I cook with both
+  // of these", which is the question worth asking of a pantry.
+  if (ingredientIds.length > 0) {
+    filtered = filtered.filter(recipe =>
+      ingredientIds.every(id =>
+        recipe.ingredients?.some(ing => ing.ingredient_id === id) || false
+      )
     );
   }
 
@@ -196,6 +212,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   // instead of calling into the store while it renders.
   getFilteredRecipes: () => {
     const { recipes, searchQuery, activeTagId } = get();
-    return filterRecipes(recipes, searchQuery, activeTagId);
+    return filterRecipes(recipes, { search: searchQuery, tagId: activeTagId });
   }
 }));

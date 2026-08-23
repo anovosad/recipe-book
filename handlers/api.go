@@ -666,6 +666,41 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// SetImageCoverHandler promotes one image to be the recipe's cover. The cover
+// is whichever image sorts first, so this is a reorder rather than a flag.
+func SetImageCoverHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	clientIP := getClientIP(r)
+
+	imageID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil || !utils.IsValidID(imageID) {
+		utils.LogSecurityEvent("INVALID_IMAGE_ID_COVER", clientIP, mux.Vars(r)["id"])
+		sendJSONError(w, http.StatusBadRequest, "Invalid image ID")
+		return
+	}
+
+	// "Not found" and "not yours" are deliberately the same answer, so the
+	// endpoint cannot be used to probe which image ids exist.
+	recipeID, err := database.SetRecipeImageCover(imageID, user.ID)
+	if errors.Is(err, database.ErrImageNotFound) {
+		utils.LogSecurityEvent("UNAUTHORIZED_IMAGE_COVER", clientIP, fmt.Sprintf("UserID: %d, ImageID: %d", user.ID, imageID))
+		sendJSONError(w, http.StatusNotFound, "Image not found")
+		return
+	}
+	if err != nil {
+		utils.LogSecurityEvent("IMAGE_COVER_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Could not set the cover image")
+		return
+	}
+
+	sendJSONSuccess(w, "Cover image updated", database.GetRecipeImages(recipeID))
+}
+
 func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := auth.GetUserFromToken(r)
 	if err != nil {

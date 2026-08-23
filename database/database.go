@@ -834,6 +834,84 @@ func GetUserByUsernameSecure(username string) (*models.User, string, error) {
 	return &user, hashedPassword, nil
 }
 
+// ErrImageNotFound is returned when an image does not exist or the recipe it
+// belongs to is not owned by the acting user.
+var ErrImageNotFound = errors.New("image not found or access denied")
+
+// SetRecipeImageCover makes one image the recipe's cover and returns the recipe
+// it belongs to. There is no is_cover column and none is needed: every read
+// already orders by display_order, so the cover is simply whichever image
+// sorts first. The whole set is renumbered from 0 rather than pushing the
+// chosen one below the others, which would drift further negative on every
+// change.
+func SetRecipeImageCover(imageID, userID int) (int, error) {
+	if !utils.IsValidID(imageID) || !utils.IsValidID(userID) {
+		return 0, ErrImageNotFound
+	}
+
+	var recipeID, createdBy int
+	err := DB.QueryRow(`
+		SELECT ri.recipe_id, r.created_by
+		FROM recipe_images ri
+		JOIN recipes r ON ri.recipe_id = r.id
+		WHERE ri.id = ?
+	`, imageID).Scan(&recipeID, &createdBy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrImageNotFound
+	}
+	if err != nil {
+		return 0, err
+	}
+	if createdBy != userID {
+		return 0, ErrImageNotFound
+	}
+
+	rows, err := DB.Query(
+		"SELECT id FROM recipe_images WHERE recipe_id = ? ORDER BY display_order ASC, id ASC",
+		recipeID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	ordered := []int{imageID}
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		if id != imageID {
+			ordered = append(ordered, id)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	for position, id := range ordered {
+		if _, err := tx.Exec(
+			"UPDATE recipe_images SET display_order = ? WHERE id = ? AND recipe_id = ?",
+			position, id, recipeID,
+		); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return recipeID, nil
+}
+
 // ErrWrongPassword is returned when the current password supplied with a
 // password change does not match the stored hash.
 var ErrWrongPassword = errors.New("current password is incorrect")

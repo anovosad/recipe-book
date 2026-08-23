@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Search, X, Utensils, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, X, Utensils, Tag as TagIcon, Leaf } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useOptimizedRecipes, useOptimizedTags, invalidate } from '@/hooks/useOptimizedData';
 import { useAppStore, filterRecipes } from '@/store/appStore';
@@ -11,6 +11,20 @@ import { Button, LoadingSpinner, EmptyState, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
 const SEARCH_DEBOUNCE_MS = 250;
+
+// Ingredients have no colour of their own, so they all share one, which also
+// keeps them visually distinct from the multicoloured tag chips.
+const INGREDIENT_COLOR = '#10b981';
+// Above this many chips the panel gets its own filter box.
+const INGREDIENT_SEARCH_THRESHOLD = 12;
+
+const parseIds = (raw: string | null): number[] => {
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map(part => Number(part.trim()))
+    .filter(id => Number.isInteger(id) && id > 0);
+};
 
 const RecipesPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,8 +41,11 @@ const RecipesPage: React.FC = () => {
   const searchQuery = searchParams.get('search') ?? '';
   const tagParam = searchParams.get('tag');
   const activeTagId = tagParam && !Number.isNaN(Number(tagParam)) ? Number(tagParam) : null;
+  const activeIngredientIds = parseIds(searchParams.get('ingredient'));
+  const ingredientKey = activeIngredientIds.join(',');
 
-  const [showFilters, setShowFilters] = useState(false);
+  const [openPanel, setOpenPanel] = useState<'tags' | 'ingredients' | null>(null);
+  const [ingredientQuery, setIngredientQuery] = useState('');
   const [inputValue, setInputValue] = useState(searchQuery);
   const [syncedQuery, setSyncedQuery] = useState(searchQuery);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,14 +68,48 @@ const RecipesPage: React.FC = () => {
   }, []);
 
   const filteredRecipes = useMemo(
-    () => filterRecipes(recipes, searchQuery, activeTagId),
-    [recipes, searchQuery, activeTagId]
+    () => filterRecipes(recipes, {
+      search: searchQuery,
+      tagId: activeTagId,
+      ingredientIds: activeIngredientIds
+    }),
+    // activeIngredientIds is a fresh array every render; its contents are what
+    // matter, and ingredientKey is those contents.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recipes, searchQuery, activeTagId, ingredientKey]
   );
 
-  const applyFilters = useCallback((search: string, tagId: number | null) => {
+  // Only the ingredients some recipe actually uses. Offering the whole pantry
+  // would mean chips that can only ever return nothing.
+  const usedIngredients = useMemo(() => {
+    const seen = new Map<number, string>();
+    for (const recipe of recipes) {
+      for (const ingredient of recipe.ingredients ?? []) {
+        if (ingredient.ingredient_id && !seen.has(ingredient.ingredient_id)) {
+          seen.set(ingredient.ingredient_id, ingredient.name);
+        }
+      }
+    }
+    return [...seen.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [recipes]);
+
+  const visibleIngredients = useMemo(() => {
+    const query = ingredientQuery.trim().toLowerCase();
+    if (!query) return usedIngredients;
+    return usedIngredients.filter(ingredient => ingredient.name.toLowerCase().includes(query));
+  }, [usedIngredients, ingredientQuery]);
+
+  const applyFilters = useCallback((
+    search: string,
+    tagId: number | null,
+    ingredientIds: number[]
+  ) => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
     if (tagId) params.set('tag', String(tagId));
+    if (ingredientIds.length > 0) params.set('ingredient', ingredientIds.join(','));
     setSearchParams(params, { replace: true });
   }, [setSearchParams]);
 
@@ -66,12 +117,23 @@ const RecipesPage: React.FC = () => {
     const value = e.target.value;
     setInputValue(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => applyFilters(value, activeTagId), SEARCH_DEBOUNCE_MS);
+    debounceRef.current = setTimeout(
+      () => applyFilters(value, activeTagId, activeIngredientIds),
+      SEARCH_DEBOUNCE_MS
+    );
+  };
+
+  const toggleIngredient = (id: number) => {
+    const next = activeIngredientIds.includes(id)
+      ? activeIngredientIds.filter(current => current !== id)
+      : [...activeIngredientIds, id];
+    applyFilters(searchQuery, activeTagId, next);
   };
 
   const clearFilters = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setInputValue('');
+    setIngredientQuery('');
     setSearchParams({}, { replace: true });
   };
 
@@ -102,7 +164,10 @@ const RecipesPage: React.FC = () => {
   }
 
   const activeTag = tags.find(tag => tag.id === activeTagId);
-  const hasFilters = Boolean(searchQuery || activeTagId);
+  const activeIngredients = usedIngredients.filter(ingredient =>
+    activeIngredientIds.includes(ingredient.id)
+  );
+  const hasFilters = Boolean(searchQuery || activeTagId || activeIngredientIds.length > 0);
 
   return (
     <div className="space-y-8">
@@ -116,6 +181,7 @@ const RecipesPage: React.FC = () => {
           <p className="mt-2 text-ink-500">
             {filteredRecipes.length} recipe{filteredRecipes.length !== 1 ? 's' : ''}
             {hasFilters ? ' matching your filters' : ' in the collection'}
+            {activeIngredients.length > 1 && ` — with all ${activeIngredients.length} ingredients`}
           </p>
         </div>
 
@@ -143,12 +209,21 @@ const RecipesPage: React.FC = () => {
 
           <div className="flex gap-2">
             <Button
-              variant={showFilters || activeTagId ? 'primary' : 'secondary'}
-              onClick={() => setShowFilters(open => !open)}
-              icon={<SlidersHorizontal className="h-4 w-4" />}
-              aria-expanded={showFilters}
+              variant={openPanel === 'tags' || activeTagId ? 'primary' : 'secondary'}
+              onClick={() => setOpenPanel(panel => (panel === 'tags' ? null : 'tags'))}
+              icon={<TagIcon className="h-4 w-4" />}
+              aria-expanded={openPanel === 'tags'}
             >
               Tags
+            </Button>
+            <Button
+              variant={openPanel === 'ingredients' || activeIngredientIds.length > 0 ? 'primary' : 'secondary'}
+              onClick={() => setOpenPanel(panel => (panel === 'ingredients' ? null : 'ingredients'))}
+              icon={<Leaf className="h-4 w-4" />}
+              aria-expanded={openPanel === 'ingredients'}
+            >
+              Ingredients
+              {activeIngredientIds.length > 0 && ` (${activeIngredientIds.length})`}
             </Button>
             {hasFilters && (
               <Button variant="ghost" onClick={clearFilters} icon={<X className="h-4 w-4" />}>
@@ -158,7 +233,7 @@ const RecipesPage: React.FC = () => {
           </div>
         </div>
 
-        {(showFilters || activeTagId) && tags.length > 0 && (
+        {openPanel === 'tags' && tags.length > 0 && (
           <div className="animate-rise mt-4 flex flex-wrap gap-2 border-t border-black/5 pt-4">
             {tags.map(tag => (
               <TagChip
@@ -168,17 +243,83 @@ const RecipesPage: React.FC = () => {
                 type="button"
                 dot
                 selected={tag.id === activeTagId}
-                onClick={() => applyFilters(searchQuery, tag.id === activeTagId ? null : tag.id)}
+                onClick={() => applyFilters(
+                  searchQuery,
+                  tag.id === activeTagId ? null : tag.id,
+                  activeIngredientIds
+                )}
                 aria-pressed={tag.id === activeTagId}
               />
             ))}
           </div>
         )}
 
-        {activeTag && !showFilters && (
-          <p className="mt-3 flex items-center gap-2 text-sm text-ink-500">
-            Filtered by <TagChip tag={activeTag} dot />
-          </p>
+        {openPanel === 'ingredients' && (
+          <div className="animate-rise mt-4 space-y-3 border-t border-black/5 pt-4">
+            <p className="text-sm text-ink-500">
+              Pick as many as you like — recipes have to contain <strong className="font-semibold text-ink-700">all</strong> of them.
+            </p>
+
+            {usedIngredients.length > INGREDIENT_SEARCH_THRESHOLD && (
+              <input
+                type="search"
+                className="field"
+                placeholder="Find an ingredient…"
+                value={ingredientQuery}
+                onChange={(e) => setIngredientQuery(e.target.value)}
+                aria-label="Filter the ingredient list"
+              />
+            )}
+
+            {visibleIngredients.length > 0 ? (
+              <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+                {visibleIngredients.map(ingredient => (
+                  <TagChip
+                    key={ingredient.id}
+                    tag={{ name: ingredient.name, color: INGREDIENT_COLOR }}
+                    as="button"
+                    type="button"
+                    selected={activeIngredientIds.includes(ingredient.id)}
+                    onClick={() => toggleIngredient(ingredient.id)}
+                    aria-pressed={activeIngredientIds.includes(ingredient.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-ink-300">
+                {usedIngredients.length === 0
+                  ? 'No recipe lists any ingredients yet.'
+                  : `Nothing matches "${ingredientQuery}".`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* What is currently narrowing the list, when the panels are shut. */}
+        {openPanel === null && (activeTag || activeIngredients.length > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-ink-500">
+            Filtered by
+            {activeTag && (
+              <TagChip
+                tag={activeTag}
+                as="button"
+                type="button"
+                dot
+                onClick={() => applyFilters(searchQuery, null, activeIngredientIds)}
+                title={`Remove the ${activeTag.name} tag filter`}
+              />
+            )}
+            {activeIngredients.map(ingredient => (
+              <TagChip
+                key={ingredient.id}
+                tag={{ name: ingredient.name, color: INGREDIENT_COLOR }}
+                as="button"
+                type="button"
+                onClick={() => toggleIngredient(ingredient.id)}
+                title={`Remove ${ingredient.name}`}
+              />
+            ))}
+          </div>
         )}
       </section>
 

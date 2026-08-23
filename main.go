@@ -132,6 +132,7 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	// Recipe Image API routes
 	api.HandleFunc("/recipes/{id:[0-9]+}/images", handlers.UploadRecipeImagesHandler).Methods("POST")
 	api.HandleFunc("/images/{id:[0-9]+}", handlers.DeleteImageHandler).Methods("DELETE")
+	api.HandleFunc("/images/{id:[0-9]+}/cover", handlers.SetImageCoverHandler).Methods("PUT")
 
 	// Ingredient API routes
 	api.HandleFunc("/ingredients", handlers.GetIngredientsHandler).Methods("GET")

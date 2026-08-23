@@ -146,6 +146,12 @@ const RecipeDetailPage: React.FC = () => {
         Back to Recipes
       </Button>
 
+      {/* Above the fold and full width. It used to be a row of thumbnails in a
+          card halfway down the page. */}
+      {recipe.images && recipe.images.length > 0 && (
+        <RecipeImageGallery images={recipe.images} recipeName={recipe.title} />
+      )}
+
       {/* Recipe Header */}
       <Card padding="lg">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -199,14 +205,6 @@ const RecipeDetailPage: React.FC = () => {
           </div>
         )}
       </Card>
-
-      {/* Photos. The lightbox component already existed - nothing imported it,
-          so clicking a photo opened the raw file in a new browser tab. */}
-      {recipe.images && recipe.images.length > 0 && (
-        <Card padding="lg">
-          <RecipeImageGallery images={recipe.images} recipeName={recipe.title} />
-        </Card>
-      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         {/* Ingredients */}

@@ -16,17 +16,22 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
   recipeName,
   className
 }) => {
+  // Which photo is shown large on the page, as opposed to selectedIndex, which
+  // is the one the lightbox is currently on.
+  const [activeIndex, setActiveIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
 
   const closeModal = useCallback(() => {
+    // Leave the page showing whatever you were last looking at.
+    if (selectedIndex !== null) setActiveIndex(selectedIndex);
     setIsModalOpen(false);
     setSelectedIndex(null);
     setZoom(1);
     setRotation(0);
-  }, []);
+  }, [selectedIndex]);
 
   const navigateImage = useCallback((direction: number) => {
     if (selectedIndex === null) return;
@@ -94,49 +99,65 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
     return null;
   }
 
+  // Clamped rather than reset by an effect: navigating from a recipe with four
+  // photos to one with two keeps this component mounted.
+  const heroIndex = Math.min(activeIndex, images.length - 1);
+  const hero = images[heroIndex];
+
   return (
     <>
-      {/* Gallery Grid */}
-      <div className={cn("space-y-4", className)}>
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <ZoomIn className="w-5 h-5 text-brand-500" />
-          Photos
-          <span className="text-sm font-normal text-ink-300">({images.length})</span>
-        </h2>
+      <div className={cn('space-y-3', className)}>
+        {/* The photo at full width, not a thumbnail you have to open first. */}
+        <button
+          type="button"
+          onClick={() => openModal(heroIndex)}
+          className="surface group relative block w-full cursor-zoom-in overflow-hidden p-0"
+          title="Open full size"
+        >
+          <img
+            src={`/uploads/${hero.filename}`}
+            alt={hero.caption || `${recipeName} - Photo ${heroIndex + 1}`}
+            className="aspect-[16/10] w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+          />
 
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(14rem,100%),1fr))]">
-          {images.map((image, index) => (
-            <div
-              key={image.id}
-              className="group relative overflow-hidden rounded-2xl bg-brand-50 ring-1 ring-black/[0.06] transition-shadow duration-200 hover:shadow-lift cursor-zoom-in"
-              onClick={() => openModal(index)}
-            >
-              <img
-                src={`/uploads/${image.filename}`}
-                alt={image.caption || `${recipeName} - Photo ${index + 1}`}
-                className="aspect-[4/3] w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                loading="lazy"
-              />
-              
-              {/* Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors duration-200 group-hover:bg-black/20">
-                <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-              </div>
-              
-              {/* Caption */}
-              {image.caption && (
-                <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent p-3">
-                  <p className="text-white text-sm truncate">{image.caption}</p>
-                </div>
-              )}
-              
-              {/* Image Counter */}
-              <div className="absolute top-2 right-2 rounded-full bg-black/45 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
-                {index + 1} / {images.length}
-              </div>
-            </div>
-          ))}
-        </div>
+          <span className="absolute right-3 top-3 rounded-full bg-black/45 p-2 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+            <ZoomIn className="h-4 w-4" />
+          </span>
+
+          {hero.caption && (
+            <span className="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent p-4 text-left text-sm text-white">
+              {hero.caption}
+            </span>
+          )}
+        </button>
+
+        {images.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {images.map((image, index) => (
+              <button
+                key={image.id}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                className={cn(
+                  'h-16 w-24 shrink-0 overflow-hidden rounded-xl ring-2 transition-all',
+                  index === heroIndex
+                    ? 'ring-brand-400'
+                    : 'opacity-65 ring-transparent hover:opacity-100'
+                )}
+                title={image.caption || `Photo ${index + 1}`}
+                aria-label={`Show photo ${index + 1}`}
+                aria-current={index === heroIndex}
+              >
+                <img
+                  src={`/uploads/${image.filename}`}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Rendered into <body>. `.surface` sets backdrop-filter, and an element
