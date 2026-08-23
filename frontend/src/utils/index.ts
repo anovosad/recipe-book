@@ -1,10 +1,18 @@
 import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
 /**
- * Utility function for conditional class names
+ * Utility function for conditional class names.
+ *
+ * twMerge, not clsx alone: components build a class string and then let the
+ * caller append to it, and two Tailwind utilities for the same property are
+ * settled by their order in the generated stylesheet, not by which was passed
+ * last. `<Card className="p-3">` therefore rendered at the card's own p-6, and
+ * `<Button className="h-auto p-4">` kept the button's px-4 py-2. Merging drops
+ * the conflicting base class so the caller's value is the one that survives.
  */
 export function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+  return twMerge(clsx(inputs));
 }
 
 /**

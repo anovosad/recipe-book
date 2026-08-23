@@ -1,414 +1,261 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/*
+ * Tailwind is compiled here now, by @tailwindcss/vite. It used to be pulled
+ * from cdn.tailwindcss.com at runtime, and that CDN build only ever looks at
+ * the live DOM - it never sees this file. Every `@apply` below was therefore
+ * shipped to the browser verbatim and ignored, so the entire visual layer in
+ * this stylesheet had been dead from the start.
+ */
+@import "tailwindcss";
 
-/* Base styles */
+/* Auto source detection walks up from the Vite root; naming the two trees
+   explicitly keeps the scan the same wherever the build is invoked from. */
+@source "../**/*.{ts,tsx}";
+@source "../../index.html";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Coral through warm orange. #ff6b6b and #ff8e53 are the two ends of the
+     old button gradient - the ramp is built around them so the accent is the
+     same hue everywhere instead of Tailwind's flat red. */
+  --color-brand-50:  #fff6f4;
+  --color-brand-100: #ffe9e4;
+  --color-brand-200: #ffd0c7;
+  --color-brand-300: #ffab9e;
+  --color-brand-400: #ff8b7c;
+  --color-brand-500: #ff6b6b;
+  --color-brand-600: #f04a4a;
+  --color-brand-700: #cc3535;
+  --color-brand-800: #a52d2d;
+  --color-brand-900: #862a2a;
+  --color-ember-500: #ff8e53;
+
+  /* Ink, so body copy is a warm near-black rather than pure grey. */
+  --color-ink-900: #1d2027;
+  --color-ink-700: #3f4552;
+  --color-ink-500: #6b7280;
+  --color-ink-300: #9aa1ae;
+
+  /* Shadows are blue-violet, not black. That tint is what made the old UI
+     read as light glass sitting above the page instead of ink on paper. */
+  --shadow-soft: 0 2px 6px rgb(31 38 135 / 0.04), 0 8px 24px rgb(31 38 135 / 0.07);
+  --shadow-lift: 0 4px 10px rgb(31 38 135 / 0.06), 0 18px 40px rgb(31 38 135 / 0.13);
+  --shadow-brand: 0 6px 18px rgb(255 107 107 / 0.32);
+
+  --radius-card: 1.125rem;
+}
+
 @layer base {
-  * {
-    @apply border-border;
+  html {
+    scroll-behavior: smooth;
   }
-  
+
   body {
-    @apply bg-background text-foreground font-sans;
+    /* Two soft washes over a warm-to-cool wash. Fixed attachment keeps the
+       tint still while the page scrolls, so long pages stay calm. */
+    background-color: #fbf8f7;
+    background-image:
+      radial-gradient(58rem 32rem at 8% -12%, rgb(255 142 83 / 0.13), transparent 62%),
+      radial-gradient(46rem 30rem at 102% 4%, rgb(120 180 255 / 0.13), transparent 58%),
+      linear-gradient(155deg, #fdfaf9 0%, #f7f2f5 52%, #f1f1f8 100%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+    color: var(--color-ink-700);
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Scrollbar styles */
-  ::-webkit-scrollbar {
-    @apply w-2;
+  h1, h2, h3, h4 {
+    color: var(--color-ink-900);
+    letter-spacing: -0.015em;
   }
 
-  ::-webkit-scrollbar-track {
-    @apply bg-gray-100;
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-900);
   }
 
+  ::-webkit-scrollbar { width: 0.625rem; height: 0.625rem; }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded-full;
+    background: rgb(31 38 135 / 0.16);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
   }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(31 38 135 / 0.28); background-clip: content-box; }
 
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400;
-  }
-
-  /* Focus styles */
+  /* Keyboard focus only. The components ask for `focus:ring`, which fires for
+     mouse clicks too and left a ring stuck on every button just pressed. */
   :focus-visible {
-    @apply outline-none ring-2 ring-red-500 ring-offset-2;
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
   }
 }
 
-/* Component styles */
 @layer components {
-  /* Card hover effects */
-  .recipe-card {
-    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+  /* The card. Translucent white over the page wash, hairline highlight, and
+     the blue-violet shadow - the "glass" the old stylesheet was after. */
+  .surface {
+    background: rgb(255 255 255 / 0.82);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgb(255 255 255 / 0.75);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
   }
 
-  /* Image modal overlay */
-  .image-modal {
-    @apply fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 cursor-pointer;
+  .surface-interactive {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
   }
 
-  .image-modal img {
-    @apply max-w-full max-h-full object-contain cursor-default;
+  .surface-interactive:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lift);
+    border-color: rgb(255 107 107 / 0.28);
   }
 
-  .image-modal-close {
-    @apply absolute top-4 right-4 text-white text-2xl cursor-pointer hover:text-gray-300 transition-colors;
+  /* Primary action: the coral-to-orange gradient the old buttons used. */
+  .btn-brand {
+    background-image: linear-gradient(135deg, var(--color-brand-500), var(--color-ember-500));
+    color: white;
+    box-shadow: var(--shadow-brand);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
   }
 
-  /* Line clamp utilities */
-  .line-clamp-1 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+  .btn-brand:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: saturate(1.08);
+    box-shadow: 0 8px 22px rgb(255 107 107 / 0.42);
   }
 
-  .line-clamp-2 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+  .btn-brand:active:not(:disabled) { transform: translateY(0); }
+
+  /* A tag renders in its own colour, which the API has carried all along and
+     nothing displayed. The mixes derive a tinted ground and a dark-enough
+     label from that one value, so light tags (#ffd93d) stay readable and dark
+     ones (#ff5722) do not turn into a solid block. */
+  .chip {
+    --chip: var(--color-ink-300);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+    background: color-mix(in srgb, var(--chip) 14%, white);
+    color: color-mix(in srgb, var(--chip) 45%, #171a21);
+    border: 1px solid color-mix(in srgb, var(--chip) 26%, white);
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   }
 
-  .line-clamp-3 {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
+  a.chip:hover, button.chip:hover {
+    background: color-mix(in srgb, var(--chip) 24%, white);
+    border-color: color-mix(in srgb, var(--chip) 45%, white);
   }
 
-  /* Animation utilities */
-  .fade-in {
-    @apply animate-in fade-in duration-200;
+  .chip-selected {
+    background: color-mix(in srgb, var(--chip) 88%, white);
+    border-color: color-mix(in srgb, var(--chip) 88%, white);
+    color: white;
+    text-shadow: 0 1px 1px rgb(0 0 0 / 0.18);
   }
 
-  .slide-in-from-bottom {
-    @apply animate-in slide-in-from-bottom-2 duration-300;
+  /* The same colour as a solid block, for a tag shown on its own row. */
+  .swatch {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+    flex: none;
+    background: color-mix(in srgb, var(--chip, #9aa1ae) 32%, white);
+    border: 1px solid color-mix(in srgb, var(--chip, #9aa1ae) 50%, white);
   }
 
-  .slide-in-from-right {
-    @apply animate-in slide-in-from-right-2 duration-300;
+  .chip-dot {
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: 9999px;
+    background: var(--chip);
+    flex: none;
   }
 
-  /* Glassmorphism effect */
-  .glass {
-    @apply backdrop-blur-lg bg-white/80 border border-white/20;
+  /* Form controls, so inputs across the app agree without each page saying so. */
+  .field {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(31 38 135 / 0.12);
+    background: rgb(255 255 255 / 0.9);
+    padding: 0.5625rem 0.875rem;
+    color: var(--color-ink-900);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
   }
 
-  .glass-dark {
-    @apply backdrop-blur-lg bg-gray-900/80 border border-gray-700/20;
+  .field::placeholder { color: var(--color-ink-300); }
+
+  .field:hover:not(:disabled) { border-color: rgb(255 107 107 / 0.35); }
+
+  .field:focus {
+    outline: none;
+    background: white;
+    border-color: var(--color-brand-400);
+    box-shadow: 0 0 0 3px rgb(255 107 107 / 0.15);
   }
 
-  /* Gradient backgrounds */
-  .gradient-red {
-    @apply bg-gradient-to-br from-red-500 to-pink-600;
-  }
-
-  .gradient-blue {
-    @apply bg-gradient-to-br from-blue-500 to-indigo-600;
-  }
-
-  .gradient-green {
-    @apply bg-gradient-to-br from-green-500 to-emerald-600;
-  }
-
-  /* Loading skeleton */
-  .skeleton {
-    @apply animate-pulse bg-gray-200 rounded;
-  }
-
-  .skeleton-text {
-    @apply skeleton h-4 w-full;
-  }
-
-  .skeleton-title {
-    @apply skeleton h-6 w-3/4;
-  }
-
-  .skeleton-avatar {
-    @apply skeleton h-10 w-10 rounded-full;
-  }
-
-  /* Form enhancements */
-  .form-floating {
-    @apply relative;
-  }
-
-  .form-floating input:focus ~ label,
-  .form-floating input:not(:placeholder-shown) ~ label {
-    @apply -translate-y-2 scale-75;
-  }
-
-  .form-floating label {
-    @apply absolute left-3 top-2.5 text-gray-500 transition-all duration-200 pointer-events-none;
-  }
-
-  /* Recipe-specific styles */
-  .ingredient-item {
-    @apply flex items-center gap-3 py-2 border-b border-gray-100 last:border-b-0;
-  }
-
-  .ingredient-quantity {
-    @apply font-semibold text-red-600 min-w-[3rem];
-  }
-
-  .ingredient-unit {
-    @apply text-gray-600 min-w-[4rem];
-  }
-
-  .ingredient-name {
-    @apply flex-1 text-gray-900;
-  }
-
-  /* Tag styles */
-  .tag {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-sm font-medium transition-colors;
-  }
-
-  .tag-active {
-    @apply bg-red-600 text-white;
-  }
-
-  .tag-inactive {
-    @apply bg-gray-100 text-gray-700 hover:bg-red-100 hover:text-red-700;
-  }
-
-  /* Responsive typography */
-  .responsive-text {
-    @apply text-sm md:text-base;
-  }
-
-  .responsive-title {
-    @apply text-xl md:text-2xl lg:text-3xl;
-  }
-
-  /* Print styles */
-  @media print {
-    .no-print {
-      @apply hidden;
-    }
-
-    .print-only {
-      @apply block;
-    }
-
-    body {
-      @apply text-black bg-white;
-    }
-
-    .recipe-content {
-      @apply shadow-none border border-gray-300;
-    }
+  .field-invalid {
+    border-color: var(--color-brand-500);
+    box-shadow: 0 0 0 3px rgb(255 107 107 / 0.12);
   }
 }
 
-/* Utility styles */
 @layer utilities {
-  /* Text selection */
-  .select-none {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
+  .line-clamp-1, .line-clamp-2, .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-1 { -webkit-line-clamp: 1; }
+  .line-clamp-2 { -webkit-line-clamp: 2; }
+  .line-clamp-3 { -webkit-line-clamp: 3; }
+
+  /* Recipes, tags and ingredients all lay out as "as many as fit, minimum
+     width X" rather than fixed breakpoint counts, so a 3-item list never
+     stretches into three thin columns. */
+  .auto-grid {
+    display: grid;
+    gap: 1.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(20rem, 100%), 1fr));
   }
 
-  .select-text {
-    -webkit-user-select: text;
-    -moz-user-select: text;
-    -ms-user-select: text;
-    user-select: text;
+  .auto-grid-tight {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr));
   }
 
-  /* Aspect ratios */
-  .aspect-square {
-    aspect-ratio: 1 / 1;
-  }
-
-  .aspect-video {
-    aspect-ratio: 16 / 9;
-  }
-
-  .aspect-photo {
-    aspect-ratio: 4 / 3;
-  }
-
-  /* Safe areas for mobile */
-  .safe-top {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .safe-left {
-    padding-left: env(safe-area-inset-left);
-  }
-
-  .safe-right {
-    padding-right: env(safe-area-inset-right);
-  }
-
-  /* Custom scrollbars */
-  .scrollbar-thin {
-    scrollbar-width: thin;
-    scrollbar-color: rgb(156 163 175) rgb(243 244 246);
-  }
-
-  .scrollbar-none {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
+  .animate-rise {
+    animation: rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-  }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to   { opacity: 1; transform: none; }
 }
 
-/* Custom animations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+@media print {
+  body { background: white; }
+  .no-print { display: none !important; }
+  .surface { box-shadow: none; border: 1px solid #d8d8d8; background: white; backdrop-filter: none; }
 }
 
-@keyframes slideInUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideInDown {
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes scaleIn {
-  from {
-    transform: scale(0.9);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.animate-slide-in-up {
-  animation: slideInUp 0.3s ease-out;
-}
-
-.animate-slide-in-down {
-  animation: slideInDown 0.3s ease-out;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.2s ease-out;
-}
-
-/* Recipe book specific styles */
-.recipe-grid {
-  @apply grid gap-6;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-}
-
-.ingredient-calculator {
-  @apply bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2;
-}
-
-.serving-controls button {
-  @apply w-8 h-8 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors flex items-center justify-center;
-}
-
-.recipe-instructions {
-  @apply prose prose-sm max-w-none;
-}
-
-.recipe-instructions p {
-  @apply mb-3 leading-relaxed;
-}
-
-.recipe-instructions ol {
-  @apply pl-4;
-}
-
-.recipe-instructions li {
-  @apply mb-2;
-}
-
-/* Mobile optimizations */
-@media (max-width: 640px) {
-  .recipe-grid {
-    grid-template-columns: 1fr;
-    @apply gap-4;
-  }
-
-  .responsive-text {
-    @apply text-sm;
-  }
-
-  .responsive-title {
-    @apply text-lg;
-  }
-
-  .ingredient-item {
-    @apply flex-col items-start gap-1;
-  }
-
-  .ingredient-quantity,
-  .ingredient-unit {
-    @apply min-w-0;
-  }
-}
-
-/* High DPI displays */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-  .recipe-image {
-    image-rendering: -webkit-optimize-contrast;
-    image-rendering: crisp-edges;
-  }
-}
-
-/* Reduced motion preferences */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* High contrast mode */
-@media (prefers-contrast: high) {
-  .card {
-    @apply border-2 border-gray-600;
-  }
-
-  .btn {
-    @apply border-2 border-current;
-  }
+  .surface-interactive:hover, .btn-brand:hover:not(:disabled) { transform: none; }
 }

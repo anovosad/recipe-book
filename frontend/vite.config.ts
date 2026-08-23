@@ -1,9 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  // Tailwind is a real build step now. It used to be loaded from
+  // cdn.tailwindcss.com at runtime, which meant the whole stylesheet in
+  // src/styles was inert: the CDN only scans the live DOM, so every @apply
+  // in that file was emitted verbatim and ignored by the browser.
+  plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
       // import.meta.dirname, not __dirname: Vite 8 loads this config natively
