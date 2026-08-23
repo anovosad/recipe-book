@@ -269,15 +269,20 @@ interface TagCardProps {
 }
 
 const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => (
+  // `relative` here plus `after:absolute after:inset-0` on the link is the
+  // stretched-link pattern: the anchor's own pseudo-element covers the whole
+  // card, so the entire tile is the hit target and its hover state follows.
+  // The delete button is lifted above it with `relative z-10` so it keeps its
+  // own click. Nothing about how any of this looks changes.
   <div
-    className="surface surface-interactive group flex items-center gap-3 p-3"
+    className="surface surface-interactive group relative flex items-center gap-3 p-3"
     style={{ ['--chip' as string]: tag.color || '#9aa1ae' }}
   >
     <span className="swatch" aria-hidden="true" />
 
     <Link
       to={`/recipes?tag=${tag.id}`}
-      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-brand-600"
+      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-brand-600 after:absolute after:inset-0"
       title={`View all ${tag.name} recipes`}
     >
       {tag.name}
@@ -286,7 +291,7 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
     {isAuthenticated && (
       <button
         onClick={() => onDelete(tag.id, tag.name)}
-        className="shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
+        className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
         title="Delete tag"
         aria-label={`Delete tag ${tag.name}`}
       >

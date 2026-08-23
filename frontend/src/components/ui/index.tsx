@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, X, AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react';
 import { cn } from '@/utils';
 import { Tag } from '@/types';
@@ -155,8 +156,12 @@ export const Modal: React.FC<ModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  // Into <body>, not wherever the caller happens to sit. An ancestor with a
+  // backdrop-filter - `.surface`, or the nav bar's backdrop-blur - is a
+  // containing block for fixed-position descendants, so inset-0 would resolve
+  // against that element and the dialog would be trapped inside it.
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div
         className="fixed inset-0 bg-ink-900/40 backdrop-blur-sm"
         onClick={onClose}
@@ -183,7 +188,8 @@ export const Modal: React.FC<ModalProps> = ({
         )}
         <div className={cn('px-6 pb-6', !title && 'pt-6')}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -237,7 +237,10 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
   isAuthenticated,
   onDelete
 }) => (
-  <div className="surface surface-interactive group flex items-center gap-3 p-3">
+  // Stretched link, same as the tag tiles: the anchor's pseudo-element covers
+  // the card so the whole tile is clickable, and the delete button sits above
+  // it on z-10 to keep its own.
+  <div className="surface surface-interactive group relative flex items-center gap-3 p-3">
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500">
       <Leaf className="h-4 w-4" />
     </span>
@@ -246,7 +249,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
         it went to exactly the same place. */}
     <Link
       to={`/recipes?search=${encodeURIComponent(ingredient.name)}`}
-      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-emerald-600"
+      className="min-w-0 flex-1 truncate font-medium text-ink-900 transition-colors hover:text-emerald-600 after:absolute after:inset-0"
       title={`Find recipes using ${ingredient.name}`}
     >
       {ingredient.name}
@@ -255,7 +258,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
     {isAuthenticated && (
       <button
         onClick={() => onDelete(ingredient.id, ingredient.name)}
-        className="shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
+        className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
         title="Delete ingredient"
         aria-label={`Delete ingredient ${ingredient.name}`}
       >

@@ -294,14 +294,14 @@ const RecipeDetailPage: React.FC = () => {
                     <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold tabular-nums text-brand-600">
                       {step.number}
                     </span>
-                    <p className="flex-1 text-[0.9375rem] leading-[1.75] text-ink-700">
+                    <p className="flex-1 leading-relaxed text-ink-700">
                       {step.text}
                     </p>
                   </li>
                 ))}
               </ol>
             ) : (
-              <div className="space-y-4 text-[0.9375rem] leading-[1.75] text-ink-700">
+              <div className="space-y-4 leading-relaxed text-ink-700">
                 {steps.map((step, index) => (
                   <p key={index}>{step.text}</p>
                 ))}

@@ -1,5 +1,6 @@
 // frontend/src/components/RecipeImageGallery.tsx - Image gallery with modal
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
 import { RecipeImage } from '@/types';
 import { cn } from '@/utils';
@@ -138,120 +139,114 @@ export const RecipeImageGallery: React.FC<RecipeImageGalleryProps> = ({
         </div>
       </div>
 
-      {/* Modal */}
-      {isModalOpen && selectedIndex !== null && (
-        <div 
-          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center"
-          onClick={closeModal}
-        >
-          {/* Controls */}
-          <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoom(prev => Math.max(prev - 0.25, 0.5));
-              }}
-              className="bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-              title="Zoom out (-)"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            
-            <span className="bg-black/50 text-white px-3 py-1 rounded text-sm">
-              {Math.round(zoom * 100)}%
+      {/* Rendered into <body>. `.surface` sets backdrop-filter, and an element
+          with a backdrop-filter is a containing block for its fixed-position
+          descendants - so inset-0 resolved against the card this gallery sits
+          in, and the "full screen" viewer was clamped to that card. */}
+      {isModalOpen && selectedIndex !== null && createPortal(
+        <div className="fixed inset-0 z-[100] flex flex-col bg-black/95">
+          {/* Top bar. Its own row rather than an overlay, so the controls never
+              sit on top of the picture. */}
+          <div className="flex shrink-0 items-center justify-between gap-3 px-3 py-2.5 text-white">
+            <span className="rounded-full bg-white/10 px-3 py-1 text-sm tabular-nums">
+              {selectedIndex + 1} / {images.length}
             </span>
-            
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setZoom(prev => Math.min(prev + 0.25, 3));
-              }}
-              className="bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-              title="Zoom in (+)"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setRotation(prev => (prev + 90) % 360);
-              }}
-              className="bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-              title="Rotate (R)"
-            >
-              <RotateCw className="w-4 h-4" />
-            </button>
-            
-            <button
-              onClick={closeModal}
-              className="bg-black/50 text-white p-2 rounded-full hover:bg-black/70 transition-colors"
-              title="Close (Esc)"
-            >
-              <X className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setZoom(prev => Math.max(prev - 0.25, 0.5))}
+                className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+                title="Zoom out (-)"
+                aria-label="Zoom out"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </button>
+
+              <span className="min-w-[3.5rem] text-center text-sm tabular-nums">
+                {Math.round(zoom * 100)}%
+              </span>
+
+              <button
+                onClick={() => setZoom(prev => Math.min(prev + 0.25, 3))}
+                className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+                title="Zoom in (+)"
+                aria-label="Zoom in"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={() => setRotation(prev => (prev + 90) % 360)}
+                className="rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+                title="Rotate (R)"
+                aria-label="Rotate"
+              >
+                <RotateCw className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={closeModal}
+                className="ml-1 rounded-full bg-white/10 p-2 transition-colors hover:bg-white/20"
+                title="Close (Esc)"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          {/* Image Counter */}
-          <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-2 rounded">
-            {selectedIndex + 1} of {images.length}
+          {/* The stage scrolls. Zoom is the CSS `zoom` property rather than a
+              transform on purpose: a transform does not change layout, so a
+              magnified image was simply clipped with no way to reach the rest
+              of it. */}
+          <div
+            className="relative flex-1 overflow-auto overscroll-contain"
+            onClick={closeModal}
+          >
+            <div className="flex min-h-full items-center justify-center p-4">
+              <img
+                src={`/uploads/${images[selectedIndex].filename}`}
+                alt={images[selectedIndex].caption || `${recipeName} - Photo ${selectedIndex + 1}`}
+                className="max-h-[calc(100dvh-9rem)] max-w-full object-contain"
+                style={{ zoom, transform: `rotate(${rotation}deg)` }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </div>
 
-          {/* Navigation Arrows */}
           {images.length > 1 && (
             <>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigateImage(-1);
-                }}
-                className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition-colors"
-                title="Previous image (←)"
+                onClick={() => navigateImage(-1)}
+                className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white transition-colors hover:bg-black/80"
+                title="Previous image (left arrow)"
+                aria-label="Previous image"
               >
-                <ChevronLeft className="w-6 h-6" />
+                <ChevronLeft className="h-6 w-6" />
               </button>
-              
+
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigateImage(1);
-                }}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition-colors"
-                title="Next image (→)"
+                onClick={() => navigateImage(1)}
+                className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-3 text-white transition-colors hover:bg-black/80"
+                title="Next image (right arrow)"
+                aria-label="Next image"
               >
-                <ChevronRight className="w-6 h-6" />
+                <ChevronRight className="h-6 w-6" />
               </button>
             </>
           )}
 
-          {/* Main Image */}
-          <div 
-            className="relative max-w-full max-h-full overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={`/uploads/${images[selectedIndex].filename}`}
-              alt={images[selectedIndex].caption || `${recipeName} - Photo ${selectedIndex + 1}`}
-              className="max-w-full max-h-[90vh] object-contain transition-transform duration-200"
-              style={{
-                transform: `scale(${zoom}) rotate(${rotation}deg)`,
-                transformOrigin: 'center'
-              }}
-            />
+          {/* Bottom bar */}
+          <div className="flex shrink-0 items-center justify-between gap-4 px-4 py-3 text-white">
+            <p className="min-w-0 flex-1 truncate text-sm text-white/80">
+              {images[selectedIndex].caption}
+            </p>
+            <span className="hidden text-xs whitespace-nowrap text-white/50 sm:block">
+              ← → navigate · + − zoom · R rotate · Esc close
+            </span>
           </div>
-
-          {/* Caption */}
-          {images[selectedIndex].caption && (
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded max-w-md text-center">
-              <p className="text-sm">{images[selectedIndex].caption}</p>
-            </div>
-          )}
-
-          {/* Keyboard Shortcuts Help */}
-          <div className="absolute bottom-4 right-4 bg-black/50 text-white text-xs px-3 py-2 rounded">
-            <div>← → Navigate • + - Zoom • R Rotate • ESC Close</div>
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
