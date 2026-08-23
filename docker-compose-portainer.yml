@@ -74,7 +74,12 @@ services:
       
       # Security Configuration
       - JWT_SECRET=${JWT_SECRET}
-      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-nginx}
+      # The compose network subnet, not the hostname "nginx". nginx declares
+      # depends_on: recipe-app (service_healthy), so the app always starts first
+      # and the name never resolves at that moment - the entry was silently
+      # dropped on every single deploy, leaving no trusted proxy at all and every
+      # client sharing one rate-limit bucket keyed on nginx's address.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-${NETWORK_SUBNET:-172.20.0.0/16}}
       
       # Database Configuration
       - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-25}
