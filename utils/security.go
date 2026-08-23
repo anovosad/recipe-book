@@ -2,14 +2,10 @@
 package utils
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"html/template"
 	"log"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
 )
 
@@ -25,7 +21,10 @@ var (
 	RecipeTitleRegex = regexp.MustCompile(`^[^<>]{1,200}$`)
 
 	// Tag name: 1-50 chars, letters, numbers, spaces, hyphens
-	TagNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-]{1,50}$`)
+	// '&' is allowed because the app seeds "Quick & Easy" itself; without it that
+	// default tag failed its own validator and was silently dropped, leaving the
+	// sample recipe that references it untagged.
+	TagNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-&]{1,50}$`)
 
 	// Ingredient name: 1-100 chars, letters, numbers, spaces, basic punctuation
 	IngredientNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-'.,()]{1,100}$`)
@@ -175,7 +174,11 @@ func ValidateRecipeTitle(title string) ValidationResult {
 		return ValidationResult{false, "Recipe title is too long (maximum 200 characters)", "title"}
 	}
 
-	if ContainsSQLInjection(title) || ContainsXSS(title) {
+	// Only XSS patterns are checked on free-text recipe fields. Every query in the
+	// database package is parameterised, so pattern-matching for SQL adds nothing
+	// here while rejecting ordinary cooking prose: "Select 3 tomatoes from the
+	// basket" matches the \bselect .+ \bfrom rule.
+	if ContainsXSS(title) {
 		return ValidationResult{false, "Invalid characters in recipe title", "title"}
 	}
 
@@ -194,7 +197,8 @@ func ValidateRecipeDescription(description string) ValidationResult {
 		return ValidationResult{false, "Recipe description is too long (maximum 1000 characters)", "description"}
 	}
 
-	if ContainsSQLInjection(description) || ContainsXSS(description) {
+	// See ValidateRecipeTitle: XSS only, SQL is handled by parameterised queries.
+	if ContainsXSS(description) {
 		return ValidationResult{false, "Invalid characters in recipe description", "description"}
 	}
 
@@ -213,7 +217,8 @@ func ValidateRecipeInstructions(instructions string) ValidationResult {
 		return ValidationResult{false, "Recipe instructions are too long (maximum 10,000 characters)", "instructions"}
 	}
 
-	if ContainsSQLInjection(instructions) || ContainsXSS(instructions) {
+	// See ValidateRecipeTitle: XSS only, SQL is handled by parameterised queries.
+	if ContainsXSS(instructions) {
 		return ValidationResult{false, "Invalid characters in recipe instructions", "instructions"}
 	}
 
@@ -237,7 +242,7 @@ func ValidateTagName(name string) ValidationResult {
 	}
 
 	if !TagNameRegex.MatchString(name) {
-		return ValidationResult{false, "Tag name can only contain letters, numbers, spaces, and hyphens", "name"}
+		return ValidationResult{false, "Tag name can only contain letters, numbers, spaces, hyphens and &", "name"}
 	}
 
 	return ValidationResult{true, "", "name"}
@@ -301,32 +306,9 @@ func ContainsXSS(input string) bool {
 	return false
 }
 
-// SanitizeInput removes or escapes potentially dangerous characters
-func SanitizeInput(input string) string {
-	// Remove null bytes
-	input = strings.ReplaceAll(input, "\x00", "")
-
-	// Trim whitespace
-	input = strings.TrimSpace(input)
-
-	// Escape HTML entities
-	input = template.HTMLEscapeString(input)
-
-	return input
-}
-
-// GenerateSecureToken generates a cryptographically secure random token
-func GenerateSecureToken(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
 // ValidateFileUpload validates uploaded files
 func ValidateFileUpload(filename string, size int64) ValidationResult {
-	if size > 5*1024*1024 { // 5MB limit
+	if size > maxUploadFileBytes {
 		return ValidationResult{false, "File is too large (maximum 5MB)", "file"}
 	}
 
@@ -446,15 +428,6 @@ func ValidateServingUnit(unit string) ValidationResult {
 	return ValidationResult{false, "Invalid serving unit", "serving_unit"}
 }
 
-// SecurityContext holds security-related information for requests
-type SecurityContext struct {
-	UserID    int
-	Username  string
-	IP        string
-	UserAgent string
-	Timestamp time.Time
-}
-
 // LogSecurityEvent logs security-related events
 func LogSecurityEvent(event, ip, details string) {
 	log.Printf("🔒 SECURITY: %s from IP %s - %s", event, ip, details)
@@ -463,11 +436,4 @@ func LogSecurityEvent(event, ip, details string) {
 // IsValidID validates that an ID is a positive integer
 func IsValidID(id int) bool {
 	return id > 0
-}
-
-// CleanHTML removes potentially dangerous HTML tags but keeps basic formatting
-func CleanHTML(input string) string {
-	// For now, just escape everything - you might want to use a proper HTML sanitizer
-	// like bluemonday for more sophisticated cleaning
-	return template.HTMLEscapeString(input)
 }

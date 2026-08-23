@@ -2,7 +2,10 @@
 package database
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -32,6 +35,64 @@ var (
 	stmtDeleteTag        *sql.Stmt
 )
 
+// openDatabase opens the SQLite file and applies the pragmas.
+//
+// SQLite applies most pragmas per connection and database/sql hands out a pool of
+// them, so the previous code - one Exec of the pragmas after Open - configured
+// whichever single connection happened to serve that call and left every other
+// one on the defaults. foreign_keys defaults to OFF, which means ON DELETE CASCADE
+// quietly never fired and deleting a recipe could leave its ingredient, tag and
+// image rows behind. Passing the pragmas in the DSN makes the driver apply them to
+// every connection it opens; busy_timeout is what turns "database is locked"
+// errors into a short wait.
+//
+// The bool reports whether the DSN form was accepted. If this build of the driver
+// does not understand _pragma the function falls back to a plain path rather than
+// refusing to start, and the caller then pins the pool to a single connection.
+func openDatabase(dbPath string) (*sql.DB, bool, error) {
+	dsn := dbPath + "?" + strings.Join([]string{
+		"_pragma=foreign_keys(1)",
+		"_pragma=busy_timeout(10000)",
+		"_pragma=journal_mode(WAL)",
+		"_pragma=synchronous(NORMAL)",
+		"_pragma=cache_size(-8000)",
+		"_pragma=temp_store(memory)",
+	}, "&")
+
+	db, err := sql.Open("sqlite", dsn)
+	if err == nil {
+		if err = db.Ping(); err == nil {
+			return db, true, nil
+		}
+		db.Close()
+	}
+
+	log.Printf("⚠️  Could not open the database with DSN pragmas (%v) - falling back to a plain path", err)
+
+	db, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, false, err
+	}
+
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, false, err
+	}
+
+	if _, err := db.Exec(`
+		PRAGMA journal_mode = WAL;
+		PRAGMA synchronous = NORMAL;
+		PRAGMA busy_timeout = 10000;
+		PRAGMA cache_size = -8000;
+		PRAGMA temp_store = memory;
+		PRAGMA foreign_keys = ON;
+	`); err != nil {
+		log.Printf("Warning: Failed to set some database pragmas: %v", err)
+	}
+
+	return db, false, nil
+}
+
 func InitDB() {
 	var err error
 	dbPath := os.Getenv("DB_PATH")
@@ -50,32 +111,46 @@ func InitDB() {
 	// Ensure the directory exists and is writable (only if DB doesn't exist)
 	if !dbExists {
 		dbDir := filepath.Dir(dbPath)
-		if err := os.MkdirAll(dbDir, 0755); err != nil {
+		// 0750: the database is only ever read by this process, and nothing else
+		// on the host has a reason to be able to open it.
+		if err := os.MkdirAll(dbDir, 0750); err != nil {
 			log.Printf("Warning: Could not create database directory %s: %v", dbDir, err)
 		}
 	}
 
-	DB, err = sql.Open("sqlite", dbPath)
+	var perConnectionPragmas bool
+	DB, perConnectionPragmas, err = openDatabase(dbPath)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
 
-	// Set connection pool settings for performance
-	DB.SetMaxOpenConns(10) // Reduced for startup speed
-	DB.SetMaxIdleConns(5)
-	DB.SetConnMaxLifetime(5 * time.Minute)
+	if perConnectionPragmas {
+		DB.SetMaxOpenConns(10)
+		DB.SetMaxIdleConns(5)
+		// Safe to recycle: the DSN reapplies every pragma to each new connection.
+		DB.SetConnMaxLifetime(5 * time.Minute)
+	} else {
+		// Without per-connection pragmas the settings below only hold on the one
+		// connection they were executed on, so the pool is capped at that single
+		// connection to keep foreign keys and WAL consistent. SQLite serialises
+		// writes anyway, so the cost is modest.
+		//
+		// The lifetime has to stay unlimited here as well: retiring that single
+		// connection would have database/sql open a fresh, pragma-less one, and
+		// foreign_keys would silently go back to OFF a few minutes after startup -
+		// the exact failure the DSN form exists to prevent.
+		DB.SetMaxOpenConns(1)
+		DB.SetMaxIdleConns(1)
+		DB.SetConnMaxLifetime(0)
+	}
 
-	// Enable WAL mode and other pragmas for performance
-	_, err = DB.Exec(`
-		PRAGMA journal_mode = WAL;
-		PRAGMA synchronous = NORMAL;
-		PRAGMA cache_size = 2000;
-		PRAGMA temp_store = memory;
-		PRAGMA mmap_size = 268435456;
-		PRAGMA foreign_keys = ON;
-	`)
-	if err != nil {
-		log.Printf("Warning: Failed to set some database pragmas: %v", err)
+	// Read the pragma back rather than assuming it was applied: silently running
+	// without foreign keys is exactly the failure this is guarding against.
+	var foreignKeys int
+	if err := DB.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
+		log.Printf("Warning: could not read the foreign_keys pragma: %v", err)
+	} else if foreignKeys != 1 {
+		log.Println("⚠️  foreign_keys is OFF - ON DELETE CASCADE will not fire")
 	}
 
 	// Only run heavy initialization if database is new
@@ -85,7 +160,6 @@ func InitDB() {
 		createTables()
 		insertDefaultIngredients()
 		insertDefaultTags()
-		os.MkdirAll("./uploads", 0755)
 		insertDefaultRecipes()
 		fmt.Println("✅ New database initialized successfully")
 	} else {
@@ -93,6 +167,14 @@ func InitDB() {
 		// Just ensure tables exist and run critical migrations
 		createTables()        // This is idempotent
 		migrateServingUnits() // Run any necessary migrations
+	}
+
+	// The upload directory was previously created only on a fresh database, so an
+	// existing deployment with a missing ./uploads silently failed every upload.
+	// Uploaded images are served by this process, not by nginx reading the
+	// directory directly, so it does not need to be world-readable either.
+	if err := os.MkdirAll("./uploads", 0750); err != nil {
+		log.Printf("Warning: Could not create uploads directory: %v", err)
 	}
 
 	// Prepare statements after database is ready
@@ -240,12 +322,16 @@ func createTables() {
 		FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
 	);
 	
+	-- A surrogate key, not (recipe_id, ingredient_id): a recipe may legitimately
+	-- list the same ingredient in two units, e.g. butter 100 g for the dough and
+	-- 2 tbsp for the pan. The UNIQUE constraint still rejects an exact repeat.
 	CREATE TABLE IF NOT EXISTS recipe_ingredients (
-		recipe_id INTEGER,
-		ingredient_id INTEGER,
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		recipe_id INTEGER NOT NULL,
+		ingredient_id INTEGER NOT NULL,
 		quantity REAL NOT NULL CHECK(quantity > 0 AND quantity <= 10000),
 		unit TEXT NOT NULL CHECK(length(unit) >= 1 AND length(unit) <= 20),
-		PRIMARY KEY (recipe_id, ingredient_id),
+		UNIQUE (recipe_id, ingredient_id, unit),
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
 		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
 	);
@@ -282,6 +368,82 @@ func createTables() {
 	}
 
 	migrateServingUnits()
+	migrateRecipeIngredientsKey()
+}
+
+// migrateRecipeIngredientsKey rebuilds recipe_ingredients so its primary key is a
+// surrogate id instead of (recipe_id, ingredient_id). SQLite cannot alter a
+// primary key in place, so the table is copied, dropped and renamed - all inside
+// one transaction, so a failure leaves the original table untouched.
+func migrateRecipeIngredientsKey() {
+	var hasSurrogateKey int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('recipe_ingredients') WHERE name='id'").Scan(&hasSurrogateKey)
+	if err != nil {
+		log.Printf("Error checking the recipe_ingredients schema: %v", err)
+		return
+	}
+	if hasSurrogateKey > 0 {
+		return
+	}
+
+	fmt.Println("🔄 Rebuilding recipe_ingredients to allow one ingredient in several units...")
+
+	var before int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM recipe_ingredients").Scan(&before); err != nil {
+		log.Printf("Error counting recipe_ingredients: %v", err)
+		return
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		log.Printf("Error starting the recipe_ingredients migration: %v", err)
+		return
+	}
+	defer tx.Rollback()
+
+	steps := []string{
+		`CREATE TABLE recipe_ingredients_migrated (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			recipe_id INTEGER NOT NULL,
+			ingredient_id INTEGER NOT NULL,
+			quantity REAL NOT NULL CHECK(quantity > 0 AND quantity <= 10000),
+			unit TEXT NOT NULL CHECK(length(unit) >= 1 AND length(unit) <= 20),
+			UNIQUE (recipe_id, ingredient_id, unit),
+			FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
+			FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
+		)`,
+		`INSERT INTO recipe_ingredients_migrated (recipe_id, ingredient_id, quantity, unit)
+			SELECT recipe_id, ingredient_id, quantity, unit FROM recipe_ingredients`,
+		`DROP TABLE recipe_ingredients`,
+		`ALTER TABLE recipe_ingredients_migrated RENAME TO recipe_ingredients`,
+		`CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id)`,
+	}
+
+	for _, step := range steps {
+		if _, err := tx.Exec(step); err != nil {
+			log.Printf("recipe_ingredients migration failed, keeping the original table: %v", err)
+			return
+		}
+	}
+
+	var after int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM recipe_ingredients").Scan(&after); err != nil {
+		log.Printf("Error verifying the migrated recipe_ingredients: %v", err)
+		return
+	}
+
+	// Refuse to commit a copy that lost rows.
+	if after != before {
+		log.Printf("recipe_ingredients migration would change %d rows into %d - rolling back", before, after)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing the recipe_ingredients migration: %v", err)
+		return
+	}
+
+	fmt.Printf("✅ recipe_ingredients rebuilt (%d rows preserved)\n", after)
 }
 
 func migrateServingUnits() {
@@ -344,19 +506,71 @@ func insertDefaultTags() {
 	}
 }
 
+// initialAdminPassword returns the password for the seeded admin account. It
+// comes from ADMIN_PASSWORD when set, otherwise it is random and printed once.
+// The bool reports whether it was generated.
+func initialAdminPassword() (string, bool, error) {
+	if password := os.Getenv("ADMIN_PASSWORD"); password != "" {
+		if validation := utils.ValidatePassword(password); !validation.Valid {
+			return "", false, fmt.Errorf("ADMIN_PASSWORD is not acceptable: %s", validation.Message)
+		}
+		return password, false, nil
+	}
+
+	buf := make([]byte, 18)
+	if _, err := rand.Read(buf); err != nil {
+		return "", false, err
+	}
+
+	// base64url keeps it copy-pasteable, and the suffix guarantees the digit and
+	// letter that ValidatePassword requires of every other account.
+	return base64.RawURLEncoding.EncodeToString(buf) + "a1", true, nil
+}
+
+func adminEmail() string {
+	if email := os.Getenv("ADMIN_EMAIL"); email != "" {
+		if validation := utils.ValidateEmail(email); validation.Valid {
+			return email
+		}
+		log.Printf("Ignoring ADMIN_EMAIL: not a valid address")
+	}
+	return "admin@recipebook.com"
+}
+
 func insertDefaultRecipes() {
 	var userID int
 	err := DB.QueryRow("SELECT id FROM users WHERE username = 'admin'").Scan(&userID)
 	if err != nil {
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
+		password, generated, err := initialAdminPassword()
+		if err != nil {
+			log.Printf("Could not prepare the admin password: %v", err)
+			return
+		}
+
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("Could not hash the admin password: %v", err)
+			return
+		}
+
 		result, err := DB.Exec("INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-			"admin", "admin@recipebook.com", string(hashedPassword))
+			"admin", adminEmail(), string(hashedPassword))
 		if err != nil {
 			log.Printf("Could not create admin user: %v", err)
 			return
 		}
 		id, _ := result.LastInsertId()
 		userID = int(id)
+
+		if generated {
+			// Printed once, on the run that creates the database. The old build
+			// shipped a fixed admin123, which is a published password on every
+			// deployment that never changed it.
+			log.Printf("🔑 Created the 'admin' user with a generated password: %s", password)
+			log.Println("🔑 Store it now - it is not shown again. Set ADMIN_PASSWORD to choose your own.")
+		} else {
+			log.Println("🔑 Created the 'admin' user with the password from ADMIN_PASSWORD")
+		}
 	}
 
 	var recipeCount int
@@ -598,44 +812,319 @@ func GetUserByUsernameSecure(username string) (*models.User, string, error) {
 	return &user, hashedPassword, nil
 }
 
-// Secure recipe creation
-func CreateRecipeSecure(title, description, instructions string, prepTime, cookTime, servings int, servingUnit string, userID int) (int64, error) {
-	// Validate all inputs
-	if validation := utils.ValidateRecipeTitle(title); !validation.Valid {
-		return 0, fmt.Errorf("invalid title: %s", validation.Message)
+// ErrRecipeNotFound is returned when a recipe does not exist or is not owned by
+// the acting user - the two cases are deliberately indistinguishable to callers.
+var ErrRecipeNotFound = errors.New("recipe not found or access denied")
+
+// ValidationError marks a failure caused by the caller's input rather than by the
+// database. Handlers use it to decide what is safe to echo back: a validation
+// message is meant for the user, a driver error is not.
+type ValidationError struct {
+	msg string
+}
+
+func (e *ValidationError) Error() string {
+	return e.msg
+}
+
+func newValidationError(format string, args ...interface{}) error {
+	return &ValidationError{msg: fmt.Sprintf(format, args...)}
+}
+
+// IsValidationError reports whether err came from validating caller input.
+func IsValidationError(err error) bool {
+	var validationErr *ValidationError
+	return errors.As(err, &validationErr)
+}
+
+// RecipeInput carries the scalar fields of a recipe write.
+type RecipeInput struct {
+	Title        string
+	Description  string
+	Instructions string
+	PrepTime     int
+	CookTime     int
+	Servings     int
+	ServingUnit  string
+}
+
+// RecipeIngredientInput is one ingredient row of a recipe write.
+type RecipeIngredientInput struct {
+	IngredientID int
+	Quantity     float64
+	Unit         string
+}
+
+func validateRecipeInput(in *RecipeInput) error {
+	if in.ServingUnit == "" {
+		in.ServingUnit = "people"
 	}
 
-	if validation := utils.ValidateRecipeDescription(description); !validation.Valid {
-		return 0, fmt.Errorf("invalid description: %s", validation.Message)
+	checks := []utils.ValidationResult{
+		utils.ValidateRecipeTitle(in.Title),
+		utils.ValidateRecipeDescription(in.Description),
+		utils.ValidateRecipeInstructions(in.Instructions),
+		utils.ValidateServingUnit(in.ServingUnit),
+		utils.ValidateNumericInput(in.PrepTime, 0, 1440, "Prep time"),
+		utils.ValidateNumericInput(in.CookTime, 0, 1440, "Cook time"),
+		utils.ValidateNumericInput(in.Servings, 1, 100, "Servings"),
 	}
 
-	if validation := utils.ValidateRecipeInstructions(instructions); !validation.Valid {
-		return 0, fmt.Errorf("invalid instructions: %s", validation.Message)
+	for _, check := range checks {
+		if !check.Valid {
+			return newValidationError("%s", check.Message)
+		}
 	}
 
-	if validation := utils.ValidateServingUnit(servingUnit); !validation.Valid {
-		return 0, fmt.Errorf("invalid serving unit: %s", validation.Message)
+	return nil
+}
+
+// CreateRecipeTx inserts a recipe together with its tags and ingredients inside a
+// single transaction. The previous version inserted the relations with fire-and-
+// forget Exec calls, so a rejected ingredient (unknown id, duplicate, bad unit)
+// was dropped silently and the caller still saw a success response.
+func CreateRecipeTx(in RecipeInput, userID int, tagIDs []int, ingredients []RecipeIngredientInput) (int64, error) {
+	if err := validateRecipeInput(&in); err != nil {
+		return 0, err
 	}
 
-	// Validate numeric inputs
-	if validation := utils.ValidateNumericInput(prepTime, 0, 1440, "Prep time"); !validation.Valid {
-		return 0, fmt.Errorf("invalid prep time: %s", validation.Message)
+	tx, err := DB.Begin()
+	if err != nil {
+		return 0, err
 	}
+	defer tx.Rollback()
 
-	if validation := utils.ValidateNumericInput(cookTime, 0, 1440, "Cook time"); !validation.Valid {
-		return 0, fmt.Errorf("invalid cook time: %s", validation.Message)
-	}
-
-	if validation := utils.ValidateNumericInput(servings, 1, 100, "Servings"); !validation.Valid {
-		return 0, fmt.Errorf("invalid servings: %s", validation.Message)
-	}
-
-	result, err := stmtCreateRecipe.Exec(title, description, instructions, prepTime, cookTime, servings, servingUnit, userID)
+	result, err := tx.Stmt(stmtCreateRecipe).Exec(in.Title, in.Description, in.Instructions,
+		in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, userID)
 	if err != nil {
 		return 0, err
 	}
 
-	return result.LastInsertId()
+	recipeID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	if err := replaceRecipeRelations(tx, recipeID, tagIDs, ingredients); err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	return recipeID, nil
+}
+
+// UpdateRecipeTx rewrites a recipe and its relations atomically. Ownership is
+// enforced in the UPDATE itself, so a caller that is not the owner changes nothing.
+func UpdateRecipeTx(recipeID, userID int, in RecipeInput, tagIDs []int, ingredients []RecipeIngredientInput) error {
+	if !utils.IsValidID(recipeID) || !utils.IsValidID(userID) {
+		return ErrRecipeNotFound
+	}
+
+	if err := validateRecipeInput(&in); err != nil {
+		return err
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Stmt(stmtUpdateRecipe).Exec(in.Title, in.Description, in.Instructions,
+		in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, recipeID, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrRecipeNotFound
+	}
+
+	if err := replaceRecipeRelations(tx, int64(recipeID), tagIDs, ingredients); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// replaceRecipeRelations rewrites the tag and ingredient rows of a recipe. Every
+// failure is reported rather than skipped, so the caller can reject the whole
+// write instead of persisting a partially attached recipe.
+func replaceRecipeRelations(tx *sql.Tx, recipeID int64, tagIDs []int, ingredients []RecipeIngredientInput) error {
+	if _, err := tx.Exec("DELETE FROM recipe_tags WHERE recipe_id = ?", recipeID); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM recipe_ingredients WHERE recipe_id = ?", recipeID); err != nil {
+		return err
+	}
+
+	seenTags := make(map[int]bool)
+	for _, tagID := range tagIDs {
+		if !utils.IsValidID(tagID) {
+			return newValidationError("invalid tag id: %d", tagID)
+		}
+		if seenTags[tagID] {
+			continue
+		}
+		seenTags[tagID] = true
+
+		if _, err := tx.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID); err != nil {
+			return newValidationError("tag %d could not be attached (does it exist?)", tagID)
+		}
+	}
+
+	// One ingredient may appear in several units (butter 100 g and 2 tbsp), but
+	// the exact same ingredient-and-unit pair twice is a mistake worth reporting
+	// rather than silently collapsing into one row.
+	type ingredientKey struct {
+		id   int
+		unit string
+	}
+
+	seenIngredients := make(map[ingredientKey]bool)
+	for _, ingredient := range ingredients {
+		if !utils.IsValidID(ingredient.IngredientID) {
+			return newValidationError("invalid ingredient id: %d", ingredient.IngredientID)
+		}
+
+		key := ingredientKey{id: ingredient.IngredientID, unit: strings.ToLower(strings.TrimSpace(ingredient.Unit))}
+		if seenIngredients[key] {
+			return newValidationError("ingredient %d is listed twice with the same unit", ingredient.IngredientID)
+		}
+		seenIngredients[key] = true
+
+		if validation := utils.ValidateQuantity(ingredient.Quantity); !validation.Valid {
+			return newValidationError("%s", validation.Message)
+		}
+		if validation := utils.ValidateUnit(ingredient.Unit); !validation.Valid {
+			return newValidationError("%s", validation.Message)
+		}
+
+		if _, err := tx.Exec(
+			"INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
+			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit,
+		); err != nil {
+			return newValidationError("ingredient %d could not be attached (does it exist?)", ingredient.IngredientID)
+		}
+	}
+
+	return nil
+}
+
+// placeholders builds the "?, ?, ?" list for an IN clause of n values. The values
+// themselves are always passed as parameters; only the count is interpolated.
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+func idArgs(ids []int) []interface{} {
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return args
+}
+
+// attachRelations loads the ingredients, images and tags for a whole page of
+// recipes in three queries instead of three per recipe. Listing 50 recipes used
+// to cost 151 round trips; it now costs 4.
+func attachRelations(recipes []models.Recipe) []models.Recipe {
+	if len(recipes) == 0 {
+		return recipes
+	}
+
+	ids := make([]int, len(recipes))
+	for i := range recipes {
+		ids[i] = recipes[i].ID
+		recipes[i].Ingredients = []models.RecipeIngredient{}
+		recipes[i].Images = []models.RecipeImage{}
+		recipes[i].Tags = []models.Tag{}
+	}
+
+	in := placeholders(len(ids))
+	args := idArgs(ids)
+
+	index := make(map[int]*models.Recipe, len(recipes))
+	for i := range recipes {
+		index[recipes[i].ID] = &recipes[i]
+	}
+
+	if rows, err := DB.Query(`
+		SELECT ri.recipe_id, ri.ingredient_id, i.name, ri.unit, ri.quantity
+		FROM recipe_ingredients ri
+		JOIN ingredients i ON ri.ingredient_id = i.id
+		WHERE ri.recipe_id IN (`+in+`)
+		ORDER BY i.name
+	`, args...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var recipeID int
+			var ingredient models.RecipeIngredient
+			if err := rows.Scan(&recipeID, &ingredient.IngredientID, &ingredient.Name, &ingredient.Unit, &ingredient.Quantity); err != nil {
+				continue
+			}
+			if recipe, ok := index[recipeID]; ok {
+				recipe.Ingredients = append(recipe.Ingredients, ingredient)
+			}
+		}
+	} else {
+		log.Printf("Error loading recipe ingredients: %v", err)
+	}
+
+	if rows, err := DB.Query(`
+		SELECT id, recipe_id, filename, caption, display_order
+		FROM recipe_images
+		WHERE recipe_id IN (`+in+`)
+		ORDER BY display_order ASC, id ASC
+	`, args...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var image models.RecipeImage
+			if err := rows.Scan(&image.ID, &image.RecipeID, &image.Filename, &image.Caption, &image.Order); err != nil {
+				continue
+			}
+			if recipe, ok := index[image.RecipeID]; ok {
+				recipe.Images = append(recipe.Images, image)
+			}
+		}
+	} else {
+		log.Printf("Error loading recipe images: %v", err)
+	}
+
+	if rows, err := DB.Query(`
+		SELECT rt.recipe_id, t.id, t.name, t.color
+		FROM recipe_tags rt
+		JOIN tags t ON rt.tag_id = t.id
+		WHERE rt.recipe_id IN (`+in+`)
+		ORDER BY t.name
+	`, args...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var recipeID int
+			var tag models.Tag
+			if err := rows.Scan(&recipeID, &tag.ID, &tag.Name, &tag.Color); err != nil {
+				continue
+			}
+			if recipe, ok := index[recipeID]; ok {
+				recipe.Tags = append(recipe.Tags, tag)
+			}
+		}
+	} else {
+		log.Printf("Error loading recipe tags: %v", err)
+	}
+
+	return recipes
 }
 
 // Database query functions
@@ -652,7 +1141,7 @@ func GetAllRecipes() ([]models.Recipe, error) {
 	}
 	defer rows.Close()
 
-	var recipes []models.Recipe
+	recipes := []models.Recipe{}
 	for rows.Next() {
 		var recipe models.Recipe
 		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
@@ -662,35 +1151,10 @@ func GetAllRecipes() ([]models.Recipe, error) {
 			continue
 		}
 
-		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
-		recipe.Images = GetRecipeImages(recipe.ID)
-		recipe.Tags = GetRecipeTags(recipe.ID)
 		recipes = append(recipes, recipe)
 	}
 
-	return recipes, nil
-}
-
-func GetRecipeByID(id int) (*models.Recipe, error) {
-	var recipe models.Recipe
-	err := DB.QueryRow(`
-		SELECT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
-		FROM recipes r
-		JOIN users u ON r.created_by = u.id
-		WHERE r.id = ?
-	`, id).Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
-		&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.CreatedBy,
-		&recipe.CreatedAt, &recipe.AuthorName)
-
-	if err != nil {
-		return nil, err
-	}
-
-	recipe.Ingredients = GetRecipeIngredients(recipe.ID)
-	recipe.Images = GetRecipeImages(recipe.ID)
-	recipe.Tags = GetRecipeTags(recipe.ID)
-	return &recipe, nil
+	return attachRelations(recipes), nil
 }
 
 // Secure recipe search
@@ -707,7 +1171,7 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 	}
 	defer rows.Close()
 
-	var recipes []models.Recipe
+	recipes := []models.Recipe{}
 	seenRecipes := make(map[int]bool)
 
 	for rows.Next() {
@@ -723,32 +1187,40 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 			continue
 		}
 
-		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
-		recipe.Images = GetRecipeImages(recipe.ID)
-		recipe.Tags = GetRecipeTags(recipe.ID)
 		recipes = append(recipes, recipe)
 		seenRecipes[recipe.ID] = true
 	}
 
-	return recipes, nil
+	return attachRelations(recipes), nil
 }
 
 // Secure ingredient creation
-func CreateIngredientSecure(name string) error {
-	// Validate ingredient name
+// CreateIngredientSecure returns the new row so the handler can answer 201 with
+// the created resource instead of echoing back the name it was given.
+func CreateIngredientSecure(name string) (*models.Ingredient, error) {
 	if validation := utils.ValidateIngredientName(name); !validation.Valid {
-		return fmt.Errorf("invalid ingredient name: %s", validation.Message)
+		return nil, fmt.Errorf("invalid ingredient name: %s", validation.Message)
 	}
 
-	_, err := stmtCreateIngredient.Exec(name)
-	return err
+	result, err := stmtCreateIngredient.Exec(name)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.Ingredient{ID: int(id), Name: name}, nil
 }
 
 // Secure tag creation
-func CreateTagSecure(name, color string) error {
-	// Validate tag name
+// CreateTagSecure returns the new row, including the colour it settled on when
+// the caller sent none or sent something unusable.
+func CreateTagSecure(name, color string) (*models.Tag, error) {
 	if validation := utils.ValidateTagName(name); !validation.Valid {
-		return fmt.Errorf("invalid tag name: %s", validation.Message)
+		return nil, fmt.Errorf("invalid tag name: %s", validation.Message)
 	}
 
 	// Basic color validation
@@ -756,8 +1228,17 @@ func CreateTagSecure(name, color string) error {
 		color = "#ff6b6b"
 	}
 
-	_, err := stmtCreateTag.Exec(name, color)
-	return err
+	result, err := stmtCreateTag.Exec(name, color)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.Tag{ID: int(id), Name: name, Color: color}, nil
 }
 
 // Secure recipe deletion (with ownership check)
@@ -791,7 +1272,7 @@ func DeleteIngredientSecure(ingredientID int) error {
 
 	// Check if ingredient is used in any recipes
 	var recipeCount int
-	err := DB.QueryRow("SELECT COUNT(*) FROM recipe_ingredients WHERE ingredient_id = ?", ingredientID).Scan(&recipeCount)
+	err := DB.QueryRow("SELECT COUNT(DISTINCT recipe_id) FROM recipe_ingredients WHERE ingredient_id = ?", ingredientID).Scan(&recipeCount)
 	if err != nil {
 		return err
 	}
@@ -802,6 +1283,119 @@ func DeleteIngredientSecure(ingredientID int) error {
 
 	_, err = stmtDeleteIngredient.Exec(ingredientID)
 	return err
+}
+
+// IngredientUsage reports how many distinct recipes use this ingredient, plus a
+// few of their titles for the error message. The handler used to recount this
+// itself with a plain COUNT(*) over recipe_ingredients, which counted a recipe
+// once per row - a recipe listing butter in grams and in tablespoons was
+// reported as two recipes, and its title appeared twice in the list.
+func IngredientUsage(ingredientID int) (int, []string, error) {
+	if !utils.IsValidID(ingredientID) {
+		return 0, nil, fmt.Errorf("invalid ingredient ID")
+	}
+
+	var count int
+	err := DB.QueryRow("SELECT COUNT(DISTINCT recipe_id) FROM recipe_ingredients WHERE ingredient_id = ?", ingredientID).Scan(&count)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	if count == 0 {
+		return 0, nil, nil
+	}
+
+	rows, err := DB.Query(`
+		SELECT DISTINCT r.title
+		FROM recipes r
+		JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+		WHERE ri.ingredient_id = ?
+		ORDER BY r.title
+		LIMIT 3
+	`, ingredientID)
+	if err != nil {
+		return count, nil, nil
+	}
+	defer rows.Close()
+
+	titles := []string{}
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err == nil {
+			titles = append(titles, title)
+		}
+	}
+	return count, titles, nil
+}
+
+// TagUsageByOthers reports how many recipes belonging to somebody other than
+// userID carry this tag, plus a few of their titles for the error message.
+func TagUsageByOthers(tagID, userID int) (int, []string, error) {
+	if !utils.IsValidID(tagID) || !utils.IsValidID(userID) {
+		return 0, nil, fmt.Errorf("invalid tag or user ID")
+	}
+
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM recipe_tags rt
+		JOIN recipes r ON rt.recipe_id = r.id
+		WHERE rt.tag_id = ? AND r.created_by != ?
+	`, tagID, userID).Scan(&count)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	if count == 0 {
+		return 0, nil, nil
+	}
+
+	rows, err := DB.Query(`
+		SELECT r.title
+		FROM recipe_tags rt
+		JOIN recipes r ON rt.recipe_id = r.id
+		WHERE rt.tag_id = ? AND r.created_by != ?
+		ORDER BY r.title
+		LIMIT 3
+	`, tagID, userID)
+	if err != nil {
+		return count, nil, nil
+	}
+	defer rows.Close()
+
+	titles := []string{}
+	for rows.Next() {
+		var title string
+		if err := rows.Scan(&title); err == nil {
+			titles = append(titles, title)
+		}
+	}
+
+	return count, titles, nil
+}
+
+// DeleteTagSecure removes a tag. Deleting a tag cascades to recipe_tags and so
+// detaches it from every recipe that used it, including other users' recipes.
+func DeleteTagSecure(tagID int) error {
+	if !utils.IsValidID(tagID) {
+		return fmt.Errorf("invalid tag ID")
+	}
+
+	result, err := stmtDeleteTag.Exec(tagID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 // Get recipe by ID with ownership validation
@@ -855,7 +1449,7 @@ func GetRecipesByTag(tagID int) ([]models.Recipe, error) {
 	}
 	defer rows.Close()
 
-	var recipes []models.Recipe
+	recipes := []models.Recipe{}
 	for rows.Next() {
 		var recipe models.Recipe
 		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
@@ -865,13 +1459,10 @@ func GetRecipesByTag(tagID int) ([]models.Recipe, error) {
 			continue
 		}
 
-		recipe.Ingredients = GetRecipeIngredients(recipe.ID)
-		recipe.Images = GetRecipeImages(recipe.ID)
-		recipe.Tags = GetRecipeTags(recipe.ID)
 		recipes = append(recipes, recipe)
 	}
 
-	return recipes, nil
+	return attachRelations(recipes), nil
 }
 
 func GetAllIngredients() ([]models.Ingredient, error) {
@@ -881,7 +1472,7 @@ func GetAllIngredients() ([]models.Ingredient, error) {
 	}
 	defer rows.Close()
 
-	var ingredients []models.Ingredient
+	ingredients := []models.Ingredient{}
 	for rows.Next() {
 		var ingredient models.Ingredient
 		err := rows.Scan(&ingredient.ID, &ingredient.Name)
@@ -901,7 +1492,7 @@ func GetAllTags() ([]models.Tag, error) {
 	}
 	defer rows.Close()
 
-	var tags []models.Tag
+	tags := []models.Tag{}
 	for rows.Next() {
 		var tag models.Tag
 		err := rows.Scan(&tag.ID, &tag.Name, &tag.Color)
@@ -928,7 +1519,7 @@ func GetRecipeIngredients(recipeID int) []models.RecipeIngredient {
 	}
 	defer rows.Close()
 
-	var ingredients []models.RecipeIngredient
+	ingredients := []models.RecipeIngredient{}
 	for rows.Next() {
 		var ing models.RecipeIngredient
 		err := rows.Scan(&ing.IngredientID, &ing.Name, &ing.Unit, &ing.Quantity)
@@ -955,7 +1546,7 @@ func GetRecipeTags(recipeID int) []models.Tag {
 	}
 	defer rows.Close()
 
-	var tags []models.Tag
+	tags := []models.Tag{}
 	for rows.Next() {
 		var tag models.Tag
 		err := rows.Scan(&tag.ID, &tag.Name, &tag.Color)
@@ -981,7 +1572,7 @@ func GetRecipeImages(recipeID int) []models.RecipeImage {
 	}
 	defer rows.Close()
 
-	var images []models.RecipeImage
+	images := []models.RecipeImage{}
 	for rows.Next() {
 		var img models.RecipeImage
 		err := rows.Scan(&img.ID, &img.RecipeID, &img.Filename, &img.Caption, &img.Order)

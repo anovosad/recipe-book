@@ -1,8 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
+	"database/sql"
+	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -61,7 +63,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_REGISTER", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -117,7 +119,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_LOGIN", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -168,15 +170,11 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	auth.SetAuthCookie(w, tokenString)
 	utils.LogSecurityEvent("LOGIN_SUCCESS", clientIP, req.Username)
 
-	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"message": "Login successful",
-		"data": map[string]interface{}{
-			"user": map[string]interface{}{
-				"id":       user.ID,
-				"username": user.Username,
-				"email":    user.Email,
-			},
+	sendJSONSuccess(w, "Login successful", map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
 		},
 	})
 }
@@ -202,7 +200,7 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
+	sendJSONData(w, http.StatusOK, map[string]interface{}{
 		"id":       user.ID,
 		"username": user.Username,
 		"email":    user.Email,
@@ -211,14 +209,29 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 
 // Recipe Handlers (JSON only)
 
+// GetRecipesHandler serves the recipe collection and its two filtered forms,
+// GET /api/recipes?q=... and GET /api/recipes?tag=... The filters are dispatched
+// here rather than through mux Queries() routes: a failing Queries matcher
+// clears mux's record of a method mismatch, so registering one on this path
+// turned every 405 into a 404.
 func GetRecipesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("q") != "" {
+		SearchHandler(w, r)
+		return
+	}
+
+	if r.URL.Query().Get("tag") != "" {
+		GetRecipesByTagHandler(w, r)
+		return
+	}
+
 	recipes, err := database.GetAllRecipes()
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch recipes")
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, recipes)
+	sendJSONData(w, http.StatusOK, recipes)
 }
 
 func GetRecipeHandler(w http.ResponseWriter, r *http.Request) {
@@ -241,7 +254,36 @@ func GetRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, recipe)
+	sendJSONData(w, http.StatusOK, recipe)
+}
+
+// GetRecipesByTagHandler backs both GET /api/recipes?tag={id} - the filtered
+// collection, which is the form to prefer - and the older GET
+// /api/recipes/tag/{id} the frontend already calls.
+func GetRecipesByTagHandler(w http.ResponseWriter, r *http.Request) {
+	idStr, exists := mux.Vars(r)["id"]
+	if !exists {
+		idStr = r.URL.Query().Get("tag")
+		exists = idStr != ""
+	}
+	if !exists {
+		sendJSONError(w, http.StatusBadRequest, "Tag ID is required")
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil || !utils.IsValidID(id) {
+		sendJSONError(w, http.StatusBadRequest, "Invalid tag ID")
+		return
+	}
+
+	recipes, err := database.GetRecipesByTag(id)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch recipes")
+		return
+	}
+
+	sendJSONData(w, http.StatusOK, recipes)
 }
 
 func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +296,7 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var req RecipeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_RECIPE", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -263,19 +305,28 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	// Validate and create recipe
 	recipeID, err := createRecipeFromRequest(req, user.ID, clientIP)
 	if err != nil {
-		sendJSONError(w, http.StatusBadRequest, err.Error())
+		// Only messages produced by validating the caller's input are echoed back;
+		// a driver error must not reach the client.
+		if database.IsValidationError(err) {
+			sendJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSONError(w, http.StatusInternalServerError, "Failed to create recipe")
 		return
 	}
 
 	utils.LogSecurityEvent("RECIPE_CREATED", clientIP, fmt.Sprintf("RecipeID:%d, Title:%s, User:%s", recipeID, req.Title, user.Username))
 
-	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
-		"success": true,
-		"message": "Recipe created successfully",
-		"data": map[string]interface{}{
-			"recipe_id": recipeID,
-		},
-	})
+	// 201 with the created resource and its Location, so a client does not have
+	// to issue a second GET to learn what it just made.
+	created, err := database.GetRecipeByIDSecure(int(recipeID))
+	if err != nil {
+		// The row exists - only reading it back failed. Report the creation.
+		sendJSONCreated(w, fmt.Sprintf("/api/recipes/%d", recipeID), "Recipe created successfully", nil)
+		return
+	}
+
+	sendJSONCreated(w, fmt.Sprintf("/api/recipes/%d", recipeID), "Recipe created successfully", created)
 }
 
 func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
@@ -301,16 +352,26 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify ownership
+	// A recipe that does not exist is a 404; one that exists and belongs to
+	// somebody else is a 403. Answering 403 for both made "I mistyped the id"
+	// indistinguishable from "this is not yours".
 	owns, err := database.UserOwnsRecipe(id, user.ID)
-	if err != nil || !owns {
+	if errors.Is(err, sql.ErrNoRows) {
+		sendJSONError(w, http.StatusNotFound, "Recipe not found")
+		return
+	}
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update recipe")
+		return
+	}
+	if !owns {
 		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_UPDATE_API", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
 		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
 	var req RecipeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_RECIPE_UPDATE", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -319,12 +380,28 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	// Update recipe
 	err = updateRecipeFromRequest(req, id, user.ID, clientIP)
 	if err != nil {
-		sendJSONError(w, http.StatusBadRequest, err.Error())
+		if errors.Is(err, database.ErrRecipeNotFound) {
+			sendJSONError(w, http.StatusNotFound, "Recipe not found")
+			return
+		}
+		if database.IsValidationError(err) {
+			sendJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSONError(w, http.StatusInternalServerError, "Failed to update recipe")
 		return
 	}
 
 	utils.LogSecurityEvent("RECIPE_UPDATED_API", clientIP, fmt.Sprintf("RecipeID:%d, User:%s", id, user.Username))
-	sendJSONSuccess(w, "Recipe updated successfully", nil)
+
+	// PUT replaces the resource, so the new representation is what the caller
+	// gets back - the same shape GET returns.
+	updated, err := database.GetRecipeByIDSecure(id)
+	if err != nil {
+		sendJSONSuccess(w, "Recipe updated successfully", nil)
+		return
+	}
+	sendJSONSuccess(w, "Recipe updated successfully", updated)
 }
 
 func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
@@ -350,19 +427,32 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Separate "no such recipe" from "not yours" before deleting, so the caller
+	// gets 404 or 403 rather than one status covering both.
+	owns, err := database.UserOwnsRecipe(id, user.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		sendJSONError(w, http.StatusNotFound, "Recipe not found")
+		return
+	}
+	if err != nil {
+		utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
+		return
+	}
+	if !owns {
+		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_DELETE", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
+		sendJSONError(w, http.StatusForbidden, "Access denied")
+		return
+	}
+
 	// Get recipe images for cleanup (before deletion)
 	images := database.GetRecipeImages(id)
 
-	// Use secure delete function
-	err = database.DeleteRecipeSecure(id, user.ID)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_DELETE", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
-			sendJSONError(w, http.StatusForbidden, "Recipe not found or access denied")
-		} else {
-			utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
-			sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
-		}
+	// DeleteRecipeSecure still carries the ownership clause in its WHERE, which
+	// is what makes the check above advisory rather than the security boundary.
+	if err := database.DeleteRecipeSecure(id, user.ID); err != nil {
+		utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
 		return
 	}
 
@@ -412,8 +502,11 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse multipart form with 32MB max memory
-	err = r.ParseMultipartForm(32 << 20)
+	// Cap the whole request before parsing it; ParseMultipartForm's argument only
+	// bounds how much is kept in memory, not how much the client may send.
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
+
+	err = r.ParseMultipartForm(10 << 20)
 	if err != nil {
 		utils.LogSecurityEvent("MULTIPART_PARSE_ERROR", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid form data")
@@ -427,30 +520,38 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var uploadedImages []map[string]interface{}
+	uploadedImages := []map[string]interface{}{}
+	skipped := 0
+
+	// Numbering has to continue after the images the recipe already has. Starting
+	// from the loop index again collided with the existing rows and scrambled the
+	// gallery order on every upload after the first.
+	nextOrder := 0
+	var maxOrder int
+	if err := database.DB.QueryRow(
+		"SELECT COALESCE(MAX(display_order), -1) FROM recipe_images WHERE recipe_id = ?", recipeID,
+	).Scan(&maxOrder); err == nil {
+		nextOrder = maxOrder + 1
+	}
 
 	for i, fileHeader := range files {
-		if i >= 5 { // Limit to 5 images
-			break
+		if len(uploadedImages) >= maxImagesPerUpload {
+			skipped++
+			continue
 		}
 
 		// Validate file
 		validation := utils.ValidateFileUpload(fileHeader.Filename, fileHeader.Size)
 		if !validation.Valid {
 			utils.LogSecurityEvent("INVALID_FILE_UPLOAD", clientIP, validation.Message)
+			skipped++
 			continue
 		}
 
-		file, err := fileHeader.Open()
-		if err != nil {
-			continue
-		}
-		defer file.Close()
-
-		// Save file
-		filename, err := utils.SaveUploadedFile(file, fileHeader)
+		filename, err := saveUploadedImage(fileHeader)
 		if err != nil {
 			utils.LogSecurityEvent("FILE_SAVE_ERROR", clientIP, err.Error())
+			skipped++
 			continue
 		}
 
@@ -466,11 +567,13 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 		// Save to database
 		result, err := database.DB.Exec(
 			"INSERT INTO recipe_images (recipe_id, filename, caption, display_order) VALUES (?, ?, ?, ?)",
-			recipeID, filename, caption, i,
+			recipeID, filename, caption, nextOrder,
 		)
 		if err != nil {
 			// Remove file if database insert fails
 			os.Remove(filepath.Join("uploads", filename))
+			utils.LogSecurityEvent("IMAGE_DB_INSERT_ERROR", clientIP, err.Error())
+			skipped++
 			continue
 		}
 
@@ -479,19 +582,27 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 			"id":       imageID,
 			"filename": filename,
 			"caption":  caption,
-			"order":    i,
+			"order":    nextOrder,
 		})
+		nextOrder++
+	}
+
+	if len(uploadedImages) == 0 {
+		sendJSONError(w, http.StatusBadRequest, "No images could be saved. Check the file type (JPG, PNG, GIF, WebP) and size (max 5MB).")
+		return
 	}
 
 	utils.LogSecurityEvent("IMAGES_UPLOADED", clientIP,
 		fmt.Sprintf("RecipeID:%d, ImagesCount:%d, User:%s", recipeID, len(uploadedImages), user.Username))
 
-	sendJSONResponse(w, http.StatusCreated, map[string]interface{}{
-		"success": true,
-		"message": fmt.Sprintf("Uploaded %d image(s)", len(uploadedImages)),
-		"data": map[string]interface{}{
-			"images": uploadedImages,
-		},
+	message := fmt.Sprintf("Uploaded %d image(s)", len(uploadedImages))
+	if skipped > 0 {
+		message += fmt.Sprintf(", skipped %d", skipped)
+	}
+
+	sendJSONCreated(w, fmt.Sprintf("/api/recipes/%d", recipeID), message, map[string]interface{}{
+		"images":  uploadedImages,
+		"skipped": skipped,
 	})
 }
 
@@ -568,7 +679,7 @@ func GetIngredientsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, ingredients)
+	sendJSONData(w, http.StatusOK, ingredients)
 }
 
 func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
@@ -581,7 +692,7 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var req IngredientRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_INGREDIENT", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -598,7 +709,7 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use secure database function
-	err = database.CreateIngredientSecure(req.Name)
+	ingredient, err := database.CreateIngredientSecure(req.Name)
 	if err != nil {
 		utils.LogSecurityEvent("INGREDIENT_INSERT_ERROR", clientIP, fmt.Sprintf("Name: %s, Error: %v", req.Name, err))
 		sendJSONError(w, http.StatusConflict, "Ingredient already exists or database error")
@@ -606,9 +717,7 @@ func CreateIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.LogSecurityEvent("INGREDIENT_CREATED", clientIP, fmt.Sprintf("Name: %s, User: %s", req.Name, user.Username))
-	sendJSONSuccess(w, "Ingredient created successfully", map[string]interface{}{
-		"name": req.Name,
-	})
+	sendJSONCreated(w, fmt.Sprintf("/api/ingredients/%d", ingredient.ID), "Ingredient created successfully", ingredient)
 }
 
 func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
@@ -638,55 +747,41 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 	var ingredientName string
 	database.DB.QueryRow("SELECT name FROM ingredients WHERE id = ?", id).Scan(&ingredientName)
 
-	// Use secure delete function
-	err = database.DeleteIngredientSecure(id)
+	// Ask the database layer about usage instead of deleting first and then
+	// reverse-engineering the refusal out of the error text.
+	recipeCount, recipeNames, err := database.IngredientUsage(id)
 	if err != nil {
-		if strings.Contains(err.Error(), "used in") {
-			// Parse the error to get recipe count and names
-			var recipeCount int
-			database.DB.QueryRow("SELECT COUNT(*) FROM recipe_ingredients WHERE ingredient_id = ?", id).Scan(&recipeCount)
+		utils.LogSecurityEvent("INGREDIENT_DELETE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete ingredient")
+		return
+	}
 
-			rows, err := database.DB.Query(`
-				SELECT r.title 
-				FROM recipes r 
-				JOIN recipe_ingredients ri ON r.id = ri.recipe_id 
-				WHERE ri.ingredient_id = ? 
-				LIMIT 3
-			`, id)
-
-			var recipeNames []string
-			if err == nil {
-				defer rows.Close()
-				for rows.Next() {
-					var title string
-					if rows.Scan(&title) == nil {
-						recipeNames = append(recipeNames, title)
-					}
-				}
+	if recipeCount > 0 {
+		errorMsg := fmt.Sprintf("Cannot delete %s because it is used in %d recipe(s)", ingredientName, recipeCount)
+		if len(recipeNames) > 0 {
+			errorMsg += fmt.Sprintf(": %s", strings.Join(recipeNames, ", "))
+			if recipeCount > len(recipeNames) {
+				errorMsg += fmt.Sprintf(" and %d more", recipeCount-len(recipeNames))
 			}
-
-			errorMsg := fmt.Sprintf("Cannot delete %s because it is used in %d recipe(s)", ingredientName, recipeCount)
-			if len(recipeNames) > 0 {
-				errorMsg += fmt.Sprintf(": %s", strings.Join(recipeNames, ", "))
-				if recipeCount > len(recipeNames) {
-					errorMsg += fmt.Sprintf(" and %d more", recipeCount-len(recipeNames))
-				}
-			}
-
-			utils.LogSecurityEvent("INGREDIENT_DELETE_BLOCKED", clientIP, fmt.Sprintf("Name: %s, UsedIn: %d recipes", ingredientName, recipeCount))
-
-			sendJSONResponse(w, http.StatusConflict, map[string]interface{}{
-				"error":         errorMsg,
-				"usedInRecipes": true,
-				"recipeCount":   recipeCount,
-				"recipeNames":   recipeNames,
-			})
-			return
-		} else {
-			utils.LogSecurityEvent("INGREDIENT_DELETE_ERROR", clientIP, err.Error())
-			sendJSONError(w, http.StatusInternalServerError, "Failed to delete ingredient")
-			return
 		}
+
+		utils.LogSecurityEvent("INGREDIENT_DELETE_BLOCKED", clientIP, fmt.Sprintf("Name: %s, UsedIn: %d recipes", ingredientName, recipeCount))
+
+		sendJSONErrorDetails(w, http.StatusConflict, errorMsg, map[string]interface{}{
+			"usedInRecipes": true,
+			"recipeCount":   recipeCount,
+			"recipeNames":   recipeNames,
+		})
+		return
+	}
+
+	// DeleteIngredientSecure repeats the usage check inside the database layer;
+	// it is what stops a recipe created between the check above and the delete
+	// from losing its ingredient.
+	if err := database.DeleteIngredientSecure(id); err != nil {
+		utils.LogSecurityEvent("INGREDIENT_DELETE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete ingredient")
+		return
 	}
 
 	utils.LogSecurityEvent("INGREDIENT_DELETED", clientIP, fmt.Sprintf("ID: %d, Name: %s, User: %s", id, ingredientName, user.Username))
@@ -702,7 +797,7 @@ func GetTagsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendJSONResponse(w, http.StatusOK, tags)
+	sendJSONData(w, http.StatusOK, tags)
 }
 
 func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
@@ -715,7 +810,7 @@ func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 
 	var req TagRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		utils.LogSecurityEvent("INVALID_JSON_TAG", clientIP, err.Error())
 		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
 		return
@@ -742,18 +837,15 @@ func CreateTagHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use secure database function
-	err = database.CreateTagSecure(req.Name, req.Color)
+	tag, err := database.CreateTagSecure(req.Name, req.Color)
 	if err != nil {
 		utils.LogSecurityEvent("TAG_INSERT_ERROR", clientIP, fmt.Sprintf("Name: %s, Error: %v", req.Name, err))
 		sendJSONError(w, http.StatusConflict, "Tag already exists or database error")
 		return
 	}
 
-	utils.LogSecurityEvent("TAG_CREATED", clientIP, fmt.Sprintf("Name: %s, Color: %s, User: %s", req.Name, req.Color, user.Username))
-	sendJSONSuccess(w, "Tag created successfully", map[string]interface{}{
-		"name":  req.Name,
-		"color": req.Color,
-	})
+	utils.LogSecurityEvent("TAG_CREATED", clientIP, fmt.Sprintf("Name: %s, Color: %s, User: %s", tag.Name, tag.Color, user.Username))
+	sendJSONCreated(w, fmt.Sprintf("/api/tags/%d", tag.ID), "Tag created successfully", tag)
 }
 
 func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
@@ -783,9 +875,43 @@ func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 	var tagName string
 	database.DB.QueryRow("SELECT name FROM tags WHERE id = ?", id).Scan(&tagName)
 
-	// Delete tag (cascading deletes will handle recipe_tags)
-	_, err = database.DB.Exec("DELETE FROM tags WHERE id = ?", id)
+	// Tags are global and deleting one cascades to every recipe that carries it.
+	// Any logged-in user could therefore strip a tag off strangers' recipes, so
+	// the delete is refused once somebody else's recipe depends on it.
+	otherCount, otherTitles, err := database.TagUsageByOthers(id, user.ID)
 	if err != nil {
+		utils.LogSecurityEvent("TAG_USAGE_CHECK_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Failed to delete tag")
+		return
+	}
+
+	if otherCount > 0 {
+		errorMsg := fmt.Sprintf("Cannot delete %s because it is used by %d recipe(s) from other users", tagName, otherCount)
+		if len(otherTitles) > 0 {
+			errorMsg += fmt.Sprintf(": %s", strings.Join(otherTitles, ", "))
+			if otherCount > len(otherTitles) {
+				errorMsg += fmt.Sprintf(" and %d more", otherCount-len(otherTitles))
+			}
+		}
+
+		utils.LogSecurityEvent("TAG_DELETE_BLOCKED", clientIP,
+			fmt.Sprintf("TagID: %d, Name: %s, UsedByOthers: %d, User: %s", id, tagName, otherCount, user.Username))
+
+		sendJSONErrorDetails(w, http.StatusConflict, errorMsg, map[string]interface{}{
+			"usedInRecipes": true,
+			"recipeCount":   otherCount,
+			"recipeNames":   otherTitles,
+		})
+		return
+	}
+
+	// Delete tag (cascading deletes will handle recipe_tags)
+	err = database.DeleteTagSecure(id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			sendJSONError(w, http.StatusNotFound, "Tag not found")
+			return
+		}
 		utils.LogSecurityEvent("TAG_DELETE_ERROR", clientIP, fmt.Sprintf("ID: %d, Error: %v", id, err))
 		sendJSONError(w, http.StatusInternalServerError, "Failed to delete tag")
 		return
@@ -824,206 +950,71 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	utils.LogSecurityEvent("SEARCH_PERFORMED", clientIP, fmt.Sprintf("Query: %s, Results: %d", query, len(recipes)))
 
-	sendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"query":   query,
-		"results": recipes,
-		"count":   len(recipes),
+	sendJSONMeta(w, http.StatusOK, recipes, map[string]interface{}{
+		"query": query,
+		"count": len(recipes),
 	})
 }
 
 // Helper functions
 
-func createRecipeFromRequest(req RecipeRequest, userID int, clientIP string) (int64, error) {
-	// Trim whitespace
-	req.Title = strings.TrimSpace(req.Title)
-	req.Description = strings.TrimSpace(req.Description)
-	req.Instructions = strings.TrimSpace(req.Instructions)
-	req.ServingUnit = strings.TrimSpace(req.ServingUnit)
-
-	// Comprehensive validation
-	titleValidation := utils.ValidateRecipeTitle(req.Title)
-	descValidation := utils.ValidateRecipeDescription(req.Description)
-	instrValidation := utils.ValidateRecipeInstructions(req.Instructions)
-	servingUnitValidation := utils.ValidateServingUnit(req.ServingUnit)
-
-	if !titleValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, titleValidation.Message)
-		return 0, fmt.Errorf(titleValidation.Message)
+func recipeInputFromRequest(req RecipeRequest) (database.RecipeInput, []database.RecipeIngredientInput) {
+	in := database.RecipeInput{
+		Title:        strings.TrimSpace(req.Title),
+		Description:  strings.TrimSpace(req.Description),
+		Instructions: strings.TrimSpace(req.Instructions),
+		PrepTime:     req.PrepTime,
+		CookTime:     req.CookTime,
+		Servings:     req.Servings,
+		ServingUnit:  strings.TrimSpace(req.ServingUnit),
 	}
 
-	if !descValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, descValidation.Message)
-		return 0, fmt.Errorf(descValidation.Message)
-	}
-
-	if !instrValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, instrValidation.Message)
-		return 0, fmt.Errorf(instrValidation.Message)
-	}
-
-	if !servingUnitValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_VALIDATION_FAILED", clientIP, servingUnitValidation.Message)
-		return 0, fmt.Errorf(servingUnitValidation.Message)
-	}
-
-	// Validate numeric inputs
-	prepTimeValidation := utils.ValidateNumericInput(req.PrepTime, 0, 1440, "Prep time")
-	cookTimeValidation := utils.ValidateNumericInput(req.CookTime, 0, 1440, "Cook time")
-	servingsValidation := utils.ValidateNumericInput(req.Servings, 1, 100, "Servings")
-
-	if !prepTimeValidation.Valid {
-		return 0, fmt.Errorf(prepTimeValidation.Message)
-	}
-
-	if !cookTimeValidation.Valid {
-		return 0, fmt.Errorf(cookTimeValidation.Message)
-	}
-
-	if !servingsValidation.Valid {
-		return 0, fmt.Errorf(servingsValidation.Message)
-	}
-
-	if req.ServingUnit == "" {
-		req.ServingUnit = "people"
-	}
-
-	// Use secure database function
-	recipeID, err := database.CreateRecipeSecure(req.Title, req.Description, req.Instructions, req.PrepTime, req.CookTime, req.Servings, req.ServingUnit, userID)
-	if err != nil {
-		utils.LogSecurityEvent("RECIPE_INSERT_ERROR", clientIP, err.Error())
-		return 0, fmt.Errorf("error creating recipe")
-	}
-
-	// Handle tags with validation
-	for _, tagID := range req.Tags {
-		if utils.IsValidID(tagID) {
-			database.DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID)
-		} else {
-			utils.LogSecurityEvent("INVALID_TAG_ID", clientIP, fmt.Sprintf("%d", tagID))
-		}
-	}
-
-	// Handle ingredients with thorough validation
+	ingredients := make([]database.RecipeIngredientInput, 0, len(req.Ingredients))
 	for _, ingredient := range req.Ingredients {
-		if !utils.IsValidID(ingredient.IngredientID) {
-			utils.LogSecurityEvent("INVALID_INGREDIENT_ID", clientIP, fmt.Sprintf("%d", ingredient.IngredientID))
-			continue
-		}
+		ingredients = append(ingredients, database.RecipeIngredientInput{
+			IngredientID: ingredient.IngredientID,
+			Quantity:     ingredient.Quantity,
+			Unit:         strings.TrimSpace(ingredient.Unit),
+		})
+	}
 
-		// Validate ingredient data
-		quantityValidation := utils.ValidateQuantity(ingredient.Quantity)
-		unitValidation := utils.ValidateUnit(ingredient.Unit)
+	return in, ingredients
+}
 
-		if !quantityValidation.Valid || !unitValidation.Valid {
-			utils.LogSecurityEvent("INGREDIENT_VALIDATION_FAILED", clientIP,
-				fmt.Sprintf("ID:%d, Qty:%f, Unit:%s", ingredient.IngredientID, ingredient.Quantity, ingredient.Unit))
-			continue
-		}
+// createRecipeFromRequest validates and persists a recipe. Validation and the
+// tag/ingredient inserts all happen inside one transaction in the database layer,
+// so a rejected ingredient fails the whole request instead of being dropped.
+func createRecipeFromRequest(req RecipeRequest, userID int, clientIP string) (int64, error) {
+	in, ingredients := recipeInputFromRequest(req)
 
-		database.DB.Exec("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
-			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit)
+	recipeID, err := database.CreateRecipeTx(in, userID, req.Tags, ingredients)
+	if err != nil {
+		utils.LogSecurityEvent("RECIPE_CREATE_FAILED", clientIP, err.Error())
+		return 0, err
 	}
 
 	return recipeID, nil
 }
 
 func updateRecipeFromRequest(req RecipeRequest, recipeID, userID int, clientIP string) error {
-	// Trim whitespace
-	req.Title = strings.TrimSpace(req.Title)
-	req.Description = strings.TrimSpace(req.Description)
-	req.Instructions = strings.TrimSpace(req.Instructions)
-	req.ServingUnit = strings.TrimSpace(req.ServingUnit)
+	in, ingredients := recipeInputFromRequest(req)
 
-	// Comprehensive validation (same as create)
-	titleValidation := utils.ValidateRecipeTitle(req.Title)
-	descValidation := utils.ValidateRecipeDescription(req.Description)
-	instrValidation := utils.ValidateRecipeInstructions(req.Instructions)
-	servingUnitValidation := utils.ValidateServingUnit(req.ServingUnit)
-
-	if !titleValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, titleValidation.Message)
-		return fmt.Errorf(titleValidation.Message)
-	}
-
-	if !descValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, descValidation.Message)
-		return fmt.Errorf(descValidation.Message)
-	}
-
-	if !instrValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, instrValidation.Message)
-		return fmt.Errorf(instrValidation.Message)
-	}
-
-	if !servingUnitValidation.Valid {
-		utils.LogSecurityEvent("RECIPE_EDIT_VALIDATION_FAILED", clientIP, servingUnitValidation.Message)
-		return fmt.Errorf(servingUnitValidation.Message)
-	}
-
-	// Validate numeric inputs
-	prepTimeValidation := utils.ValidateNumericInput(req.PrepTime, 0, 1440, "Prep time")
-	cookTimeValidation := utils.ValidateNumericInput(req.CookTime, 0, 1440, "Cook time")
-	servingsValidation := utils.ValidateNumericInput(req.Servings, 1, 100, "Servings")
-
-	if !prepTimeValidation.Valid {
-		return fmt.Errorf(prepTimeValidation.Message)
-	}
-
-	if !cookTimeValidation.Valid {
-		return fmt.Errorf(cookTimeValidation.Message)
-	}
-
-	if !servingsValidation.Valid {
-		return fmt.Errorf(servingsValidation.Message)
-	}
-
-	if req.ServingUnit == "" {
-		req.ServingUnit = "people"
-	}
-
-	// Update recipe using prepared statement
-	_, err := database.DB.Exec(`
-		UPDATE recipes SET title = ?, description = ?, instructions = ?, 
-		prep_time = ?, cook_time = ?, servings = ?, serving_unit = ? WHERE id = ? AND created_by = ?
-	`, req.Title, req.Description, req.Instructions, req.PrepTime, req.CookTime, req.Servings, req.ServingUnit, recipeID, userID)
-
-	if err != nil {
-		utils.LogSecurityEvent("RECIPE_UPDATE_ERROR", clientIP, err.Error())
-		return fmt.Errorf("error updating recipe")
-	}
-
-	// Update tags with validation
-	database.DB.Exec("DELETE FROM recipe_tags WHERE recipe_id = ?", recipeID)
-	for _, tagID := range req.Tags {
-		if utils.IsValidID(tagID) {
-			database.DB.Exec("INSERT INTO recipe_tags (recipe_id, tag_id) VALUES (?, ?)", recipeID, tagID)
-		} else {
-			utils.LogSecurityEvent("INVALID_TAG_ID_EDIT", clientIP, fmt.Sprintf("%d", tagID))
-		}
-	}
-
-	// Update ingredients with validation
-	database.DB.Exec("DELETE FROM recipe_ingredients WHERE recipe_id = ?", recipeID)
-	for _, ingredient := range req.Ingredients {
-		if !utils.IsValidID(ingredient.IngredientID) {
-			utils.LogSecurityEvent("INVALID_INGREDIENT_ID_EDIT", clientIP, fmt.Sprintf("%d", ingredient.IngredientID))
-			continue
-		}
-
-		// Validate ingredient data
-		quantityValidation := utils.ValidateQuantity(ingredient.Quantity)
-		unitValidation := utils.ValidateUnit(ingredient.Unit)
-
-		if !quantityValidation.Valid || !unitValidation.Valid {
-			utils.LogSecurityEvent("INGREDIENT_VALIDATION_FAILED_EDIT", clientIP,
-				fmt.Sprintf("ID:%d, Qty:%f, Unit:%s", ingredient.IngredientID, ingredient.Quantity, ingredient.Unit))
-			continue
-		}
-
-		database.DB.Exec("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
-			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit)
+	if err := database.UpdateRecipeTx(recipeID, userID, in, req.Tags, ingredients); err != nil {
+		utils.LogSecurityEvent("RECIPE_UPDATE_FAILED", clientIP, err.Error())
+		return err
 	}
 
 	return nil
+}
+
+// saveUploadedImage opens, stores and closes one uploaded file. It exists so the
+// close happens per file rather than piling up deferred closes inside the loop.
+func saveUploadedImage(fileHeader *multipart.FileHeader) (string, error) {
+	file, err := fileHeader.Open()
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	return utils.SaveUploadedFile(file, fileHeader)
 }

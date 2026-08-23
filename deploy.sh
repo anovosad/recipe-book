@@ -310,8 +310,9 @@ deploy() {
     
     echo -e "${GREEN}✅ Deployment completed successfully!${NC}"
     echo -e "${BLUE}📋 Access your Recipe Book at: https://${DOMAIN}${NC}"
-    echo -e "${BLUE}📋 Default admin credentials: admin / admin123${NC}"
-    echo -e "${YELLOW}⚠️  Remember to change the default admin password!${NC}"
+    echo -e "${BLUE}📋 Admin user: admin${NC}"
+    echo -e "${BLUE}📋 Password: from ADMIN_PASSWORD, or generated and logged once${NC}"
+    echo -e "${BLUE}   on the first run - find it with: ./deploy.sh logs | grep '🔑'${NC}"
 }
 
 # Check service health
@@ -442,10 +443,12 @@ security_audit() {
     find . -name ".env" -not -perm 600 -exec chmod 600 {} \;
     find nginx/ssl -name "*.pem" -not -perm 600 -exec chmod 600 {} \;
     
-    # Check for default passwords
-    echo -e "${YELLOW}📋 Checking for default passwords...${NC}"
-    if grep -q "admin123" .env 2>/dev/null; then
-        echo -e "${YELLOW}⚠️  Default admin password detected - please change it${NC}"
+    # Check that the JWT secret is present and not a placeholder
+    echo -e "${YELLOW}📋 Checking secrets...${NC}"
+    if ! grep -q "^JWT_SECRET=." .env 2>/dev/null; then
+        echo -e "${RED}❌ JWT_SECRET is missing from .env - the app will refuse to start${NC}"
+    elif grep -qi "^JWT_SECRET=\(change\|secret\|your-\)" .env 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  JWT_SECRET looks like a placeholder - regenerate it${NC}"
     fi
     
     # Check SSL certificate expiry

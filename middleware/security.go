@@ -2,17 +2,19 @@
 package middleware
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"recipe-book/apiresp"
 
 	"golang.org/x/time/rate"
 )
@@ -34,12 +36,44 @@ type SecurityManager struct {
 	// Blocked IPs
 	blockedIPs map[string]time.Time
 
+	// Rate-limit violations per IP, counted towards a block
+	violations map[string]*violationRecord
+
 	// Mutex for thread safety
 	mu sync.RWMutex
 
 	// Cleanup ticker
 	cleanup *time.Ticker
+
+	// The limits this manager was built with. It used to be accepted by the
+	// constructor, defaulted when nil and then thrown away, while every limiter
+	// took a config argument of its own - so a manager could be built with one
+	// set of limits and enforce another.
+	config *RateLimitConfig
 }
+
+// violationRecord counts how often one IP has tripped a rate limit recently.
+type violationRecord struct {
+	count     int
+	firstSeen time.Time
+	lastCount time.Time
+}
+
+const (
+	// violationsBeforeBlock is how many rate-limit violations inside
+	// violationWindow earn an IP a temporary block.
+	violationsBeforeBlock = 5
+	violationWindow       = 5 * time.Minute
+
+	// violationCooldown collapses one burst of denied requests into a single
+	// counted violation. The general limiter runs on every matched route, so a
+	// page load that overruns the burst produces a dozen denials in the same
+	// second; counting each of them would turn one overload into an instant
+	// block. A block should mean "kept hammering after being told to slow down",
+	// which is what a gap of at least this long between counted violations
+	// expresses.
+	violationCooldown = 30 * time.Second
+)
 
 // Configuration for rate limits
 type RateLimitConfig struct {
@@ -102,11 +136,13 @@ func NewSecurityManager(config *RateLimitConfig) *SecurityManager {
 	}
 
 	sm := &SecurityManager{
+		config:           config,
 		loginLimiters:    make(map[string]*RateLimiter),
 		registerLimiters: make(map[string]*RateLimiter),
 		searchLimiters:   make(map[string]*RateLimiter),
 		generalLimiters:  make(map[string]*RateLimiter),
 		blockedIPs:       make(map[string]time.Time),
+		violations:       make(map[string]*violationRecord),
 		cleanup:          time.NewTicker(5 * time.Minute), // Cleanup every 5 minutes
 	}
 
@@ -116,29 +152,130 @@ func NewSecurityManager(config *RateLimitConfig) *SecurityManager {
 	return sm
 }
 
-// Get client IP address
+// trustedProxies lists the peers that are allowed to speak for a client through
+// X-Forwarded-For / X-Real-IP.
+//
+// Those headers are just request headers: anyone can send them. Honouring them
+// unconditionally - which is what this used to do, taking the leftmost entry -
+// made every rate limit here optional, because a client could put a fresh
+// address in X-Forwarded-For on each request and get a fresh bucket, and could
+// equally put someone else's address there to have that address blocked.
+// nginx appends to any header the client sent ($proxy_add_x_forwarded_for), so
+// the leftmost entry is attacker-controlled even in the intended deployment.
+//
+// TRUSTED_PROXIES overrides the list (comma-separated IPs or CIDRs); the value
+// "none" turns header handling off entirely and always uses the peer address.
+// The default covers loopback and the private ranges a reverse proxy on a Docker
+// network lands in - note that docker-compose.yml uses 172.32.0.0/16, which is
+// outside RFC1918, so it sets TRUSTED_PROXIES explicitly.
+var trustedProxies = loadTrustedProxies()
+
+func loadTrustedProxies() []*net.IPNet {
+	raw := strings.TrimSpace(os.Getenv("TRUSTED_PROXIES"))
+	if strings.EqualFold(raw, "none") {
+		return nil
+	}
+	if raw == "" {
+		raw = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+	}
+
+	var nets []*net.IPNet
+	for _, entry := range strings.Split(raw, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if !strings.Contains(entry, "/") {
+			ip := net.ParseIP(entry)
+			if ip == nil {
+				// Not an address - allow a hostname, which is how a proxy on a
+				// container network is usually named (TRUSTED_PROXIES=nginx).
+				resolved, err := net.LookupIP(entry)
+				if err != nil || len(resolved) == 0 {
+					log.Printf("⚠️  Ignoring TRUSTED_PROXIES entry %q: not an IP, CIDR or resolvable host (%v)", entry, err)
+					continue
+				}
+				for _, r := range resolved {
+					nets = append(nets, hostNetwork(r))
+				}
+				continue
+			}
+			nets = append(nets, hostNetwork(ip))
+			continue
+		}
+		_, network, err := net.ParseCIDR(entry)
+		if err != nil {
+			log.Printf("⚠️  Ignoring invalid TRUSTED_PROXIES entry %q: %v", entry, err)
+			continue
+		}
+		nets = append(nets, network)
+	}
+	return nets
+}
+
+// hostNetwork turns a single address into the /32 or /128 that contains only it.
+func hostNetwork(ip net.IP) *net.IPNet {
+	if v4 := ip.To4(); v4 != nil {
+		return &net.IPNet{IP: v4, Mask: net.CIDRMask(32, 32)}
+	}
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}
+}
+
+func isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, network := range trustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// getClientIP resolves the address a rate limit should be keyed on.
 func (sm *SecurityManager) getClientIP(r *http.Request) string {
-	// Check X-Forwarded-For header (for reverse proxies)
-	xff := r.Header.Get("X-Forwarded-For")
-	if xff != "" {
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+	return ClientIP(r)
+}
+
+// ClientIP is the exported form, so the handlers log the same address the rate
+// limiter counts rather than keeping their own copy of this logic.
+func ClientIP(r *http.Request) string {
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		peer = host
+	}
+
+	// Only a trusted peer gets to override the address it connected from.
+	if !isTrustedProxy(net.ParseIP(peer)) {
+		return peer
+	}
+
+	// Walk X-Forwarded-For from the right, skipping the proxies we trust: the
+	// rightmost entry was written by our own proxy, everything further left was
+	// written by whoever came before it and stops being trustworthy as soon as
+	// one entry is not a proxy of ours.
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		for i := len(parts) - 1; i >= 0; i-- {
+			ip := net.ParseIP(strings.TrimSpace(parts[i]))
+			if ip == nil {
+				break
+			}
+			if isTrustedProxy(ip) {
+				continue
+			}
+			return ip.String()
 		}
 	}
 
-	// Check X-Real-IP header
-	xri := r.Header.Get("X-Real-IP")
-	if xri != "" {
-		return strings.TrimSpace(xri)
+	if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		if ip := net.ParseIP(xri); ip != nil {
+			return ip.String()
+		}
 	}
 
-	// Fall back to RemoteAddr
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
+	return peer
 }
 
 // Check if IP is blocked
@@ -228,12 +365,19 @@ func (sm *SecurityManager) cleanupRoutine() {
 			}
 		}
 
+		// Forget violation counters whose window has passed
+		for ip, record := range sm.violations {
+			if now.Sub(record.firstSeen) > violationWindow {
+				delete(sm.violations, ip)
+			}
+		}
+
 		sm.mu.Unlock()
 	}
 }
 
 // Middleware for general rate limiting
-func (sm *SecurityManager) GeneralRateLimit(config *RateLimitConfig) func(http.Handler) http.Handler {
+func (sm *SecurityManager) GeneralRateLimit() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := sm.getClientIP(r)
@@ -241,20 +385,21 @@ func (sm *SecurityManager) GeneralRateLimit(config *RateLimitConfig) func(http.H
 			// Check if IP is blocked
 			if blocked, remaining := sm.isBlocked(ip); blocked {
 				w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
-				http.Error(w, fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), http.StatusTooManyRequests)
+				respondError(w, r, http.StatusTooManyRequests,
+					fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), retryDetails(remaining))
 				log.Printf("⚠️  Blocked request from %s (blocked for %v more)", ip, remaining.Round(time.Second))
 				return
 			}
 
 			// Get rate limiter for this IP
-			limiter := sm.getRateLimiter(sm.generalLimiters, ip, config.GeneralRate, config.GeneralBurst)
+			limiter := sm.getRateLimiter(sm.generalLimiters, ip, sm.config.GeneralRate, sm.config.GeneralBurst)
 
 			if !limiter.Allow() {
 				// Count violations and potentially block IP
-				sm.handleRateViolation(ip, "general", config.BlockDuration)
+				sm.handleRateViolation(ip, "general", sm.config.BlockDuration)
 
 				w.Header().Set("Retry-After", "60")
-				http.Error(w, "Rate limit exceeded. Please slow down.", http.StatusTooManyRequests)
+				respondError(w, r, http.StatusTooManyRequests, "Rate limit exceeded. Please slow down.", retryDetails(time.Minute))
 				return
 			}
 
@@ -264,7 +409,7 @@ func (sm *SecurityManager) GeneralRateLimit(config *RateLimitConfig) func(http.H
 }
 
 // Middleware for login rate limiting
-func (sm *SecurityManager) LoginRateLimit(config *RateLimitConfig) func(http.Handler) http.Handler {
+func (sm *SecurityManager) LoginRateLimit() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := sm.getClientIP(r)
@@ -272,18 +417,18 @@ func (sm *SecurityManager) LoginRateLimit(config *RateLimitConfig) func(http.Han
 			// Check if IP is blocked
 			if blocked, remaining := sm.isBlocked(ip); blocked {
 				w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
-				sm.respondWithError(w, fmt.Sprintf("Too many login attempts. Try again in %v", remaining.Round(time.Second)), "login.html")
+				respondError(w, r, http.StatusTooManyRequests, fmt.Sprintf("Too many login attempts. Try again in %v", remaining.Round(time.Second)), retryDetails(remaining))
 				return
 			}
 
 			// Get rate limiter for this IP
-			limiter := sm.getRateLimiter(sm.loginLimiters, ip, config.LoginRate, config.LoginBurst)
+			limiter := sm.getRateLimiter(sm.loginLimiters, ip, sm.config.LoginRate, sm.config.LoginBurst)
 
 			if !limiter.Allow() {
 				// Block IP after repeated login violations
-				sm.blockIP(ip, config.BlockDuration)
+				sm.blockIP(ip, sm.config.BlockDuration)
 
-				sm.respondWithError(w, "Too many login attempts. Your IP has been temporarily blocked.", "login.html")
+				respondError(w, r, http.StatusTooManyRequests, "Too many login attempts. Your IP has been temporarily blocked.", retryDetails(sm.config.BlockDuration))
 				log.Printf("🚨 Blocked IP %s due to excessive login attempts", ip)
 				return
 			}
@@ -294,7 +439,7 @@ func (sm *SecurityManager) LoginRateLimit(config *RateLimitConfig) func(http.Han
 }
 
 // Middleware for registration rate limiting
-func (sm *SecurityManager) RegisterRateLimit(config *RateLimitConfig) func(http.Handler) http.Handler {
+func (sm *SecurityManager) RegisterRateLimit() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := sm.getClientIP(r)
@@ -302,16 +447,16 @@ func (sm *SecurityManager) RegisterRateLimit(config *RateLimitConfig) func(http.
 			// Check if IP is blocked
 			if blocked, remaining := sm.isBlocked(ip); blocked {
 				w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
-				sm.respondWithError(w, fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), "register.html")
+				respondError(w, r, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), retryDetails(remaining))
 				return
 			}
 
 			// Get rate limiter for this IP
-			limiter := sm.getRateLimiter(sm.registerLimiters, ip, config.RegisterRate, config.RegisterBurst)
+			limiter := sm.getRateLimiter(sm.registerLimiters, ip, sm.config.RegisterRate, sm.config.RegisterBurst)
 
 			if !limiter.Allow() {
-				sm.respondWithError(w, "Too many registration attempts. Please try again later.", "register.html")
-				log.Printf("⚠️  Registration rate limit exceeded for IP %s", ip)
+				sm.handleRateViolation(ip, "register", sm.config.BlockDuration)
+				respondError(w, r, http.StatusTooManyRequests, "Too many registration attempts. Please try again later.", retryDetails(sm.config.RegisterWindow))
 				return
 			}
 
@@ -321,20 +466,26 @@ func (sm *SecurityManager) RegisterRateLimit(config *RateLimitConfig) func(http.
 }
 
 // Middleware for search rate limiting
-func (sm *SecurityManager) SearchRateLimit(config *RateLimitConfig) func(http.Handler) http.Handler {
+func (sm *SecurityManager) SearchRateLimit() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ip := sm.getClientIP(r)
 
+			// Check if IP is blocked
+			if blocked, remaining := sm.isBlocked(ip); blocked {
+				w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
+				respondError(w, r, http.StatusTooManyRequests,
+					fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), retryDetails(remaining))
+				return
+			}
+
 			// Get rate limiter for this IP
-			limiter := sm.getRateLimiter(sm.searchLimiters, ip, config.SearchRate, config.SearchBurst)
+			limiter := sm.getRateLimiter(sm.searchLimiters, ip, sm.config.SearchRate, sm.config.SearchBurst)
 
 			if !limiter.Allow() {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]string{
-					"error": "Search rate limit exceeded. Please slow down.",
-				})
+				sm.handleRateViolation(ip, "search", sm.config.BlockDuration)
+
+				respondError(w, r, http.StatusTooManyRequests, "Search rate limit exceeded. Please slow down.", retryDetails(time.Minute))
 				log.Printf("⚠️  Search rate limit exceeded for IP %s", ip)
 				return
 			}
@@ -344,18 +495,82 @@ func (sm *SecurityManager) SearchRateLimit(config *RateLimitConfig) func(http.Ha
 	}
 }
 
-// Handle rate limit violations
-func (sm *SecurityManager) handleRateViolation(ip, violationType string, blockDuration time.Duration) {
-	// For now, we just log the violation
-	// In a more sophisticated system, you might track violation counts
-	log.Printf("⚠️  Rate limit violation from IP %s for %s requests", ip, violationType)
+// SearchRateLimitIfQuery applies the search limiter only to requests that
+// actually run a search (GET /api/recipes?q=...). Listing the collection keeps
+// the general limit, which is looser - the list is loaded on nearly every page
+// view, while a search is the expensive one worth throttling harder.
+//
+// It exists as a wrapper rather than a mux Queries() route because a failing
+// Queries matcher clears mux's record of a method mismatch, which silently turns
+// every 405 on that path into a 404.
+func (sm *SecurityManager) SearchRateLimitIfQuery() func(http.Handler) http.Handler {
+	limited := sm.SearchRateLimit()
+	return func(next http.Handler) http.Handler {
+		guarded := limited(next)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Query().Get("q") != "" {
+				guarded.ServeHTTP(w, r)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
-// Respond with error for HTML pages
-func (sm *SecurityManager) respondWithError(w http.ResponseWriter, message, template string) {
-	// For now, just return a simple error
-	// In your actual implementation, you might want to render the template with the error
-	http.Error(w, message, http.StatusTooManyRequests)
+// handleRateViolation counts a rate-limit violation and blocks the IP once it has
+// tripped the limit violationsBeforeBlock times inside violationWindow. This used
+// to only log, so the "automatic blocking after repeated violations" the README
+// advertises never actually happened for general, search or register traffic.
+func (sm *SecurityManager) handleRateViolation(ip, violationType string, blockDuration time.Duration) {
+	now := time.Now()
+
+	sm.mu.Lock()
+	record, exists := sm.violations[ip]
+	if !exists || now.Sub(record.firstSeen) > violationWindow {
+		record = &violationRecord{firstSeen: now}
+		sm.violations[ip] = record
+	} else if now.Sub(record.lastCount) < violationCooldown {
+		// Same burst as the violation already counted - the request is still
+		// refused by the caller, it just does not move the IP closer to a block.
+		sm.mu.Unlock()
+		return
+	}
+	record.count++
+	record.lastCount = now
+	count := record.count
+
+	shouldBlock := count >= violationsBeforeBlock
+	if shouldBlock {
+		// Start the count over so the block is not immediately re-triggered.
+		delete(sm.violations, ip)
+	}
+	sm.mu.Unlock()
+
+	log.Printf("⚠️  Rate limit violation %d/%d from IP %s for %s requests",
+		count, violationsBeforeBlock, ip, violationType)
+
+	// blockIP takes the same mutex, so it has to be called after the unlock.
+	if shouldBlock {
+		sm.blockIP(ip, blockDuration)
+	}
+}
+
+// respondError answers a request the middleware refused before it reached a
+// handler. An /api request gets the same envelope every handler produces - the
+// three rate limiters used to disagree about it, one writing plain text and one
+// writing a bare {"error": ...} - while a rate-limited page load, which is not a
+// JSON client, still gets plain text.
+func respondError(w http.ResponseWriter, r *http.Request, statusCode int, message string, details interface{}) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		apiresp.ErrorDetails(w, statusCode, message, details)
+		return
+	}
+	http.Error(w, message, statusCode)
+}
+
+// retryDetails tells a client how long a block still has to run.
+func retryDetails(remaining time.Duration) map[string]interface{} {
+	return map[string]interface{}{"retryAfterSeconds": int(remaining.Seconds())}
 }
 
 // Security headers middleware
@@ -454,7 +669,7 @@ func SQLInjectionProtection() func(http.Handler) http.Handler {
 				for _, value := range values {
 					if containsSQLInjection(strings.ToLower(value), sqlPatterns) {
 						log.Printf("🚨 SQL Injection attempt detected from IP %s: %s", r.RemoteAddr, value)
-						http.Error(w, "Invalid request", http.StatusBadRequest)
+						respondError(w, r, http.StatusBadRequest, "Invalid request", nil)
 						return
 					}
 				}
@@ -467,7 +682,7 @@ func SQLInjectionProtection() func(http.Handler) http.Handler {
 					for _, value := range values {
 						if containsSQLInjection(strings.ToLower(value), sqlPatterns) {
 							log.Printf("🚨 SQL Injection attempt detected from IP %s: %s", r.RemoteAddr, value)
-							http.Error(w, "Invalid request", http.StatusBadRequest)
+							respondError(w, r, http.StatusBadRequest, "Invalid request", nil)
 							return
 						}
 					}
@@ -490,68 +705,87 @@ func containsSQLInjection(input string, patterns []string) bool {
 	return false
 }
 
-// Context key for security info
-type contextKey string
-
-const SecurityContextKey contextKey = "security"
-
-// Security info to pass in context
-type SecurityInfo struct {
-	ClientIP    string
-	UserAgent   string
-	RequestTime time.Time
-}
-
-// Add security info to context
-func (sm *SecurityManager) AddSecurityContext() func(http.Handler) http.Handler {
+// Recovery turns a panic in any handler into a 500 instead of letting it tear
+// down the connection, and records the stack so the cause is recoverable.
+func Recovery() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			secInfo := &SecurityInfo{
-				ClientIP:    sm.getClientIP(r),
-				UserAgent:   r.UserAgent(),
-				RequestTime: time.Now(),
-			}
+			defer func() {
+				rec := recover()
+				if rec == nil {
+					return
+				}
 
-			ctx := context.WithValue(r.Context(), SecurityContextKey, secInfo)
-			next.ServeHTTP(w, r.WithContext(ctx))
+				// net/http uses this sentinel to abort a response on purpose.
+				if rec == http.ErrAbortHandler {
+					panic(rec)
+				}
+
+				log.Printf("🔥 PANIC serving %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+				respondError(w, r, http.StatusInternalServerError, "Internal server error", nil)
+			}()
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }
 
+// allowedOrigins returns the origins permitted to send credentialed requests.
+// ALLOWED_ORIGINS (comma separated) overrides the development defaults.
+func allowedOrigins() map[string]bool {
+	origins := map[string]bool{}
+
+	if configured := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS")); configured != "" {
+		for _, origin := range strings.Split(configured, ",") {
+			if origin = strings.TrimSpace(origin); origin != "" {
+				origins[origin] = true
+			}
+		}
+		return origins
+	}
+
+	if os.Getenv("ENVIRONMENT") == "production" {
+		// Same-origin requests carry no Origin header and need no CORS headers,
+		// so an empty set is the safe default for a production deployment.
+		return origins
+	}
+
+	for _, origin := range []string{
+		"http://localhost:3000", // Vite dev server
+		"http://localhost:5173", // Alternative Vite port
+		"http://localhost:8080", // Same origin
+		"http://127.0.0.1:8080", // Same origin alternative
+	} {
+		origins[origin] = true
+	}
+
+	return origins
+}
+
 // CORS middleware for frontend-backend communication
 func CORSMiddleware() func(http.Handler) http.Handler {
+	origins := allowedOrigins()
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Allow requests from frontend development server and production
 			origin := r.Header.Get("Origin")
-			allowedOrigins := []string{
-				"http://localhost:3000", // Vite dev server
-				"http://localhost:5173", // Alternative Vite port
-				"http://localhost:8080", // Same origin
-				"http://127.0.0.1:8080", // Same origin alternative
-			}
 
-			// Check if origin is allowed
-			for _, allowedOrigin := range allowedOrigins {
-				if origin == allowedOrigin {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-					break
-				}
-			}
+			// The response varies by Origin, so caches must not share it.
+			w.Header().Add("Vary", "Origin")
 
-			// If no origin header (same-origin requests), allow
-			if origin == "" {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
+			// A wildcard origin is invalid together with credentials - browsers
+			// reject the pair - and same-origin requests need no CORS headers.
+			if origin != "" && origins[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+				w.Header().Set("Access-Control-Max-Age", "86400")
 			}
-
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Max-Age", "86400")
 
 			// Handle preflight requests
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusOK)
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 

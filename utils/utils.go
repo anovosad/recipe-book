@@ -5,68 +5,29 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"html/template"
 	"io"
-	"log"
 	"mime/multipart"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 )
 
-var Templates *template.Template
+// maxUploadFileBytes is the per-file upload ceiling, mirrored by
+// ValidateFileUpload so both the check and the copy agree on the limit.
+const maxUploadFileBytes = 5 * 1024 * 1024
 
-func LoadTemplates() {
-	funcMap := template.FuncMap{
-		"nl2br": func(text string) template.HTML {
-			trimmed := strings.TrimSpace(text)
-			return template.HTML(strings.ReplaceAll(template.HTMLEscapeString(trimmed), "\n", "<br>"))
-		},
-		"trim": func(text string) string {
-			return strings.TrimSpace(text)
-		},
-		"add": func(a, b int) int {
-			return a + b
-		},
-		"sub": func(a, b int) int {
-			return a - b
-		},
-		"lt": func(a, b int) bool {
-			return a < b
-		},
-		"gt": func(a, b int) bool {
-			return a > b
-		},
-		"eq": func(a, b int) bool {
-			return a == b
-		},
-		"streq": func(a, b string) bool {
-			return a == b
-		},
-		"len": func(slice interface{}) int {
-			s := reflect.ValueOf(slice)
-			return s.Len()
-		},
-	}
-
-	var err error
-	Templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
-	if err != nil {
-		log.Fatal("Failed to parse templates:", err)
-		return
-	}
-
-	for _, tmpl := range Templates.Templates() {
-		fmt.Printf("📄 Loaded template: %s\n", tmpl.Name())
-	}
-}
-
-func GenerateUniqueFilename(originalFilename string) string {
+// GenerateUniqueFilename builds a random storage name, keeping the original
+// extension. The randomness is what keeps two uploads from landing on the same
+// path, so a failed read has to be an error rather than an all-zero name.
+func GenerateUniqueFilename(originalFilename string) (string, error) {
 	ext := filepath.Ext(originalFilename)
+
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes) + ext
+	if _, err := rand.Read(bytes); err != nil {
+		return "", fmt.Errorf("could not generate a filename: %w", err)
+	}
+
+	return hex.EncodeToString(bytes) + ext, nil
 }
 
 func IsValidImageFile(filename string) bool {
@@ -85,21 +46,26 @@ func SaveUploadedFile(file multipart.File, header *multipart.FileHeader) (string
 		return "", fmt.Errorf("invalid file type")
 	}
 
-	if header.Size > 5*1024*1024 {
+	if header.Size > maxUploadFileBytes {
 		return "", fmt.Errorf("file too large")
 	}
 
-	filename := GenerateUniqueFilename(header.Filename)
-	filepath := filepath.Join("uploads", filename)
+	filename, err := GenerateUniqueFilename(header.Filename)
+	if err != nil {
+		return "", err
+	}
 
-	dst, err := os.Create(filepath)
+	destination := filepath.Join("uploads", filename)
+
+	dst, err := os.Create(destination)
 	if err != nil {
 		return "", err
 	}
 	defer dst.Close()
 
-	_, err = io.Copy(dst, file)
-	if err != nil {
+	// Bound the copy by the declared size instead of trusting the stream to end.
+	if _, err := io.Copy(dst, io.LimitReader(file, maxUploadFileBytes)); err != nil {
+		os.Remove(destination)
 		return "", err
 	}
 

@@ -60,6 +60,6 @@ ENV DB_PATH=/app/data/recipes.db \
 
 # Health check with reduced frequency
 HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=2 \
-    CMD ["/app/main", "-health-check"] || exit 1
+    CMD ["/app/main", "--health-check"]
 
 ENTRYPOINT ["/app/main"]

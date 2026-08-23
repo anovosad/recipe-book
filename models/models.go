@@ -55,62 +55,7 @@ type Recipe struct {
 	AuthorName   string             `json:"author_name"`
 }
 
-type Claims struct {
-	UserID   int    `json:"user_id"`
-	Username string `json:"username"`
-}
-
-type PageData struct {
-	User        *User
-	IsLoggedIn  bool
-	Recipe      *Recipe
-	Recipes     []Recipe
-	Ingredients []Ingredient
-	Tags        []Tag
-	Title       string
-	Message     string
-	Error       string
-	SearchQuery string
-	ActiveTagID int
-	ActiveTag   *Tag
-}
-
-// Common serving units
-var ServingUnits = []struct {
-	Value string
-	Label string
-}{
-	{"people", "People"},
-	{"servings", "Servings"},
-	{"portions", "Portions"},
-	{"pieces", "Pieces"},
-	{"slices", "Slices"},
-	{"cups", "Cups"},
-	{"bowls", "Bowls"},
-	{"glasses", "Glasses"},
-	{"liters", "Liters"},
-	{"ml", "Milliliters"},
-	{"kg", "Kilograms"},
-	{"g", "Grams"},
-	{"dozen", "Dozen"},
-	{"cookies", "Cookies"},
-	{"muffins", "Muffins"},
-	{"pancakes", "Pancakes"},
-}
-
-type RecipeItem int
-
-const (
-	RecipeItemIngredients RecipeItem = iota
-	RecipeItemInstructions
-	RecipeItemImages
-	RecipeItemTags
-	RecipeItemAuthor
-	RecipeItemCreatedAt
-	RecipeItemServings
-	RecipeItemPrepTime
-	RecipeItemCookTime
-	RecipeItemServingUnit
-	RecipeItemTitle
-	RecipeItemDescription
-)
+// The types above are the whole domain. A duplicate Claims struct, the PageData
+// struct, the ServingUnits table and the RecipeItem enum used to live here too;
+// they served the server-rendered template UI that this app no longer has. JWT
+// claims are defined in package auth, which is the only place that needs them.

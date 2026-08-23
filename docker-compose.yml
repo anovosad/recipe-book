@@ -33,12 +33,20 @@ services:
     environment:
       - DB_PATH=/app/data/recipes.db
       - ENVIRONMENT=production
-      - TRUSTED_PROXIES=nginx
+      # deploy.sh generates JWT_SECRET into .env; without this line it never
+      # reached the container and the app fell back to a key baked into the source.
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set (run ./deploy.sh setup)}
+      # Only a peer inside this list may set the client address through
+      # X-Forwarded-For / X-Real-IP. This is the compose network subnet
+      # below, which is outside RFC1918 and so is not trusted by default.
+      - TRUSTED_PROXIES=172.32.0.0/16
     restart: unless-stopped
     networks:
       - recipe-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/search?q=test"]
+      # /health is the purpose-built endpoint: it needs no database and does not
+      # consume the search rate limiter the way the old /api/search probe did.
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"compress/gzip"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -40,52 +39,119 @@ func CacheHeaders() func(http.Handler) http.Handler {
 	}
 }
 
-// CompressionMiddleware adds gzip compression
+// CompressionMiddleware adds gzip compression.
+//
+// The decision to compress has to happen once the handler has set its response
+// headers, not before: the previous version announced Content-Encoding: gzip up
+// front and picked its exceptions from the *request* Content-Type, so a static
+// file served by http.ServeFile kept the Content-Length of the uncompressed body
+// while the body itself was compressed - a malformed response.
 func CompressionMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Check if client accepts gzip
-			if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			// Announce the negotiation to caches whether or not we end up compressing.
+			w.Header().Add("Vary", "Accept-Encoding")
+
+			if !acceptsGzip(r) {
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			// Don't compress images or already compressed content
-			contentType := r.Header.Get("Content-Type")
-			if strings.Contains(contentType, "image/") ||
-				strings.Contains(contentType, "video/") ||
-				strings.Contains(r.URL.Path, ".jpg") ||
-				strings.Contains(r.URL.Path, ".jpeg") ||
-				strings.Contains(r.URL.Path, ".png") ||
-				strings.Contains(r.URL.Path, ".gif") ||
-				strings.Contains(r.URL.Path, ".webp") {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			w.Header().Set("Content-Encoding", "gzip")
-			w.Header().Set("Vary", "Accept-Encoding")
 
 			gz := gzip.NewWriter(w)
-			defer gz.Close()
+			gzw := &gzipResponseWriter{ResponseWriter: w, gz: gz}
 
-			gzw := &gzipResponseWriter{
-				ResponseWriter: w,
-				Writer:         gz,
-			}
+			// Closing an unused gzip.Writer would emit an empty gzip stream into a
+			// response we decided not to compress, so only close when it was used.
+			defer func() {
+				if gzw.useGzip {
+					gz.Close()
+				}
+			}()
 
 			next.ServeHTTP(gzw, r)
 		})
 	}
 }
 
+func acceptsGzip(r *http.Request) bool {
+	for _, encoding := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		if strings.EqualFold(strings.TrimSpace(strings.Split(encoding, ";")[0]), "gzip") {
+			return true
+		}
+	}
+	return false
+}
+
+// isCompressible reports whether a response body is worth compressing. Images,
+// video and archives are already compressed and only lose time here.
+func isCompressible(contentType string) bool {
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+
+	if strings.HasPrefix(mediaType, "text/") {
+		return true
+	}
+
+	switch mediaType {
+	case "application/json", "application/javascript", "application/x-javascript",
+		"application/xml", "application/xhtml+xml", "application/wasm",
+		"application/manifest+json", "image/svg+xml":
+		return true
+	}
+
+	return false
+}
+
 type gzipResponseWriter struct {
 	http.ResponseWriter
-	io.Writer
+	gz          *gzip.Writer
+	wroteHeader bool
+	useGzip     bool
+}
+
+func (w *gzipResponseWriter) WriteHeader(code int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+
+	// 1xx, 204 and 304 carry no body, and a handler that already set its own
+	// Content-Encoding is left alone.
+	hasBody := code >= 200 && code != http.StatusNoContent && code != http.StatusNotModified
+	if hasBody && w.Header().Get("Content-Encoding") == "" && isCompressible(w.Header().Get("Content-Type")) {
+		w.useGzip = true
+		w.Header().Set("Content-Encoding", "gzip")
+		// The handler's Content-Length describes the uncompressed body.
+		w.Header().Del("Content-Length")
+		w.Header().Del("Accept-Ranges")
+	}
+
+	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
+	if !w.wroteHeader {
+		// Mirror net/http: without an explicit Content-Type the type is sniffed
+		// from the first bytes, and our decision must see the same value.
+		if w.Header().Get("Content-Type") == "" {
+			w.Header().Set("Content-Type", http.DetectContentType(b))
+		}
+		w.WriteHeader(http.StatusOK)
+	}
+
+	if w.useGzip {
+		return w.gz.Write(b)
+	}
+
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *gzipResponseWriter) Flush() {
+	if w.useGzip {
+		w.gz.Flush()
+	}
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // LightRateLimitConfig returns a lighter rate limiting config for faster startup
