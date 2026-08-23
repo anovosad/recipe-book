@@ -30,6 +30,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 type RecipeRequest struct {
 	Title        string                `json:"title"`
 	Description  string                `json:"description"`
@@ -177,6 +182,61 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			"email":    user.Email,
 		},
 	})
+}
+
+// ChangePasswordHandler replaces the signed-in user's password. It carries the
+// login rate limit rather than the general one, because the body contains a
+// password guess like a login does.
+func ChangePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	clientIP := getClientIP(r)
+
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "You must be logged in to change your password")
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		utils.LogSecurityEvent("INVALID_JSON_PASSWORD_CHANGE", clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
+		return
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		sendJSONError(w, http.StatusBadRequest, "Both the current and the new password are required")
+		return
+	}
+
+	switch err := database.ChangeUserPassword(user.ID, req.CurrentPassword, req.NewPassword); {
+	case err == nil:
+		// fall through to the success path
+	case errors.Is(err, database.ErrWrongPassword):
+		utils.LogSecurityEvent("PASSWORD_CHANGE_WRONG_PASSWORD", clientIP, user.Username)
+		sendJSONError(w, http.StatusUnauthorized, "The current password is incorrect")
+		return
+	case database.IsValidationError(err):
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	default:
+		utils.LogSecurityEvent("PASSWORD_CHANGE_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Could not change the password")
+		return
+	}
+
+	// The change retires every token issued before it, this request's included.
+	// Reissuing keeps the user signed in here while everywhere else is logged
+	// out, which is the point of changing a password someone else may know.
+	tokenString, err := auth.CreateToken(user)
+	if err != nil {
+		utils.LogSecurityEvent("TOKEN_CREATION_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Password changed, but the session could not be renewed - please log in again")
+		return
+	}
+	auth.SetAuthCookie(w, tokenString)
+
+	utils.LogSecurityEvent("PASSWORD_CHANGED", clientIP, user.Username)
+	sendJSONSuccess(w, "Password changed. Any other sessions have been signed out.", nil)
 }
 
 func LogoutHandler(w http.ResponseWriter, r *http.Request) {

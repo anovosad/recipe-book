@@ -58,6 +58,12 @@ export interface LoginForm {
   password: string;
 }
 
+export interface ChangePasswordForm {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}
+
 export interface RegisterForm {
   username: string;
   email: string;

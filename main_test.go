@@ -46,6 +46,10 @@ func TestWrongMethodIs405WithAllow(t *testing.T) {
 		{http.MethodPatch, "/api/recipes", "GET, POST"},
 		{http.MethodPut, "/api/tags", "GET, POST"},
 		{http.MethodPost, "/api/recipes/1", "GET, PUT, DELETE"},
+		// Carries the login rate limit, but is registered on the api subrouter
+		// so that apiNotFoundHandler can still see it. Put it on one of the
+		// rate-limit subrouters instead and this case comes back 404.
+		{http.MethodGet, "/api/auth/password", "PUT"},
 	}
 
 	r := buildRouter()

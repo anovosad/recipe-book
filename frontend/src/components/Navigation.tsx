@@ -10,10 +10,12 @@ import {
   UserPlus,
   LogOut,
   Menu,
-  X
+  X,
+  KeyRound
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils';
+import ChangePasswordModal from '@/components/ChangePasswordModal';
 
 const navLinks = [
   { path: '/recipes', label: 'Recipes', icon: List },
@@ -25,6 +27,7 @@ const Navigation: React.FC = () => {
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   // Closing on navigation rather than on each link's onClick, so the menu also
   // closes when something else moves the route (a redirect, the back button).
@@ -107,6 +110,14 @@ const Navigation: React.FC = () => {
                     {user?.username}
                   </span>
                   <button
+                    onClick={() => setIsPasswordModalOpen(true)}
+                    className="rounded-full p-2 text-ink-500 transition-colors hover:bg-white/70 hover:text-brand-600"
+                    title="Change password"
+                    aria-label="Change password"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className="flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-ink-500 transition-colors hover:bg-rose-50 hover:text-rose-600"
                   >
@@ -165,6 +176,13 @@ const Navigation: React.FC = () => {
                         <span>{user?.username}</span>
                       </div>
                       <button
+                        onClick={() => { setIsMobileMenuOpen(false); setIsPasswordModalOpen(true); }}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left font-medium text-ink-500 transition-colors hover:bg-white/70 hover:text-brand-600"
+                      >
+                        <KeyRound className="h-5 w-5" />
+                        <span>Change password</span>
+                      </button>
+                      <button
                         onClick={handleLogout}
                         className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left font-medium text-rose-600 transition-colors hover:bg-rose-50"
                       >
@@ -196,6 +214,11 @@ const Navigation: React.FC = () => {
           )}
         </div>
       </nav>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </>
   );
 };

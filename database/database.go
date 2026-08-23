@@ -293,7 +293,11 @@ func createTables() {
 		username TEXT UNIQUE NOT NULL CHECK(length(username) >= 3 AND length(username) <= 30),
 		email TEXT UNIQUE NOT NULL CHECK(length(email) <= 254),
 		password TEXT NOT NULL CHECK(length(password) >= 6),
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		-- Unix seconds, not a DATETIME: this is compared against a JWT's issued-at
+		-- claim, and a stored string would have to be parsed back with an assumed
+		-- zone. 0 means never changed, which is what every existing row gets.
+		password_changed_at INTEGER NOT NULL DEFAULT 0
 	);
 	
 	CREATE TABLE IF NOT EXISTS ingredients (
@@ -369,6 +373,7 @@ func createTables() {
 
 	migrateServingUnits()
 	migrateRecipeIngredientsKey()
+	migrateUserPasswordChangedAt()
 }
 
 // migrateRecipeIngredientsKey rebuilds recipe_ingredients so its primary key is a
@@ -456,6 +461,23 @@ func migrateServingUnits() {
 			log.Printf("Error adding serving_unit column: %v", err)
 		} else {
 			fmt.Println("✅ Added serving_unit column successfully")
+		}
+	}
+}
+
+// migrateUserPasswordChangedAt adds the column that lets a password change
+// invalidate the sessions issued before it. Existing rows get 0, so no token in
+// flight is rejected by the upgrade itself.
+func migrateUserPasswordChangedAt() {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='password_changed_at'").Scan(&count)
+	if err != nil || count == 0 {
+		fmt.Println("🔄 Adding password_changed_at column to users...")
+		_, err = DB.Exec("ALTER TABLE users ADD COLUMN password_changed_at INTEGER NOT NULL DEFAULT 0")
+		if err != nil {
+			log.Printf("Error adding password_changed_at column: %v", err)
+		} else {
+			fmt.Println("✅ Added password_changed_at column successfully")
 		}
 	}
 }
@@ -810,6 +832,58 @@ func GetUserByUsernameSecure(username string) (*models.User, string, error) {
 	}
 
 	return &user, hashedPassword, nil
+}
+
+// ErrWrongPassword is returned when the current password supplied with a
+// password change does not match the stored hash.
+var ErrWrongPassword = errors.New("current password is incorrect")
+
+// ChangeUserPassword verifies the current password and replaces it. The check
+// and the write live together so no caller can rewrite a hash without proving
+// it knows the old one, and the timestamp it stamps is what retires the tokens
+// issued before the change (see auth.GetUserFromToken).
+func ChangeUserPassword(userID int, currentPassword, newPassword string) error {
+	if validation := utils.ValidatePassword(newPassword); !validation.Valid {
+		return newValidationError("%s", validation.Message)
+	}
+
+	var storedHash string
+	if err := DB.QueryRow("SELECT password FROM users WHERE id = ?", userID).Scan(&storedHash); err != nil {
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(currentPassword)); err != nil {
+		return ErrWrongPassword
+	}
+
+	// Checked after the current password, so this never becomes an oracle for
+	// what the stored password is.
+	if currentPassword == newPassword {
+		return newValidationError("The new password must be different from the current one")
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	result, err := DB.Exec(
+		"UPDATE users SET password = ?, password_changed_at = ? WHERE id = ?",
+		string(newHash), time.Now().Unix(), userID,
+	)
+	if err != nil {
+		return err
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 // ErrRecipeNotFound is returned when a recipe does not exist or is not owned by

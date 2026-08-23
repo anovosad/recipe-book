@@ -49,6 +49,13 @@ func isProduction() bool {
 type Claims struct {
 	UserID   int    `json:"user_id"`
 	Username string `json:"username"`
+	// The value of users.password_changed_at at the moment this token was
+	// minted. Changing a password bumps that column, so every token still
+	// carrying the old value stops matching and is refused. Compared for
+	// equality rather than against the issued-at time, which only has
+	// second granularity - a token minted in the same second as the change
+	// would otherwise survive it.
+	PasswordChangedAt int64 `json:"pwd_at"`
 	jwt.RegisteredClaims
 }
 
@@ -70,20 +77,40 @@ func GetUserFromToken(r *http.Request) (*models.User, error) {
 	}
 
 	var user models.User
-	err = database.DB.QueryRow("SELECT id, username, email FROM users WHERE id = ?", claims.UserID).
-		Scan(&user.ID, &user.Username, &user.Email)
+	var passwordChangedAt int64
+	err = database.DB.QueryRow("SELECT id, username, email, password_changed_at FROM users WHERE id = ?", claims.UserID).
+		Scan(&user.ID, &user.Username, &user.Email, &passwordChangedAt)
 	if err != nil {
 		return nil, err
+	}
+
+	// A token minted before the last password change is dead. Without this the
+	// tokens are stateless for their full 24 hours, so changing a password that
+	// someone else already knows would not actually lock them out - which is
+	// the one thing changing it is for. Tokens issued before this claim existed
+	// carry 0, and so does every row that has never changed its password, so
+	// the upgrade itself signs nobody out.
+	if claims.PasswordChangedAt != passwordChangedAt {
+		return nil, fmt.Errorf("token predates the current password")
 	}
 
 	return &user, nil
 }
 
 func CreateToken(user *models.User) (string, error) {
+	// Stamped into the token so GetUserFromToken can compare it against the
+	// row; see the Claims field for why this is not derived from IssuedAt.
+	var passwordChangedAt int64
+	if err := database.DB.QueryRow("SELECT password_changed_at FROM users WHERE id = ?", user.ID).
+		Scan(&passwordChangedAt); err != nil {
+		return "", err
+	}
+
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
-		UserID:   user.ID,
-		Username: user.Username,
+		UserID:            user.ID,
+		Username:          user.Username,
+		PasswordChangedAt: passwordChangedAt,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

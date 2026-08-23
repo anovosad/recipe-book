@@ -160,6 +160,15 @@ class ApiService {
     return this.requestData<User>('GET', '/api/auth/check');
   }
 
+  // A successful change reissues the cookie, so this session survives it while
+  // every other one is retired server-side.
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
+    return this.request('PUT', '/api/auth/password', {
+      current_password: currentPassword,
+      new_password: newPassword
+    });
+  }
+
   // Recipe API (JSON only - no images)
   async getRecipes(): Promise<Recipe[]> {
     return this.requestData<Recipe[]>('GET', '/api/recipes');

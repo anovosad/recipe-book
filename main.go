@@ -109,6 +109,14 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	api.HandleFunc("/logout", handlers.LogoutHandler).Methods("POST")
 	api.HandleFunc("/auth/check", handlers.CheckAuthHandler).Methods("GET")
 
+	// Wrapped in the login limiter rather than registered on loginRouter: the
+	// body carries a password guess and deserves that tighter budget, but a
+	// route on one of the rate-limit subrouters is invisible to
+	// apiNotFoundHandler, which probes `api` alone - so the wrong method on it
+	// would come back 404 instead of 405.
+	api.Handle("/auth/password",
+		sm.LoginRateLimit()(http.HandlerFunc(handlers.ChangePasswordHandler))).Methods("PUT")
+
 	// One route serves the collection and its filtered forms (?q=, ?tag=), which
 	// GetRecipesHandler dispatches. A search is a filtered recipe collection, so
 	// /api/recipes?q= is the REST spelling of /api/search and is wrapped in the
