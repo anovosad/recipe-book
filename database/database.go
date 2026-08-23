@@ -834,6 +834,90 @@ func GetUserByUsernameSecure(username string) (*models.User, string, error) {
 	return &user, hashedPassword, nil
 }
 
+// ErrNameTaken is returned when a rename would collide with an existing name.
+var ErrNameTaken = errors.New("that name is already taken")
+
+// UpdateIngredientSecure renames an ingredient. Recipes reference it by id, so
+// every recipe using it follows the new name automatically.
+func UpdateIngredientSecure(id int, name string) (*models.Ingredient, error) {
+	if !utils.IsValidID(id) {
+		return nil, sql.ErrNoRows
+	}
+	name = strings.TrimSpace(name)
+	if validation := utils.ValidateIngredientName(name); !validation.Valid {
+		return nil, newValidationError("%s", validation.Message)
+	}
+
+	// Checked before the write so the caller gets "taken", not a driver error
+	// about a unique index. Excluding the row itself lets a rename that only
+	// changes capitalisation through.
+	var clash int
+	if err := DB.QueryRow(
+		"SELECT COUNT(*) FROM ingredients WHERE lower(name) = lower(?) AND id != ?", name, id,
+	).Scan(&clash); err != nil {
+		return nil, err
+	}
+	if clash > 0 {
+		return nil, ErrNameTaken
+	}
+
+	result, err := DB.Exec("UPDATE ingredients SET name = ? WHERE id = ?", name, id)
+	if err != nil {
+		return nil, err
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return nil, err
+	} else if rows == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return &models.Ingredient{ID: id, Name: name}, nil
+}
+
+// UpdateTagSecure renames a tag and optionally recolours it. An empty colour
+// leaves the stored one alone.
+func UpdateTagSecure(id int, name, color string) (*models.Tag, error) {
+	if !utils.IsValidID(id) {
+		return nil, sql.ErrNoRows
+	}
+	name = strings.TrimSpace(name)
+	if validation := utils.ValidateTagName(name); !validation.Valid {
+		return nil, newValidationError("%s", validation.Message)
+	}
+
+	color = strings.TrimSpace(color)
+	if color == "" {
+		if err := DB.QueryRow("SELECT color FROM tags WHERE id = ?", id).Scan(&color); err != nil {
+			return nil, err
+		}
+	}
+	if len(color) != 7 || !strings.HasPrefix(color, "#") {
+		return nil, newValidationError("Colour must be a hex value like #ff6b6b")
+	}
+
+	var clash int
+	if err := DB.QueryRow(
+		"SELECT COUNT(*) FROM tags WHERE lower(name) = lower(?) AND id != ?", name, id,
+	).Scan(&clash); err != nil {
+		return nil, err
+	}
+	if clash > 0 {
+		return nil, ErrNameTaken
+	}
+
+	result, err := DB.Exec("UPDATE tags SET name = ?, color = ? WHERE id = ?", name, color, id)
+	if err != nil {
+		return nil, err
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return nil, err
+	} else if rows == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return &models.Tag{ID: id, Name: name, Color: color}, nil
+}
+
 // ErrImageNotFound is returned when an image does not exist or the recipe it
 // belongs to is not owned by the acting user.
 var ErrImageNotFound = errors.New("image not found or access denied")

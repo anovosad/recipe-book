@@ -327,6 +327,113 @@ export const cs: Dictionary = {
     one: '{count} lívanec', few: '{count} lívance', many: '{count} lívance', other: '{count} lívanců'
   } as Phrase,
 
+  'common.rename': 'Přejmenovat',
+  'common.save': 'Uložit',
+  'ingredients.renameTitle': 'Přejmenovat surovinu',
+  'ingredients.renamed': 'Surovina přejmenována',
+  'ingredients.renameFailed': 'Surovinu se nepodařilo přejmenovat',
+  'ingredients.renameLabel': 'Přejmenovat {name}',
+  'ingredients.renameNote': 'Změna se projeví ve všech receptech, které ji používají.',
+  'tags.renameTitle': 'Přejmenovat štítek',
+  'tags.renamed': 'Štítek přejmenován',
+  'tags.renameFailed': 'Štítek se nepodařilo přejmenovat',
+  'tags.renameLabel': 'Přejmenovat {name}',
+  'tags.renameNote': 'Změna se projeví ve všech receptech, které jej nesou.',
+
+  // Measurement units - see the English file for what each group is for.
+  'measure.tsp': {
+    one: 'lžička', few: 'lžičky', many: 'lžičky', other: 'lžiček'
+  } as Phrase,
+  'measure.tbsp': {
+    one: 'lžíce', few: 'lžíce', many: 'lžíce', other: 'lžic'
+  } as Phrase,
+  'measure.cup': {
+    one: 'hrnek', few: 'hrnky', many: 'hrnku', other: 'hrnků'
+  } as Phrase,
+  'measure.ml': {
+    one: 'ml', few: 'ml', many: 'ml', other: 'ml'
+  } as Phrase,
+  'measure.l': {
+    one: 'l', few: 'l', many: 'l', other: 'l'
+  } as Phrase,
+  'measure.fl oz': {
+    one: 'fl oz', few: 'fl oz', many: 'fl oz', other: 'fl oz'
+  } as Phrase,
+  'measure.g': {
+    one: 'g', few: 'g', many: 'g', other: 'g'
+  } as Phrase,
+  'measure.kg': {
+    one: 'kg', few: 'kg', many: 'kg', other: 'kg'
+  } as Phrase,
+  'measure.oz': {
+    one: 'oz', few: 'oz', many: 'oz', other: 'oz'
+  } as Phrase,
+  'measure.lb': {
+    one: 'lb', few: 'lb', many: 'lb', other: 'lb'
+  } as Phrase,
+  'measure.piece': {
+    one: 'kus', few: 'kusy', many: 'kusu', other: 'kusů'
+  } as Phrase,
+  'measure.clove': {
+    one: 'stroužek', few: 'stroužky', many: 'stroužku', other: 'stroužků'
+  } as Phrase,
+  'measure.slice': {
+    one: 'plátek', few: 'plátky', many: 'plátku', other: 'plátků'
+  } as Phrase,
+  'measure.can': {
+    one: 'konzerva', few: 'konzervy', many: 'konzervy', other: 'konzerv'
+  } as Phrase,
+  'measure.package': {
+    one: 'balení', few: 'balení', many: 'balení', other: 'balení'
+  } as Phrase,
+  'measure.pinch': {
+    one: 'špetka', few: 'špetky', many: 'špetky', other: 'špetek'
+  } as Phrase,
+  'measure.dash': {
+    one: 'kapka', few: 'kapky', many: 'kapky', other: 'kapek'
+  } as Phrase,
+  'measure.to taste': {
+    one: 'dle chuti', few: 'dle chuti', many: 'dle chuti', other: 'dle chuti'
+  } as Phrase,
+  'measureLabel.tsp': 'Lžička',
+  'measureLabel.tbsp': 'Lžíce',
+  'measureLabel.cup': 'Hrnek',
+  'measureLabel.ml': 'Mililitr',
+  'measureLabel.l': 'Litr',
+  'measureLabel.fl oz': 'Tekutá unce',
+  'measureLabel.g': 'Gram',
+  'measureLabel.kg': 'Kilogram',
+  'measureLabel.oz': 'Unce',
+  'measureLabel.lb': 'Libra',
+  'measureLabel.piece': 'Kus',
+  'measureLabel.clove': 'Stroužek',
+  'measureLabel.slice': 'Plátek',
+  'measureLabel.can': 'Konzerva',
+  'measureLabel.package': 'Balení',
+  'measureLabel.pinch': 'Špetka',
+  'measureLabel.dash': 'Kapka',
+  'measureLabel.to taste': 'Dle chuti',
+  'measureCategory.Volume': 'Objem',
+  'measureCategory.Weight': 'Hmotnost',
+  'measureCategory.Count': 'Počet',
+  'measureCategory.Other': 'Ostatní',
+  'servingLabel.people': 'Osoby',
+  'servingLabel.servings': 'Porce',
+  'servingLabel.portions': 'Porce',
+  'servingLabel.pieces': 'Kusy',
+  'servingLabel.slices': 'Plátky',
+  'servingLabel.cups': 'Hrnky',
+  'servingLabel.bowls': 'Misky',
+  'servingLabel.glasses': 'Sklenice',
+  'servingLabel.liters': 'Litry',
+  'servingLabel.ml': 'Mililitry',
+  'servingLabel.kg': 'Kilogramy',
+  'servingLabel.g': 'Gramy',
+  'servingLabel.dozen': 'Tucet',
+  'servingLabel.cookies': 'Sušenky',
+  'servingLabel.muffins': 'Muffiny',
+  'servingLabel.pancakes': 'Lívance',
+
   // Network-level, raised by the axios interceptor rather than by a page
   'net.timeout': 'Požadavek vypršel. Zkuste to prosím znovu.',
   'net.rateLimited': 'Příliš mnoho požadavků. Zpomalte prosím.',

@@ -110,8 +110,14 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	// inner route lets mux continue to the next route, which is what makes this
 	// ordering work.
 	api := r.PathPrefix("/api").Subrouter()
+	// Both, and the same handler for both: there are two routes to a 405 - mux
+	// spotting the mismatch itself, or the request falling through to the
+	// NotFoundHandler - and only the probing one knows which methods to name in
+	// Allow. Wiring the plain handler to the first left /api/tags/{id} answering
+	// 405 with no Allow at all, depending on nothing more than which route
+	// happened to be registered last.
 	api.NotFoundHandler = apiNotFoundHandler(api)
-	api.MethodNotAllowedHandler = http.HandlerFunc(handlers.MethodNotAllowedHandler)
+	api.MethodNotAllowedHandler = apiNotFoundHandler(api)
 
 	// Other API routes
 	api.HandleFunc("/logout", handlers.LogoutHandler).Methods("POST")
@@ -145,11 +151,13 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	// Ingredient API routes
 	api.HandleFunc("/ingredients", handlers.GetIngredientsHandler).Methods("GET")
 	api.HandleFunc("/ingredients", handlers.CreateIngredientHandler).Methods("POST")
+	api.HandleFunc("/ingredients/{id:[0-9]+}", handlers.UpdateIngredientHandler).Methods("PUT")
 	api.HandleFunc("/ingredients/{id:[0-9]+}", handlers.DeleteIngredientHandler).Methods("DELETE")
 
 	// Tag API routes
 	api.HandleFunc("/tags", handlers.GetTagsHandler).Methods("GET")
 	api.HandleFunc("/tags", handlers.CreateTagHandler).Methods("POST")
+	api.HandleFunc("/tags/{id:[0-9]+}", handlers.UpdateTagHandler).Methods("PUT")
 	api.HandleFunc("/tags/{id:[0-9]+}", handlers.DeleteTagHandler).Methods("DELETE")
 }
 

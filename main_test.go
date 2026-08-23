@@ -50,6 +50,8 @@ func TestWrongMethodIs405WithAllow(t *testing.T) {
 		// so that apiNotFoundHandler can still see it. Put it on one of the
 		// rate-limit subrouters instead and this case comes back 404.
 		{http.MethodGet, "/api/auth/password", "PUT"},
+		{http.MethodPost, "/api/tags/1", "PUT, DELETE"},
+		{http.MethodPost, "/api/ingredients/1", "PUT, DELETE"},
 	}
 
 	r := buildRouter()

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Tag as TagIcon, Plus, Trash2, Search } from 'lucide-react';
+import { Tag as TagIcon, Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Tag } from '@/types';
 import { cn } from '@/utils';
-import { useTranslation } from '@/i18n';
+import { useTranslation, translate, currentLanguage } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -29,6 +29,9 @@ export const TagsPage: React.FC = () => {
   const [newTagName, setNewTagName] = useState('');
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [renaming, setRenaming] = useState<Tag | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameColor, setRenameColor] = useState(TAG_COLORS[0]);
 
   // Derived during render rather than mirrored into state by an effect. The
   // effect version rendered once with the previous list before the new one
@@ -47,11 +50,14 @@ export const TagsPage: React.FC = () => {
       setTags(data);
     } catch (error) {
       console.error('Failed to load tags:', error);
-      toast.error(t('tags.loadFailed'));
+      // translate() rather than t(): this callback must not depend on a
+      // function identity, or the effect below re-fires whenever that
+      // identity changes and the page fetches in a loop.
+      toast.error(translate(currentLanguage(), 'tags.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadTags happens after an await,
@@ -122,6 +128,40 @@ export const TagsPage: React.FC = () => {
     }
   };
 
+  const startRename = (tag: Tag) => {
+    setRenaming(tag);
+    setRenameValue(tag.name);
+    setRenameColor(tag.color || TAG_COLORS[0]);
+  };
+
+  const handleRename = async () => {
+    const name = renameValue.trim();
+    if (!renaming || !name) return;
+    if (name === renaming.name && renameColor === renaming.color) {
+      setRenaming(null);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await apiService.updateTag(renaming.id, name, renameColor);
+      if (response.success) {
+        await loadTags();
+        // Recipes carry the id, so anything caching recipes still shows the old
+        // name and colour until it refetches.
+        invalidate('tags', 'recipes');
+        setRenaming(null);
+        toast.success(t('tags.renamed'));
+      } else {
+        toast.error(response.error || t('tags.renameFailed'));
+      }
+    } catch (error: any) {
+      toast.error(error?.error || t('tags.renameFailed'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isSubmitting) {
       handleAddTag();
@@ -177,6 +217,7 @@ export const TagsPage: React.FC = () => {
               key={tag.id}
               tag={tag}
               isAuthenticated={isAuthenticated}
+              onRename={startRename}
               onDelete={handleDeleteTag}
             />
           ))}
@@ -201,6 +242,66 @@ export const TagsPage: React.FC = () => {
           }
         />
       )}
+
+      <Modal
+        isOpen={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title={t('tags.renameTitle')}
+      >
+        <div className="space-y-5">
+          <Input
+            label={t('form.newTagName')}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isSubmitting) handleRename(); }}
+            helperText={t('tags.renameNote')}
+            autoFocus
+          />
+
+          <div className="space-y-2">
+            <span className="block text-sm font-medium text-ink-700">{t('form.tagColor')}</span>
+            <div className="flex flex-wrap gap-2">
+              {TAG_COLORS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setRenameColor(color)}
+                  aria-label={t('tags.useColour', { colour: color })}
+                  aria-pressed={color === renameColor}
+                  className={cn(
+                    'h-8 w-8 rounded-full transition-transform',
+                    color === renameColor
+                      ? 'ring-2 ring-ink-900/40 ring-offset-2 scale-110'
+                      : 'hover:scale-110'
+                  )}
+                  style={{ background: color }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {renameValue.trim() && (
+            <div className="flex items-center gap-2 text-sm text-ink-500">
+              {t('form.preview')}
+              <TagChip tag={{ name: renameValue.trim(), color: renameColor }} dot />
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleRename}
+              size="sm"
+              loading={isSubmitting}
+              disabled={!renameValue.trim()}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={t('tags.newTitle')}>
         <div className="space-y-5">
@@ -265,12 +366,14 @@ export const TagsPage: React.FC = () => {
 interface TagCardProps {
   tag: Tag;
   isAuthenticated: boolean;
+  onRename: (tag: Tag) => void;
   onDelete: (id: number, name: string) => void;
 }
 
-const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => {
+const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onRename, onDelete }) => {
   const { t } = useTranslation();
   const viewLabel = t('tags.viewRecipes', { name: tag.name });
+  const renameLabel = t('tags.renameLabel', { name: tag.name });
   const deleteLabel = t('tags.deleteLabel', { name: tag.name });
 
   return (
@@ -294,6 +397,15 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
     </Link>
 
     {isAuthenticated && (
+      <>
+      <button
+        onClick={() => onRename(tag)}
+        className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-brand-50 hover:text-brand-600 focus-visible:opacity-100"
+        title={renameLabel}
+        aria-label={renameLabel}
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
       <button
         onClick={() => onDelete(tag.id, tag.name)}
         className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
@@ -302,6 +414,7 @@ const TagCard: React.FC<TagCardProps> = ({ tag, isAuthenticated, onDelete }) => 
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      </>
       )}
     </div>
   );

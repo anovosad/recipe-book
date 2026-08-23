@@ -1,12 +1,12 @@
 // frontend/src/pages/IngredientsPage.tsx - More compact version
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Leaf, Plus, Trash2, Search } from 'lucide-react';
+import { Leaf, Plus, Trash2, Search, Pencil } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Ingredient } from '@/types';
-import { useTranslation } from '@/i18n';
+import { useTranslation, translate, currentLanguage } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -19,6 +19,8 @@ export const IngredientsPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [newIngredientName, setNewIngredientName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [renaming, setRenaming] = useState<Ingredient | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // Derived during render rather than mirrored into state by an effect. The
   // effect version rendered once with the previous list before the new one
@@ -39,12 +41,15 @@ export const IngredientsPage: React.FC = () => {
       setIngredients(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load ingredients:', error);
-      toast.error(t('ingredients.loadFailed'));
+      // translate() rather than t(): this callback must not depend on a
+      // function identity, or the effect below re-fires whenever that
+      // identity changes and the page fetches in a loop.
+      toast.error(translate(currentLanguage(), 'ingredients.loadFailed'));
       setIngredients([]);
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadIngredients happens after an await,
@@ -108,6 +113,39 @@ export const IngredientsPage: React.FC = () => {
     }
   };
 
+  const startRename = (ingredient: Ingredient) => {
+    setRenaming(ingredient);
+    setRenameValue(ingredient.name);
+  };
+
+  const handleRename = async () => {
+    const name = renameValue.trim();
+    if (!renaming || !name) return;
+    if (name === renaming.name) {
+      setRenaming(null);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await apiService.updateIngredient(renaming.id, name);
+      if (response.success) {
+        await loadIngredients();
+        // Recipes hold the id, not the name, so the lists that cache recipes
+        // are showing the old word until they refetch.
+        invalidate('ingredients', 'recipes');
+        setRenaming(null);
+        toast.success(t('ingredients.renamed'));
+      } else {
+        toast.error(response.error || t('ingredients.renameFailed'));
+      }
+    } catch (error: any) {
+      toast.error(error?.error || t('ingredients.renameFailed'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !isSubmitting) {
       handleAddIngredient();
@@ -163,6 +201,7 @@ export const IngredientsPage: React.FC = () => {
               key={ingredient.id}
               ingredient={ingredient}
               isAuthenticated={isAuthenticated}
+              onRename={startRename}
               onDelete={handleDeleteIngredient}
             />
           ))}
@@ -187,6 +226,36 @@ export const IngredientsPage: React.FC = () => {
           }
         />
       )}
+
+      <Modal
+        isOpen={renaming !== null}
+        onClose={() => setRenaming(null)}
+        title={t('ingredients.renameTitle')}
+      >
+        <div className="space-y-4">
+          <Input
+            label={t('form.newIngredientName')}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !isSubmitting) handleRename(); }}
+            helperText={t('ingredients.renameNote')}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleRename}
+              size="sm"
+              loading={isSubmitting}
+              disabled={!renameValue.trim()}
+            >
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Add Ingredient Modal */}
       <Modal
@@ -229,16 +298,19 @@ export const IngredientsPage: React.FC = () => {
 interface IngredientCardProps {
   ingredient: Ingredient;
   isAuthenticated: boolean;
+  onRename: (ingredient: Ingredient) => void;
   onDelete: (id: number, name: string) => void;
 }
 
 const IngredientCard: React.FC<IngredientCardProps> = ({
   ingredient,
   isAuthenticated,
+  onRename,
   onDelete
 }) => {
   const { t } = useTranslation();
   const findLabel = t('ingredients.findRecipes', { name: ingredient.name });
+  const renameLabel = t('ingredients.renameLabel', { name: ingredient.name });
   const deleteLabel = t('ingredients.deleteLabel', { name: ingredient.name });
 
   return (
@@ -261,6 +333,15 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
     </Link>
 
     {isAuthenticated && (
+      <>
+      <button
+        onClick={() => onRename(ingredient)}
+        className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-brand-50 hover:text-brand-600 focus-visible:opacity-100"
+        title={renameLabel}
+        aria-label={renameLabel}
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
       <button
         onClick={() => onDelete(ingredient.id, ingredient.name)}
         className="relative z-10 shrink-0 rounded-full p-1.5 text-ink-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600 focus-visible:opacity-100"
@@ -269,6 +350,7 @@ const IngredientCard: React.FC<IngredientCardProps> = ({
       >
         <Trash2 className="h-4 w-4" />
       </button>
+      </>
       )}
     </div>
   );

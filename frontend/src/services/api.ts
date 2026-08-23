@@ -274,6 +274,10 @@ class ApiService {
     return this.request('POST', '/api/ingredients', ingredientData);
   }
 
+  async updateIngredient(id: number, name: string): Promise<ApiResponse<Ingredient>> {
+    return this.request('PUT', `/api/ingredients/${id}`, { name });
+  }
+
   async deleteIngredient(id: number): Promise<ApiResponse> {
     return this.request('DELETE', `/api/ingredients/${id}`);
   }
@@ -285,6 +289,11 @@ class ApiService {
 
   async createTag(tagData: TagForm): Promise<ApiResponse> {
     return this.request('POST', '/api/tags', tagData);
+  }
+
+  // An empty colour keeps the stored one.
+  async updateTag(id: number, name: string, color?: string): Promise<ApiResponse<Tag>> {
+    return this.request('PUT', `/api/tags/${id}`, { name, color: color ?? '' });
   }
 
   async deleteTag(id: number): Promise<ApiResponse> {

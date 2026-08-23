@@ -765,6 +765,70 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 	sendJSONSuccess(w, "Image deleted successfully", nil)
 }
 
+// renameTarget is the shared shape of the two rename endpoints. Ingredients and
+// tags are a taxonomy the whole household shares - anyone signed in may add to
+// it, so anyone signed in may correct a name in it too.
+func renameHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+	event string,
+	rename func(id int, name, color string) (any, error),
+) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	clientIP := getClientIP(r)
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil || !utils.IsValidID(id) {
+		sendJSONError(w, http.StatusBadRequest, "Invalid ID")
+		return
+	}
+
+	var req TagRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		utils.LogSecurityEvent("INVALID_JSON_"+event, clientIP, err.Error())
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
+		return
+	}
+
+	updated, err := rename(id, req.Name, req.Color)
+	switch {
+	case err == nil:
+	case errors.Is(err, sql.ErrNoRows):
+		sendJSONError(w, http.StatusNotFound, "Not found")
+		return
+	case errors.Is(err, database.ErrNameTaken):
+		sendJSONError(w, http.StatusConflict, "That name is already taken")
+		return
+	case database.IsValidationError(err):
+		sendJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	default:
+		utils.LogSecurityEvent(event+"_ERROR", clientIP, err.Error())
+		sendJSONError(w, http.StatusInternalServerError, "Could not save the change")
+		return
+	}
+
+	utils.LogSecurityEvent(event, clientIP, fmt.Sprintf("ID: %d, Name: %s, User: %s", id, req.Name, user.Username))
+	sendJSONSuccess(w, "Renamed", updated)
+}
+
+func UpdateIngredientHandler(w http.ResponseWriter, r *http.Request) {
+	renameHandler(w, r, "INGREDIENT_RENAMED", func(id int, name, _ string) (any, error) {
+		return database.UpdateIngredientSecure(id, name)
+	})
+}
+
+func UpdateTagHandler(w http.ResponseWriter, r *http.Request) {
+	renameHandler(w, r, "TAG_RENAMED", func(id int, name, color string) (any, error) {
+		return database.UpdateTagSecure(id, name, color)
+	})
+}
+
 // Ingredient Handlers
 
 func GetIngredientsHandler(w http.ResponseWriter, r *http.Request) {

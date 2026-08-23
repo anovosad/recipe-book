@@ -32,7 +32,7 @@ const RecipeDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { t } = useTranslation();
-  const { formatDuration, formatDate, formatServings } = useFormatters();
+  const { formatDuration, formatDate, formatServings, formatUnit } = useFormatters();
   const setCurrentRecipe = useAppStore(state => state.setCurrentRecipe);
   const deleteRecipeFromStore = useAppStore(state => state.deleteRecipe);
 
@@ -260,7 +260,9 @@ const RecipeDetailPage: React.FC = () => {
                     >
                       {formatCookingQuantity(getScaledQuantity(ingredient.quantity))}
                     </span>
-                    <span className="min-w-[3rem] text-sm text-ink-500">{ingredient.unit}</span>
+                    <span className="min-w-[3rem] text-sm text-ink-500">
+                      {formatUnit(getScaledQuantity(ingredient.quantity), ingredient.unit)}
+                    </span>
                     <span className="flex-1 text-ink-900">{ingredient.name}</span>
                   </li>
                 ))}

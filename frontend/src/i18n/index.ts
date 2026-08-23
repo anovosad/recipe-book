@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { en } from './en';
@@ -109,8 +110,14 @@ export function useTranslation() {
   const language = useLanguageStore(state => state.language);
   const setLanguage = useLanguageStore(state => state.setLanguage);
 
-  const t = (key: TranslationKey, values?: TranslateValues) =>
-    translate(language, key, values);
+  // Memoised on the language, and that matters rather more than it looks.
+  // A fresh `t` on every render makes every useCallback and useEffect that
+  // depends on it fire again - the ingredients page fetched, re-rendered,
+  // fetched again, and stacked up a failure toast each time round.
+  const t = useCallback(
+    (key: TranslationKey, values?: TranslateValues) => translate(language, key, values),
+    [language]
+  );
 
   return { t, language, setLanguage };
 }
@@ -128,6 +135,9 @@ export const currentLanguage = () => useLanguageStore.getState().language;
 export function useFormatters() {
   const { t, language } = useTranslation();
 
+  // Same reasoning as `t`: these are handed to components that may key work on
+  // their identity, so they change when the language does and not otherwise.
+  return useMemo(() => {
   const formatDuration = (minutes: number): string => {
     if (!minutes || minutes <= 0) return t('common.notSpecified');
 
@@ -161,5 +171,32 @@ export function useFormatters() {
     return `${count} ${unit}`;
   };
 
-  return { formatDuration, formatDate, formatServings };
+  /**
+   * The unit as it is written beside a quantity: "2 lžíce", "1,5 lžíce",
+   * "5 lžic". The quantity drives the plural, and a fraction lands in Czech's
+   * `many` category, which is exactly the form that case wants.
+   */
+  const formatUnit = (quantity: number, unit: string): string => {
+    const key = `measure.${unit}` as TranslationKey;
+    return key in en ? t(key, { count: quantity }) : unit;
+  };
+
+  /** The unit's name for a picker, rather than its shorthand. */
+  const unitLabel = (unit: string): string => {
+    const key = `measureLabel.${unit}` as TranslationKey;
+    return key in en ? t(key) : unit;
+  };
+
+  const unitCategory = (category: string): string => {
+    const key = `measureCategory.${category}` as TranslationKey;
+    return key in en ? t(key) : category;
+  };
+
+  const servingUnitLabel = (unit: string): string => {
+    const key = `servingLabel.${unit}` as TranslationKey;
+    return key in en ? t(key) : unit;
+  };
+
+  return { formatDuration, formatDate, formatServings, formatUnit, unitLabel, unitCategory, servingUnitLabel };
+  }, [t, language]);
 }

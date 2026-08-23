@@ -16,7 +16,7 @@ import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { Recipe, Ingredient, Tag, RecipeForm, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
 import { validateImageFile, getErrorMessage, cn } from '@/utils';
-import { useTranslation } from '@/i18n';
+import { useTranslation, useFormatters, translate, currentLanguage } from '@/i18n';
 import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal, TagChip } from '@/components/ui';
 import { invalidate } from '@/hooks/useOptimizedData';
 import toast from 'react-hot-toast';
@@ -30,6 +30,7 @@ const RecipeFormPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const { t } = useTranslation();
+  const { unitLabel, unitCategory, servingUnitLabel } = useFormatters();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -110,7 +111,7 @@ const RecipeFormPage: React.FC = () => {
             setRecipe(recipeData);
           } catch (error) {
             console.error('Failed to load recipe:', error);
-            toast.error(t('recipe.notFound'));
+            toast.error(translate(currentLanguage(), 'recipe.notFound'));
             navigate('/');
             return;
           }
@@ -119,7 +120,7 @@ const RecipeFormPage: React.FC = () => {
         setIsFormReady(true);
       } catch (error) {
         console.error('Failed to load data:', error);
-        toast.error(t('form.loadFailed'));
+        toast.error(translate(currentLanguage(), 'form.loadFailed'));
         if (isEditMode) {
           navigate('/');
         }
@@ -129,7 +130,9 @@ const RecipeFormPage: React.FC = () => {
     };
 
     loadData();
-  }, [id, isEditMode, navigate, t]);
+    // No `t` in the dependencies on purpose: this loads the recipe once, and
+    // keying it on a function identity is how a fetch loop starts.
+  }, [id, isEditMode, navigate]);
 
   // Populate form when recipe and reference data are loaded.
   //
@@ -508,7 +511,7 @@ const RecipeFormPage: React.FC = () => {
               {...register('serving_unit')}
               options={SERVING_UNITS.map(unit => ({
                 value: unit.value,
-                label: unit.label
+                label: servingUnitLabel(unit.value)
               }))}
               error={errors.serving_unit?.message}
             />
@@ -580,21 +583,23 @@ const RecipeFormPage: React.FC = () => {
                     options={[
                       { value: '', label: t('form.selectUnit') },
                       ...MEASUREMENT_UNITS.reduce((acc, unit) => {
-                        const category = acc.find(g => g.label === unit.category);
+                        const category = acc.find(g => g.key === unit.category);
+                        const option = { value: unit.value, label: unitLabel(unit.value) };
                         if (category) {
-                          category.options = category.options || [];
-                          category.options.push({ value: unit.value, label: unit.label });
+                          category.options.push(option);
                         } else {
-                          acc.push({
-                            label: unit.category,
-                            options: [{ value: unit.value, label: unit.label }]
-                          });
+                          acc.push({ key: unit.category, options: [option] });
                         }
                         return acc;
-                      }, [] as any[]).flatMap((group, groupIndex) => [
-                        { value: `__separator_${groupIndex}__`, label: `--- ${group.label} ---`, disabled: true },
-                        ...group.options
-                      ])
+                      }, [] as { key: string; options: { value: string; label: string }[] }[])
+                        .flatMap((group, groupIndex) => [
+                          {
+                            value: `__separator_${groupIndex}__`,
+                            label: `--- ${unitCategory(group.key)} ---`,
+                            disabled: true
+                          },
+                          ...group.options
+                        ])
                     ]}
                     error={errors.ingredients?.[index]?.unit?.message}
                   />
