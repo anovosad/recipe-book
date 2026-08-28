@@ -105,6 +105,16 @@ export const cs: Dictionary = {
   'gallery.shortcuts': '← → procházení · + − přiblížení · R otočení · Esc zavřít',
 
   // Recipe form
+  'lang.shownIn': 'Zobrazeno {language} — tenhle recept zatím jinou verzi nemá.',
+  'lang.translateTo': 'Přeložit do {language}',
+  'lang.translating': 'Překládám…',
+  'lang.translated': 'Recept přeložen',
+  'lang.translateFailed': 'Recept se nepodařilo přeložit',
+  'lang.backfill': 'Doplnit chybějící názvy',
+  'lang.backfilling': 'Doplňuji…',
+  'lang.backfilled': 'Doplněno: {ingredients} ingrediencí a {tags} štítků',
+  'lang.backfillFailed': 'Chybějící názvy se nepodařilo doplnit',
+  'lang.registrationClosed': 'Registrace je na tomhle webu uzavřená. Požádejte majitele o účet.',
   'import.title': 'Vyplnit z odkazu',
   'import.hint': 'Vložte odkaz na recept. Načte se, přeloží do češtiny a vyplní formulář níže. Dokud nedáte Vytvořit recept, nic se neuloží.',
   'import.placeholder': 'https://example.com/recept',

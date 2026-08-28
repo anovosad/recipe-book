@@ -26,6 +26,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -66,9 +67,12 @@ type Service struct {
 // form can populate itself from it with no special case. Notes are the model's
 // own flags about what it was unsure of.
 type Draft struct {
-	Recipe    models.Recipe `json:"recipe"`
-	Notes     []string      `json:"notes"`
-	SourceURL string        `json:"source_url"`
+	Recipe models.Recipe `json:"recipe"`
+	// Every language the model wrote, which is what a save stores. Recipe above
+	// is one of them, picked for display.
+	Texts     map[string]models.RecipeText `json:"texts"`
+	Notes     []string                     `json:"notes"`
+	SourceURL string                       `json:"source_url"`
 }
 
 // New returns the import service and whether it should be offered at all.
@@ -93,7 +97,7 @@ func New() (*Service, bool) {
 // Errors split the way the handlers expect: IsInputError means the caller gave
 // a URL that cannot work and the message can be shown as-is, anything else is
 // ours and gets a generic 500.
-func (s *Service) Import(ctx context.Context, rawURL string) (*Draft, error) {
+func (s *Service) Import(ctx context.Context, rawURL, language string) (*Draft, error) {
 	page, finalURL, err := fetchPage(ctx, rawURL)
 	if err != nil {
 		return nil, err
@@ -106,7 +110,7 @@ func (s *Service) Import(ctx context.Context, rawURL string) (*Draft, error) {
 
 	// Read before the model runs, so the prompt can show what the collection
 	// already calls things; the same resolver then creates whatever is new.
-	names, err := recipeinput.NewResolver()
+	names, err := recipeinput.NewResolver(database.NormalizeLanguage(language))
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func (s *Service) Import(ctx context.Context, rawURL string) (*Draft, error) {
 		return nil, inputError("the AI did not manage to read that page this time; please try again")
 	}
 
-	return s.draftFrom(answer, finalURL, names)
+	return s.draftFrom(answer, finalURL, language, names)
 }
 
 // draftFrom turns the model's answer into a draft. Everything here is a
@@ -153,19 +157,30 @@ func (s *Service) Import(ctx context.Context, rawURL string) (*Draft, error) {
 // to the allowed set, but not stop a title running to 400 characters or an
 // ingredient name arriving with a colon in it, and either would be refused at
 // the point of saving - long after the person had reviewed the draft.
-func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinput.Resolver) (*Draft, error) {
-	title := clean(answer.Title, maxTitleRunes)
-	if title == "" {
-		return nil, inputError("no recipe title could be read from that page")
-	}
-
-	instructions := strings.TrimSpace(answer.Instructions)
-	if instructions == "" {
-		return nil, inputError("no method could be read from that page")
-	}
-	instructions = truncateRunes(instructions, maxInstructionRunes)
-
+func (s *Service) draftFrom(answer *aiRecipe, sourceURL, language string, names *recipeinput.Resolver) (*Draft, error) {
 	notes := answer.Notes
+
+	// Every language the model returned, held to the same limits. A language
+	// whose title or method came back empty is dropped rather than stored
+	// half-written; losing the English side of a recipe is recoverable with the
+	// translate button, storing a blank one is not obviously wrong until
+	// somebody opens it.
+	texts := map[string]models.RecipeText{}
+	for code, text := range answer.Texts {
+		title := clean(text.Title, maxTitleRunes)
+		instructions := truncateRunes(strings.TrimSpace(text.Instructions), maxInstructionRunes)
+		if title == "" || instructions == "" {
+			continue
+		}
+		texts[code] = models.RecipeText{
+			Title:        title,
+			Description:  recipeinput.WithSource(clean(text.Description, maxDescriptionRunes), sourceURL),
+			Instructions: instructions,
+		}
+	}
+	if len(texts) == 0 {
+		return nil, inputError("no recipe text could be read from that page")
+	}
 
 	// Ingredients. A name the validator would refuse is dropped rather than
 	// allowed to fail the whole import, and said so in the notes - losing one
@@ -175,9 +190,9 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 		if len(ingredients) == maxIngredientEntries {
 			break
 		}
-		name := sanitizeName(item.Name, ingredientRune, 100)
-		if name == "" || !utils.ValidateIngredientName(name).Valid {
-			notes = append(notes, "Ingredienci „"+clean(item.Name, 60)+"“ se nepodařilo uložit, doplňte ji ručně.")
+		cleaned := sanitizeNames(item.Name.names(), ingredientRune, 100, utils.ValidateIngredientName)
+		if len(cleaned) == 0 {
+			notes = append(notes, "Ingredienci „"+clean(item.Name.Cs+" / "+item.Name.En, 60)+"“ se nepodařilo uložit, doplňte ji ručně.")
 			continue
 		}
 
@@ -190,7 +205,7 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 			quantity = 1
 		}
 
-		ingredients = append(ingredients, recipeinput.NamedIngredient{Name: name, Quantity: quantity, Unit: unit})
+		ingredients = append(ingredients, recipeinput.NamedIngredient{Names: cleaned, Quantity: quantity, Unit: unit})
 	}
 	if len(ingredients) == 0 {
 		return nil, inputError("no ingredients could be read from that page")
@@ -198,22 +213,22 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 
 	// Tags, deduplicated the same way the resolver matches them so a repeated
 	// name does not become two chips on the same recipe.
-	tags := make([]string, 0, maxTagEntries)
+	tags := make([]recipeinput.NamedTag, 0, maxTagEntries)
 	seen := map[string]bool{}
 	for _, raw := range answer.Tags {
 		if len(tags) == maxTagEntries {
 			break
 		}
-		name := sanitizeName(raw, tagRune, 50)
-		if name == "" || !utils.ValidateTagName(name).Valid {
+		cleaned := sanitizeNames(raw.names(), tagRune, 50, utils.ValidateTagName)
+		if len(cleaned) == 0 {
 			continue
 		}
-		key := strings.ToLower(name)
+		key := strings.ToLower(cleaned["en"] + "|" + cleaned["cs"])
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		tags = append(tags, name)
+		tags = append(tags, recipeinput.NamedTag{Names: cleaned})
 	}
 
 	// 0 is how the model reports that the page never said. The column will not
@@ -241,10 +256,23 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 		return nil, err
 	}
 
+	// The draft is shown in one language; the rest travels alongside in Texts
+	// and is what actually gets saved.
+	shown := texts[database.NormalizeLanguage(language)]
+	if shown.Title == "" {
+		for _, code := range sortedKeys(texts) {
+			shown = texts[code]
+			language = code
+			break
+		}
+	}
+
 	recipe := models.Recipe{
-		Title:        title,
-		Description:  recipeinput.WithSource(clean(answer.Description, maxDescriptionRunes), sourceURL),
-		Instructions: instructions,
+		Title:        shown.Title,
+		Description:  shown.Description,
+		Instructions: shown.Instructions,
+		Language:     database.NormalizeLanguage(language),
+		Languages:    sortedKeys(texts),
 		PrepTime:     clamp(answer.PrepTime, 0, 1440),
 		CookTime:     clamp(answer.CookTime, 0, 1440),
 		Servings:     clamp(servings, 1, 100),
@@ -258,12 +286,12 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 	for index, resolved := range resolvedIngredients {
 		recipe.Ingredients = append(recipe.Ingredients, models.RecipeIngredient{
 			IngredientID: resolved.IngredientID,
-			Name:         ingredients[index].Name,
+			Name:         displayName(ingredients[index].Names, language),
 			Quantity:     resolved.Quantity,
 			Unit:         resolved.Unit,
 		})
 	}
-	if storedTags, err := database.GetAllTags(); err == nil {
+	if storedTags, err := database.GetAllTags(language); err == nil {
 		byID := make(map[int]models.Tag, len(storedTags))
 		for _, tag := range storedTags {
 			byID[tag.ID] = tag
@@ -275,7 +303,7 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL string, names *recipeinp
 		}
 	}
 
-	return &Draft{Recipe: recipe, Notes: cleanNotes(notes), SourceURL: sourceURL}, nil
+	return &Draft{Recipe: recipe, Texts: texts, Notes: cleanNotes(notes), SourceURL: sourceURL}, nil
 }
 
 // ----------------------------------------------------------------- errors ---
@@ -351,9 +379,55 @@ func cleanNotes(notes []string) []string {
 // looksEmpty reports an answer that parsed but says nothing - the failure mode
 // a retry fixes, as distinct from a page that genuinely holds no recipe.
 func looksEmpty(answer *aiRecipe) bool {
-	return strings.TrimSpace(answer.Title) == "" ||
-		strings.TrimSpace(answer.Instructions) == "" ||
-		len(answer.Ingredients) == 0
+	if len(answer.Ingredients) == 0 || len(answer.Texts) == 0 {
+		return true
+	}
+	// Every language has to have arrived with something in it: half an answer
+	// is the same failure as none, and retrying is cheaper than storing a
+	// recipe whose English side is blank.
+	for _, text := range answer.Texts {
+		if strings.TrimSpace(text.Title) == "" || strings.TrimSpace(text.Instructions) == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// sanitizeNames cleans every language of a name, keeping only the ones that
+// survive the validator. A name that is unusable in one language but fine in
+// another is kept - half a name beats none - and only an entry with nothing
+// left is dropped by the caller.
+func sanitizeNames(names map[string]string, allowed func(rune) bool, limit int,
+	validate func(string) utils.ValidationResult) map[string]string {
+
+	cleaned := map[string]string{}
+	for language, raw := range names {
+		name := sanitizeName(raw, allowed, limit)
+		if name != "" && validate(name).Valid {
+			cleaned[database.NormalizeLanguage(language)] = name
+		}
+	}
+	return cleaned
+}
+
+// displayName picks the name to show beside a quantity in the draft.
+func displayName(names map[string]string, language string) string {
+	if name := names[database.NormalizeLanguage(language)]; name != "" {
+		return name
+	}
+	for _, code := range sortedKeys(names) {
+		return names[code]
+	}
+	return ""
+}
+
+func sortedKeys[T any](m map[string]T) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func clamp(value, low, high int) int {

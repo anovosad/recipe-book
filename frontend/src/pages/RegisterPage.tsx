@@ -1,16 +1,30 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { UserPlus, User, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import apiService from '@/services/api';
 import { RegisterForm } from '@/types';
 import { useTranslation } from '@/i18n';
 import { Card, Button } from '@/components/ui';
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  // The server decides whether anyone may sign themselves up; the route stays
+  // reachable so a stale bookmark gets an explanation rather than a 404, and so
+  // that turning ALLOW_REGISTRATION on needs no rebuild.
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
   const { register: registerUser, isLoading } = useAuthStore();
   const { t } = useTranslation();
+
+  useEffect(() => {
+    apiService
+      .getFeatures()
+      .then(features => setRegistrationOpen(!!features?.registration))
+      // An older server has no /api/features; leaving the form up is the safe
+      // guess, since the POST is refused server-side either way.
+      .catch(() => setRegistrationOpen(true));
+  }, []);
   
   const {
     register,
@@ -36,6 +50,24 @@ const RegisterPage: React.FC = () => {
       navigate('/login?message=Registration successful! Please log in.', { replace: true });
     }
   };
+
+  if (registrationOpen === false) {
+    return (
+      <div className="mx-auto max-w-md py-12">
+        <Card padding="lg">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-ink-500" />
+            <div>
+              <p>{t('lang.registrationClosed')}</p>
+              <Link to="/login" className="mt-3 inline-block font-medium underline">
+                {t('nav.login')}
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[calc(100vh-14rem)] items-center justify-center">

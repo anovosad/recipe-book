@@ -53,6 +53,27 @@ type Recipe struct {
 	Images       []RecipeImage      `json:"images"`
 	Tags         []Tag              `json:"tags"` // Add this line
 	AuthorName   string             `json:"author_name"`
+
+	// Language is the language the text above is actually in, which is not
+	// always the one that was asked for: a recipe that exists only in Czech is
+	// still shown to an English reader, labelled, rather than hidden. Languages
+	// lists every version that exists, so the UI can offer the others and know
+	// what is missing.
+	Language  string   `json:"language"`
+	Languages []string `json:"languages"`
+
+	// Texts is every language version, filled in only when one recipe is read
+	// on its own - the edit form needs the whole set, because saving replaces
+	// it, and a list of thirty recipes does not need it at all.
+	Texts map[string]RecipeText `json:"texts,omitempty"`
+}
+
+// RecipeText is one language's worth of a recipe. A write carries a map of
+// these keyed by language code; a read returns the one resolved for display.
+type RecipeText struct {
+	Title        string `json:"title"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 // The types above are the whole domain. A duplicate Claims struct, the PageData

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"recipe-book/auth"
 	"recipe-book/database"
+	"recipe-book/models"
 	"recipe-book/utils"
 	"strconv"
 	"strings"
@@ -36,15 +37,23 @@ type ChangePasswordRequest struct {
 }
 
 type RecipeRequest struct {
-	Title        string                `json:"title"`
-	Description  string                `json:"description"`
-	Instructions string                `json:"instructions"`
-	PrepTime     int                   `json:"prep_time"`
-	CookTime     int                   `json:"cook_time"`
-	Servings     int                   `json:"servings"`
-	ServingUnit  string                `json:"serving_unit"`
-	Ingredients  []RecipeIngredientReq `json:"ingredients"`
-	Tags         []int                 `json:"tags"`
+	// Texts is the recipe's words keyed by language, and is what a current
+	// client sends. The three flat fields below are the older single-language
+	// shape, still accepted so that a write from anything that predates
+	// translations lands in the language it says it is in rather than being
+	// rejected.
+	Texts        map[string]models.RecipeText `json:"texts"`
+	Title        string                       `json:"title"`
+	Description  string                       `json:"description"`
+	Instructions string                       `json:"instructions"`
+	Language     string                       `json:"language"`
+
+	PrepTime    int                   `json:"prep_time"`
+	CookTime    int                   `json:"cook_time"`
+	Servings    int                   `json:"servings"`
+	ServingUnit string                `json:"serving_unit"`
+	Ingredients []RecipeIngredientReq `json:"ingredients"`
+	Tags        []int                 `json:"tags"`
 }
 
 type RecipeIngredientReq struct {
@@ -64,8 +73,25 @@ type TagRequest struct {
 
 // Authentication Handlers
 
+// registrationOpen reports whether strangers may create their own accounts.
+//
+// Off by default. The collection is shared - every signed-in user may edit and
+// delete every recipe - so an account is not a small thing to hand out, and an
+// open registration form on a public address hands one to anybody. Set
+// ALLOW_REGISTRATION=true to open it, add the person, and turn it off again.
+func registrationOpen() bool {
+	value := strings.TrimSpace(os.Getenv("ALLOW_REGISTRATION"))
+	return strings.EqualFold(value, "true") || value == "1" || strings.EqualFold(value, "yes")
+}
+
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
+
+	if !registrationOpen() {
+		utils.LogSecurityEvent("REGISTRATION_CLOSED", clientIP, "attempt while ALLOW_REGISTRATION is off")
+		sendJSONError(w, http.StatusForbidden, "Registration is closed on this site")
+		return
+	}
 
 	var req RegisterRequest
 	if err := decodeJSONBody(w, r, &req); err != nil {
@@ -285,7 +311,7 @@ func GetRecipesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipes, err := database.GetAllRecipes()
+	recipes, err := database.GetAllRecipes(requestLanguage(r))
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch recipes")
 		return
@@ -308,7 +334,7 @@ func GetRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipe, err := database.GetRecipeByIDSecure(id)
+	recipe, err := database.GetRecipeByIDSecure(id, requestLanguage(r))
 	if err != nil {
 		sendJSONError(w, http.StatusNotFound, "Recipe not found")
 		return
@@ -337,7 +363,7 @@ func GetRecipesByTagHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	recipes, err := database.GetRecipesByTag(id)
+	recipes, err := database.GetRecipesByTag(id, requestLanguage(r))
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch recipes")
 		return
@@ -379,7 +405,7 @@ func CreateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 201 with the created resource and its Location, so a client does not have
 	// to issue a second GET to learn what it just made.
-	created, err := database.GetRecipeByIDSecure(int(recipeID))
+	created, err := database.GetRecipeByIDSecure(int(recipeID), requestLanguage(r))
 	if err != nil {
 		// The row exists - only reading it back failed. Report the creation.
 		sendJSONCreated(w, fmt.Sprintf("/api/recipes/%d", recipeID), "Recipe created successfully", nil)
@@ -412,21 +438,15 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A recipe that does not exist is a 404; one that exists and belongs to
-	// somebody else is a 403. Answering 403 for both made "I mistyped the id"
-	// indistinguishable from "this is not yours".
-	owns, err := database.UserOwnsRecipe(id, user.ID)
-	if errors.Is(err, sql.ErrNoRows) {
-		sendJSONError(w, http.StatusNotFound, "Recipe not found")
-		return
-	}
-	if err != nil {
+	// Existence is still checked separately so a mistyped id answers 404 rather
+	// than a silent no-op. Who wrote the recipe no longer decides anything: the
+	// collection is shared and anyone signed in may edit any of it.
+	if _, err := database.RecipeExists(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			sendJSONError(w, http.StatusNotFound, "Recipe not found")
+			return
+		}
 		sendJSONError(w, http.StatusInternalServerError, "Failed to update recipe")
-		return
-	}
-	if !owns {
-		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_UPDATE_API", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
-		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
@@ -456,7 +476,7 @@ func UpdateRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// PUT replaces the resource, so the new representation is what the caller
 	// gets back - the same shape GET returns.
-	updated, err := database.GetRecipeByIDSecure(id)
+	updated, err := database.GetRecipeByIDSecure(id, requestLanguage(r))
 	if err != nil {
 		sendJSONSuccess(w, "Recipe updated successfully", nil)
 		return
@@ -487,21 +507,16 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Separate "no such recipe" from "not yours" before deleting, so the caller
-	// gets 404 or 403 rather than one status covering both.
-	owns, err := database.UserOwnsRecipe(id, user.ID)
-	if errors.Is(err, sql.ErrNoRows) {
-		sendJSONError(w, http.StatusNotFound, "Recipe not found")
-		return
-	}
-	if err != nil {
+	// "No such recipe" is still worth separating from a successful delete, so a
+	// mistyped id answers 404. Ownership is not consulted - see the note on
+	// database.RecipeExists.
+	if _, err := database.RecipeExists(id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			sendJSONError(w, http.StatusNotFound, "Recipe not found")
+			return
+		}
 		utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
 		sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
-		return
-	}
-	if !owns {
-		utils.LogSecurityEvent("UNAUTHORIZED_RECIPE_DELETE", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, id))
-		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
@@ -510,7 +525,7 @@ func DeleteRecipeHandler(w http.ResponseWriter, r *http.Request) {
 
 	// DeleteRecipeSecure still carries the ownership clause in its WHERE, which
 	// is what makes the check above advisory rather than the security boundary.
-	if err := database.DeleteRecipeSecure(id, user.ID); err != nil {
+	if err := database.DeleteRecipeSecure(id); err != nil {
 		utils.LogSecurityEvent("RECIPE_DELETE_ERROR", clientIP, err.Error())
 		sendJSONError(w, http.StatusInternalServerError, "Failed to delete recipe")
 		return
@@ -554,11 +569,9 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify ownership
-	owns, err := database.UserOwnsRecipe(recipeID, user.ID)
-	if err != nil || !owns {
-		utils.LogSecurityEvent("UNAUTHORIZED_IMAGE_UPLOAD", clientIP, fmt.Sprintf("UserID: %d, RecipeID: %d", user.ID, recipeID))
-		sendJSONError(w, http.StatusForbidden, "Access denied")
+	// The recipe has to exist to hang photos off; whose it is does not matter.
+	if _, err := database.RecipeExists(recipeID); err != nil {
+		sendJSONError(w, http.StatusNotFound, "Recipe not found")
 		return
 	}
 
@@ -669,8 +682,9 @@ func UploadRecipeImagesHandler(w http.ResponseWriter, r *http.Request) {
 // SetImageCoverHandler promotes one image to be the recipe's cover. The cover
 // is whichever image sorts first, so this is a reorder rather than a flag.
 func SetImageCoverHandler(w http.ResponseWriter, r *http.Request) {
-	user, err := auth.GetUserFromToken(r)
-	if err != nil {
+	// The session still has to be valid - this is a write - but the user it
+	// resolves to no longer decides anything, so it is not kept.
+	if _, err := auth.GetUserFromToken(r); err != nil {
 		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
 		return
 	}
@@ -684,11 +698,8 @@ func SetImageCoverHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// "Not found" and "not yours" are deliberately the same answer, so the
-	// endpoint cannot be used to probe which image ids exist.
-	recipeID, err := database.SetRecipeImageCover(imageID, user.ID)
+	recipeID, err := database.SetRecipeImageCover(imageID)
 	if errors.Is(err, database.ErrImageNotFound) {
-		utils.LogSecurityEvent("UNAUTHORIZED_IMAGE_COVER", clientIP, fmt.Sprintf("UserID: %d, ImageID: %d", user.ID, imageID))
 		sendJSONError(w, http.StatusNotFound, "Image not found")
 		return
 	}
@@ -724,25 +735,20 @@ func DeleteImageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user owns the recipe containing this image
-	var recipeID, createdBy int
+	// The recipe is joined only to be sure the image belongs to one that still
+	// exists; created_by is no longer consulted.
+	var recipeID int
 	var filename string
 	err = database.DB.QueryRow(`
-		SELECT ri.recipe_id, r.created_by, ri.filename 
-		FROM recipe_images ri 
-		JOIN recipes r ON ri.recipe_id = r.id 
+		SELECT ri.recipe_id, ri.filename
+		FROM recipe_images ri
+		JOIN recipes r ON ri.recipe_id = r.id
 		WHERE ri.id = ?
-	`, imageID).Scan(&recipeID, &createdBy, &filename)
+	`, imageID).Scan(&recipeID, &filename)
 
 	if err != nil {
 		utils.LogSecurityEvent("IMAGE_NOT_FOUND", clientIP, fmt.Sprintf("ImageID: %d", imageID))
 		sendJSONError(w, http.StatusNotFound, "Image not found")
-		return
-	}
-
-	if createdBy != user.ID {
-		utils.LogSecurityEvent("UNAUTHORIZED_IMAGE_DELETE", clientIP, fmt.Sprintf("UserID: %d, ImageID: %d, Owner: %d", user.ID, imageID, createdBy))
-		sendJSONError(w, http.StatusForbidden, "Access denied")
 		return
 	}
 
@@ -832,7 +838,7 @@ func UpdateTagHandler(w http.ResponseWriter, r *http.Request) {
 // Ingredient Handlers
 
 func GetIngredientsHandler(w http.ResponseWriter, r *http.Request) {
-	ingredients, err := database.GetAllIngredients()
+	ingredients, err := database.GetAllIngredients(requestLanguage(r))
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch ingredients")
 		return
@@ -950,7 +956,7 @@ func DeleteIngredientHandler(w http.ResponseWriter, r *http.Request) {
 // Tag Handlers
 
 func GetTagsHandler(w http.ResponseWriter, r *http.Request) {
-	tags, err := database.GetAllTags()
+	tags, err := database.GetAllTags(requestLanguage(r))
 	if err != nil {
 		sendJSONError(w, http.StatusInternalServerError, "Failed to fetch tags")
 		return
@@ -1037,7 +1043,7 @@ func DeleteTagHandler(w http.ResponseWriter, r *http.Request) {
 	// Tags are global and deleting one cascades to every recipe that carries it.
 	// Any logged-in user could therefore strip a tag off strangers' recipes, so
 	// the delete is refused once somebody else's recipe depends on it.
-	otherCount, otherTitles, err := database.TagUsageByOthers(id, user.ID)
+	otherCount, otherTitles, err := database.TagUsage(id)
 	if err != nil {
 		utils.LogSecurityEvent("TAG_USAGE_CHECK_ERROR", clientIP, err.Error())
 		sendJSONError(w, http.StatusInternalServerError, "Failed to delete tag")
@@ -1100,7 +1106,7 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use secure search function
-	recipes, err := database.SearchRecipes(query)
+	recipes, err := database.SearchRecipes(query, requestLanguage(r))
 	if err != nil {
 		utils.LogSecurityEvent("SEARCH_ERROR", clientIP, fmt.Sprintf("Query: %s, Error: %v", query, err))
 		sendJSONError(w, http.StatusInternalServerError, "Search failed")
@@ -1117,15 +1123,44 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 
 // Helper functions
 
+// requestLanguage decides which language a read is answered in: an explicit
+// ?lang= first, then what the browser asks for, then English. The frontend
+// always sends ?lang=, so the header path is for anything else that calls the
+// API directly.
+func requestLanguage(r *http.Request) string {
+	if lang := strings.TrimSpace(r.URL.Query().Get("lang")); lang != "" {
+		return database.NormalizeLanguage(lang)
+	}
+	if header := r.Header.Get("Accept-Language"); header != "" {
+		// Only the first tag matters here; the collection has two languages and
+		// a full q-value negotiation would be ceremony over a coin flip.
+		primary := strings.SplitN(strings.SplitN(header, ",", 2)[0], "-", 2)[0]
+		return database.NormalizeLanguage(primary)
+	}
+	return database.DefaultLanguage
+}
+
 func recipeInputFromRequest(req RecipeRequest) (database.RecipeInput, []database.RecipeIngredientInput) {
+	texts := req.Texts
+	if len(texts) == 0 && strings.TrimSpace(req.Title) != "" {
+		// The old flat shape. req.Language says which language it is; without
+		// one it is taken as English, which is what the field defaulted to
+		// before there was anywhere to record it.
+		texts = map[string]models.RecipeText{
+			database.NormalizeLanguage(req.Language): {
+				Title:        strings.TrimSpace(req.Title),
+				Description:  strings.TrimSpace(req.Description),
+				Instructions: strings.TrimSpace(req.Instructions),
+			},
+		}
+	}
+
 	in := database.RecipeInput{
-		Title:        strings.TrimSpace(req.Title),
-		Description:  strings.TrimSpace(req.Description),
-		Instructions: strings.TrimSpace(req.Instructions),
-		PrepTime:     req.PrepTime,
-		CookTime:     req.CookTime,
-		Servings:     req.Servings,
-		ServingUnit:  strings.TrimSpace(req.ServingUnit),
+		Texts:       texts,
+		PrepTime:    req.PrepTime,
+		CookTime:    req.CookTime,
+		Servings:    req.Servings,
+		ServingUnit: strings.TrimSpace(req.ServingUnit),
 	}
 
 	ingredients := make([]database.RecipeIngredientInput, 0, len(req.Ingredients))

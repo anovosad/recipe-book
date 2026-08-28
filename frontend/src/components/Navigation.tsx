@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Utensils,
@@ -14,6 +14,7 @@ import {
   KeyRound
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import apiService from '@/services/api';
 import { cn } from '@/utils';
 import { useTranslation, LANGUAGES, type Language } from '@/i18n';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
@@ -56,6 +57,17 @@ const LanguageSwitch: React.FC<{ className?: string }> = ({ className }) => {
 };
 
 const Navigation: React.FC = () => {
+  // Offering a link to a form the server refuses is worse than not offering it.
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+
+  useEffect(() => {
+    apiService
+      .getFeatures()
+      .then(features => setRegistrationOpen(!!features?.registration))
+      .catch(() => setRegistrationOpen(false));
+    // Asked once per mount, with no `t` in the dependencies: a fresh function
+    // identity each render is how a fetch loop starts.
+  }, []);
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
   const { t } = useTranslation();
@@ -168,6 +180,7 @@ const Navigation: React.FC = () => {
                     <LogIn className="h-4 w-4" />
                     <span>{t('nav.login')}</span>
                   </Link>
+{registrationOpen && (
                   <Link
                     to="/register"
                     className="btn-brand flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium"
@@ -175,6 +188,7 @@ const Navigation: React.FC = () => {
                     <UserPlus className="h-4 w-4" />
                     <span>{t('nav.register')}</span>
                   </Link>
+                  )}
                 </>
               )}
             </div>
@@ -238,6 +252,7 @@ const Navigation: React.FC = () => {
                         <LogIn className="h-5 w-5" />
                         <span>{t('nav.login')}</span>
                       </Link>
+{registrationOpen && (
                       <Link
                         to="/register"
                         className="btn-brand mt-2 flex items-center gap-3 rounded-xl px-3 py-3 font-medium"
@@ -245,6 +260,7 @@ const Navigation: React.FC = () => {
                         <UserPlus className="h-5 w-5" />
                         <span>{t('nav.register')}</span>
                       </Link>
+                      )}
                     </>
                   )}
                 </div>

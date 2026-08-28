@@ -162,6 +162,16 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 		api.Handle("/recipes/import",
 			sm.ImportRateLimit()(http.HandlerFunc(handlers.ImportRecipeHandler))).Methods("POST")
 	}
+	// Translating an existing recipe, and filling in the ingredient and tag
+	// names a migration could not. Both call the AI, so both sit behind the
+	// import limiter and are only mounted when there is a key to call it with.
+	if handlers.RecipeImportAvailable() {
+		api.Handle("/recipes/{id:[0-9]+}/translate",
+			sm.ImportRateLimit()(http.HandlerFunc(handlers.TranslateRecipeHandler))).Methods("POST")
+		api.Handle("/translations/backfill",
+			sm.ImportRateLimit()(http.HandlerFunc(handlers.BackfillTranslationsHandler))).Methods("POST")
+	}
+
 	api.HandleFunc("/recipes/tag/{id:[0-9]+}", handlers.GetRecipesByTagHandler).Methods("GET")
 	api.HandleFunc("/recipes/{id:[0-9]+}", handlers.GetRecipeHandler).Methods("GET")
 	api.HandleFunc("/recipes/{id:[0-9]+}", handlers.UpdateRecipeHandler).Methods("PUT")

@@ -47,6 +47,9 @@ services:
       # the frontend hides the field, rather than offering a button that fails.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - RECIPE_IMPORT_MODEL=${RECIPE_IMPORT_MODEL:-claude-opus-5}
+      # Registration is closed unless this says otherwise: every signed-in user
+      # can edit and delete every recipe, so an account is not a small thing.
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
     restart: unless-stopped
     networks:
       - recipe-network

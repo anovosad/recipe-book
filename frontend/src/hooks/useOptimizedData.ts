@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useAppStore } from '@/store/appStore';
 import apiService from '@/services/api';
+import { onLanguageChanged } from '@/i18n';
 
 /**
  * These hooks used to skip the fetch whenever the store already held anything
@@ -25,6 +26,11 @@ const isFresh = (resource: Resource) =>
 export const invalidate = (...resources: Resource[]) => {
   for (const resource of resources) loadedAt[resource] = 0;
 };
+
+// Everything here was fetched in one language: recipe titles, ingredient names,
+// tag chips. Switching language makes the whole cache wrong, and a stale cache
+// looks exactly like the switch not working.
+onLanguageChanged(() => invalidate('recipes', 'ingredients', 'tags'));
 
 function useResource<T>(
   resource: Resource,

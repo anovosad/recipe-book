@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/gorilla/mux"
+
 	"recipe-book/auth"
+	"recipe-book/database"
 	"recipe-book/importer"
 	"recipe-book/utils"
 )
@@ -35,6 +39,7 @@ func RecipeImportAvailable() bool { return recipeImporter != nil }
 func FeaturesHandler(w http.ResponseWriter, r *http.Request) {
 	sendJSONData(w, http.StatusOK, map[string]bool{
 		"recipe_import": RecipeImportAvailable(),
+		"registration":  registrationOpen(),
 	})
 }
 
@@ -100,7 +105,7 @@ func ImportRecipeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), importWorkBudget)
 	defer cancel()
 
-	draft, err := recipeImporter.Import(ctx, req.URL)
+	draft, err := recipeImporter.Import(ctx, req.URL, requestLanguage(r))
 	if err != nil {
 		// Same split as the recipe writes: a problem with what the caller gave
 		// is echoed back, anything else is ours and stays generic.
@@ -120,4 +125,152 @@ func ImportRecipeHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("URL:%s, Title:%s, User:%s", draft.SourceURL, draft.Recipe.Title, user.Username))
 
 	sendJSONData(w, http.StatusOK, draft)
+}
+
+type translateRequest struct {
+	Language string `json:"language"`
+}
+
+// TranslateRecipeHandler adds one more language to a recipe that already
+// exists, and stores it. Unlike the import, this one saves: the recipe was
+// reviewed when it was created, and a translation of checked text is not the
+// same gamble as reading a strange web page.
+func TranslateRecipeHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	if recipeImporter == nil {
+		sendJSONError(w, http.StatusServiceUnavailable, "Translation is not configured on this server")
+		return
+	}
+
+	recipeID, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil || !utils.IsValidID(recipeID) {
+		sendJSONError(w, http.StatusBadRequest, "Invalid recipe ID")
+		return
+	}
+
+	var req translateRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
+		return
+	}
+	target := database.NormalizeLanguage(req.Language)
+
+	texts, err := database.RecipeTextsFor(recipeID)
+	if err != nil || len(texts) == 0 {
+		sendJSONError(w, http.StatusNotFound, "Recipe not found")
+		return
+	}
+	if _, done := texts[target]; done {
+		sendJSONError(w, http.StatusConflict, "That recipe already exists in this language")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), importWorkBudget)
+	defer cancel()
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(importWriteBudget)); err != nil {
+		log.Printf("translate: could not extend the write deadline: %v", err)
+	}
+
+	translated, err := recipeImporter.TranslateRecipe(ctx, texts, target)
+	if err != nil {
+		if importer.IsInputError(err) {
+			sendJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSONError(w, http.StatusInternalServerError, "Failed to translate that recipe")
+		return
+	}
+
+	if err := database.SetRecipeText(recipeID, target, translated); err != nil {
+		if database.IsValidationError(err) {
+			sendJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		sendJSONError(w, http.StatusInternalServerError, "Failed to store the translation")
+		return
+	}
+
+	utils.LogSecurityEvent("RECIPE_TRANSLATED", getClientIP(r),
+		fmt.Sprintf("RecipeID:%d, Language:%s, User:%s", recipeID, target, user.Username))
+
+	recipe, err := database.GetRecipeByIDSecure(recipeID, target)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Translated, but could not read the recipe back")
+		return
+	}
+	sendJSONSuccess(w, "Recipe translated", recipe)
+}
+
+// BackfillTranslationsHandler fills in the ingredient and tag names that have
+// no version in one language.
+//
+// This is the one-off that finishes what the migration could not: the migration
+// runs at startup and must not depend on an external API, so it renames what a
+// built-in list covers and leaves the rest. This is the rest, run by a person
+// who can see the result.
+func BackfillTranslationsHandler(w http.ResponseWriter, r *http.Request) {
+	user, err := auth.GetUserFromToken(r)
+	if err != nil {
+		sendJSONError(w, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+	if recipeImporter == nil {
+		sendJSONError(w, http.StatusServiceUnavailable, "Translation is not configured on this server")
+		return
+	}
+
+	var req translateRequest
+	if err := decodeJSONBody(w, r, &req); err != nil {
+		sendJSONError(w, http.StatusBadRequest, "Invalid JSON data")
+		return
+	}
+	target := database.NormalizeLanguage(req.Language)
+
+	missingIngredients, missingTags, err := database.MissingTranslations(target)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Could not work out what is missing")
+		return
+	}
+	if len(missingIngredients) == 0 && len(missingTags) == 0 {
+		sendJSONSuccess(w, "Nothing was missing", map[string]int{"ingredients": 0, "tags": 0})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), importWorkBudget)
+	defer cancel()
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(importWriteBudget)); err != nil {
+		log.Printf("backfill: could not extend the write deadline: %v", err)
+	}
+
+	written := map[string]int{"ingredients": 0, "tags": 0}
+
+	if len(missingIngredients) > 0 {
+		names, err := recipeImporter.TranslateNames(ctx, missingIngredients, target, "ingredient")
+		if err == nil {
+			for id, name := range names {
+				if database.SetIngredientTranslation(id, target, name) == nil {
+					written["ingredients"]++
+				}
+			}
+		}
+	}
+	if len(missingTags) > 0 {
+		names, err := recipeImporter.TranslateNames(ctx, missingTags, target, "tag")
+		if err == nil {
+			for id, name := range names {
+				if database.SetTagTranslation(id, target, name) == nil {
+					written["tags"]++
+				}
+			}
+		}
+	}
+
+	utils.LogSecurityEvent("TRANSLATIONS_BACKFILLED", getClientIP(r),
+		fmt.Sprintf("Language:%s, Ingredients:%d, Tags:%d, User:%s", target, written["ingredients"], written["tags"], user.Username))
+
+	sendJSONSuccess(w, "Translations filled in", written)
 }

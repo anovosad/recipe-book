@@ -20,14 +20,16 @@ import { invalidate } from '@/hooks/useOptimizedData';
 import apiService from '@/services/api';
 import { Recipe } from '@/types';
 import { formatCookingQuantity, parseInstructions, cn } from '@/utils';
-import { useTranslation, useFormatters } from '@/i18n';
+import { useTranslation, useFormatters, useLanguageStore, LANGUAGES } from '@/i18n';
 import { Card, Button, LoadingSpinner, Alert, TagChip } from '@/components/ui';
+import { Languages as LanguagesIcon } from 'lucide-react';
 import RecipeImageGallery from '@/components/RecipeImageGallery';
 import toast from 'react-hot-toast';
 
 const MAX_SERVINGS = 50;
 
 const RecipeDetailPage: React.FC = () => {
+  const language = useLanguageStore(state => state.language);
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -73,6 +75,27 @@ const RecipeDetailPage: React.FC = () => {
 
     loadRecipe();
   }, [id, setCurrentRecipe]);
+
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  // Write the missing language of a recipe that already exists. The result is
+  // saved, unlike an import: this is a translation of text a person already
+  // checked, not a reading of a strange web page.
+  const handleTranslate = async () => {
+    if (!recipe) return;
+    setIsTranslating(true);
+    try {
+      const response = await apiService.translateRecipe(recipe.id, language);
+      if (!response.success || !response.data) throw response;
+      setRecipe(response.data);
+      invalidate('recipes');
+      toast.success(t('lang.translated'));
+    } catch (error: any) {
+      toast.error(error?.error || t('lang.translateFailed'));
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const handleDeleteRecipe = useCallback(async () => {
     if (!recipe) return;
@@ -160,6 +183,21 @@ const RecipeDetailPage: React.FC = () => {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">{recipe.title}</h1>
+
+            {/* The recipe has no version in the language the site is set to, so
+                this is the fallback. Saying so beats showing Czech to someone
+                who asked for English and letting them wonder. */}
+            {recipe.language !== language && (
+              <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300/60 bg-amber-50/70 px-3 py-2 text-sm dark:border-amber-500/30 dark:bg-amber-500/10">
+                <LanguagesIcon className="h-4 w-4 shrink-0" />
+                <span>{t('lang.shownIn', { language: LANGUAGES[recipe.language as keyof typeof LANGUAGES]?.label ?? recipe.language })}</span>
+                {user && (
+                  <Button size="sm" variant="secondary" onClick={handleTranslate} loading={isTranslating}>
+                    {isTranslating ? t('lang.translating') : t('lang.translateTo', { language: LANGUAGES[language].label })}
+                  </Button>
+                )}
+              </div>
+            )}
             {recipe.description && (
               <p className="mt-3 text-lg leading-relaxed text-ink-500">{recipe.description}</p>
             )}

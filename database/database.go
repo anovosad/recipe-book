@@ -199,32 +199,40 @@ func prepareStatements() {
 
 	// Recipe-related statements
 	stmtGetRecipeByID, err = DB.Prepare(`
-		SELECT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		SELECT ` + recipeColumns + `
 		FROM recipes r
-		JOIN users u ON r.created_by = u.id
+		JOIN users u ON r.created_by = u.id` + recipeTextJoin + `
 		WHERE r.id = ?
 	`)
 	if err != nil {
 		log.Fatal("Failed to prepare stmtGetRecipeByID:", err)
 	}
 
+	// Search looks across every language a recipe exists in, not just the one
+	// being displayed: typing "carbonara" should find the recipe whether the
+	// reader is on the Czech side or the English one. Hence the EXISTS over
+	// recipe_translations rather than a LIKE against the joined row, and
+	// likewise for ingredient and tag names.
 	stmtSearchRecipes, err = DB.Prepare(`
-		SELECT DISTINCT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		SELECT DISTINCT ` + recipeColumns + `
 		FROM recipes r
-		JOIN users u ON r.created_by = u.id
-		LEFT JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-		LEFT JOIN ingredients i ON ri.ingredient_id = i.id
-		LEFT JOIN recipe_tags rt ON r.id = rt.recipe_id
-		LEFT JOIN tags t ON rt.tag_id = t.id
-		WHERE r.title LIKE ? 
-		   OR r.description LIKE ? 
-		   OR r.instructions LIKE ?
-		   OR i.name LIKE ?
-		   OR t.name LIKE ?
-		ORDER BY 
-		   CASE WHEN r.title LIKE ? THEN 0 ELSE 1 END,
+		JOIN users u ON r.created_by = u.id` + recipeTextJoin + `
+		WHERE EXISTS (
+			SELECT 1 FROM recipe_translations x WHERE x.recipe_id = r.id
+			AND (x.title LIKE ? OR x.description LIKE ? OR x.instructions LIKE ?)
+		)
+		   OR EXISTS (
+			SELECT 1 FROM recipe_ingredients ri JOIN ingredients i ON ri.ingredient_id = i.id
+			LEFT JOIN ingredient_translations it ON it.ingredient_id = i.id
+			WHERE ri.recipe_id = r.id AND (i.name LIKE ? OR it.name LIKE ?)
+		)
+		   OR EXISTS (
+			SELECT 1 FROM recipe_tags rt JOIN tags t ON rt.tag_id = t.id
+			LEFT JOIN tag_translations tt ON tt.tag_id = t.id
+			WHERE rt.recipe_id = r.id AND (t.name LIKE ? OR tt.name LIKE ?)
+		)
+		ORDER BY
+		   CASE WHEN tr.title LIKE ? THEN 0 ELSE 1 END,
 		   r.created_at DESC
 	`)
 	if err != nil {
@@ -232,22 +240,26 @@ func prepareStatements() {
 	}
 
 	stmtCreateRecipe, err = DB.Prepare(`
-		INSERT INTO recipes (title, description, instructions, prep_time, cook_time, servings, serving_unit, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO recipes (prep_time, cook_time, servings, serving_unit, created_by)
+		VALUES (?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Fatal("Failed to prepare stmtCreateRecipe:", err)
 	}
 
+	// No "AND created_by = ?" on this or the delete below. The collection is
+	// shared: this is one household's recipe book, and a recipe somebody else
+	// typed is still a recipe you may fix. created_by stays, because whose
+	// recipe it is remains worth showing - it just is not an access check.
 	stmtUpdateRecipe, err = DB.Prepare(`
-		UPDATE recipes SET title = ?, description = ?, instructions = ?, 
-		prep_time = ?, cook_time = ?, servings = ?, serving_unit = ? WHERE id = ? AND created_by = ?
+		UPDATE recipes SET prep_time = ?, cook_time = ?, servings = ?, serving_unit = ?
+		WHERE id = ?
 	`)
 	if err != nil {
 		log.Fatal("Failed to prepare stmtUpdateRecipe:", err)
 	}
 
-	stmtDeleteRecipe, err = DB.Prepare("DELETE FROM recipes WHERE id = ? AND created_by = ?")
+	stmtDeleteRecipe, err = DB.Prepare("DELETE FROM recipes WHERE id = ?")
 	if err != nil {
 		log.Fatal("Failed to prepare stmtDeleteRecipe:", err)
 	}
@@ -358,9 +370,44 @@ func createTables() {
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE
 	);
 
+	-- The text of a recipe, one row per language it exists in. The recipes row
+	-- itself carries only what does not need translating - times, servings,
+	-- author, photos - so there is exactly one place a title lives and no copy
+	-- to drift from it.
+	CREATE TABLE IF NOT EXISTS recipe_translations (
+		recipe_id INTEGER NOT NULL,
+		language TEXT NOT NULL CHECK(length(language) >= 2 AND length(language) <= 5),
+		title TEXT NOT NULL CHECK(length(title) >= 1 AND length(title) <= 200),
+		description TEXT CHECK(length(description) <= 1000),
+		instructions TEXT NOT NULL CHECK(length(instructions) >= 1 AND length(instructions) <= 10000),
+		PRIMARY KEY (recipe_id, language),
+		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE
+	);
+
+	-- Ingredients and tags are stored under an English canonical name - that is
+	-- what ingredients.name/tags.name are, and what the AI resolver matches
+	-- against - with every other language hanging off it here. A rename in one
+	-- language therefore cannot fork the ingredient into two.
+	CREATE TABLE IF NOT EXISTS ingredient_translations (
+		ingredient_id INTEGER NOT NULL,
+		language TEXT NOT NULL CHECK(length(language) >= 2 AND length(language) <= 5),
+		name TEXT NOT NULL CHECK(length(name) >= 1 AND length(name) <= 100),
+		PRIMARY KEY (ingredient_id, language),
+		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
+	);
+
+	CREATE TABLE IF NOT EXISTS tag_translations (
+		tag_id INTEGER NOT NULL,
+		language TEXT NOT NULL CHECK(length(language) >= 2 AND length(language) <= 5),
+		name TEXT NOT NULL CHECK(length(name) >= 1 AND length(name) <= 50),
+		PRIMARY KEY (tag_id, language),
+		FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+	);
+
 	-- Create indexes for better performance and security
 	CREATE INDEX IF NOT EXISTS idx_recipes_created_by ON recipes(created_by);
-	CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title);
+	CREATE INDEX IF NOT EXISTS idx_recipe_translations_title ON recipe_translations(title);
+	CREATE INDEX IF NOT EXISTS idx_recipe_translations_lang ON recipe_translations(language);
 	CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
 	CREATE INDEX IF NOT EXISTS idx_recipe_tags_recipe_id ON recipe_tags(recipe_id);
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
@@ -374,6 +421,301 @@ func createTables() {
 	migrateServingUnits()
 	migrateRecipeIngredientsKey()
 	migrateUserPasswordChangedAt()
+	migrateRecipeTranslations()
+	migrateTaxonomyTranslations()
+}
+
+// recipeTextJoin resolves which language a recipe is shown in.
+//
+// The requested language when it exists, English when it does not, and
+// otherwise whatever the recipe does have - a recipe written only in Czech is
+// shown to an English reader rather than vanishing from the list, and the
+// resolved tr.language comes back with it so the UI can say so. One correlated
+// subquery per recipe, covered by the (recipe_id, language) primary key.
+//
+// It takes one parameter: the requested language.
+const recipeTextJoin = `
+	JOIN recipe_translations tr ON tr.recipe_id = r.id AND tr.language = (
+		SELECT language FROM recipe_translations
+		WHERE recipe_id = r.id
+		ORDER BY (language = ?) DESC, (language = 'en') DESC, language
+		LIMIT 1
+	)`
+
+// recipeColumns is the select list every recipe read shares, in the order
+// scanRecipe expects.
+const recipeColumns = `
+	r.id, tr.title, COALESCE(tr.description, ''), tr.instructions, tr.language,
+	r.prep_time, r.cook_time, r.servings, COALESCE(r.serving_unit, 'people'),
+	r.created_by, r.created_at, u.username`
+
+// scanRecipe reads recipeColumns off a row.
+func scanRecipe(scan func(...any) error) (models.Recipe, error) {
+	var recipe models.Recipe
+	err := scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions, &recipe.Language,
+		&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit,
+		&recipe.CreatedBy, &recipe.CreatedAt, &recipe.AuthorName)
+	recipe.Ingredients = []models.RecipeIngredient{}
+	recipe.Images = []models.RecipeImage{}
+	recipe.Tags = []models.Tag{}
+	recipe.Languages = []string{}
+	return recipe, err
+}
+
+// ingredientNameSQL and tagNameSQL render a name in the requested language,
+// falling back to the English canonical stored on the row itself - which is
+// what makes an untranslated ingredient show up in English rather than not at
+// all. Each expects the alias i (ingredients) or t (tags) to be in scope, and
+// each takes one parameter: the language.
+const (
+	ingredientNameSQL = `COALESCE((SELECT name FROM ingredient_translations WHERE ingredient_id = i.id AND language = ?), i.name)`
+	tagNameSQL        = `COALESCE((SELECT name FROM tag_translations WHERE tag_id = t.id AND language = ?), t.name)`
+)
+
+// NormalizeLanguage keeps an unknown or absent code from reaching a query.
+func NormalizeLanguage(language string) string {
+	language = strings.ToLower(strings.TrimSpace(language))
+	switch language {
+	case "cs", "en":
+		return language
+	case "sk":
+		// Slovak reads Czech comfortably and the UI already maps it that way.
+		return "cs"
+	default:
+		return DefaultLanguage
+	}
+}
+
+// DefaultLanguage is the language a recipe is assumed to be in when nothing
+// says otherwise, and the one every read falls back to last.
+const DefaultLanguage = "en"
+
+// looksCzech guesses the language of existing text from its diacritics.
+//
+// A guess, and deliberately a cheap one: it runs once, over rows written before
+// there was anywhere to record a language, and a wrong answer is fixable in the
+// UI. The letters below are the ones Czech has and English does not, so any of
+// them is decisive; their absence is not, which is why English is the default
+// rather than the detected case.
+func looksCzech(text string) bool {
+	return strings.ContainsAny(text, "áčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ")
+}
+
+// migrateRecipeTranslations moves recipes.title/description/instructions into
+// recipe_translations and drops the columns.
+//
+// Copy, verify the row count, then swap - all in one transaction, so a failure
+// leaves the original table exactly as it was. The language of each existing
+// row is guessed from its own text: this app shipped English seed recipes and
+// then acquired Czech imported ones, and there was no column recording which
+// was which.
+func migrateRecipeTranslations() {
+	var hasTitle int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('recipes') WHERE name='title'").Scan(&hasTitle)
+	if err != nil {
+		log.Printf("Error checking the recipes schema: %v", err)
+		return
+	}
+	if hasTitle == 0 {
+		return // already migrated
+	}
+
+	log.Println("🌍 Migrating recipe text into recipe_translations...")
+
+	tx, err := DB.Begin()
+	if err != nil {
+		log.Printf("Could not start the recipe translation migration: %v", err)
+		return
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query("SELECT id, title, COALESCE(description, ''), instructions FROM recipes")
+	if err != nil {
+		log.Printf("Could not read recipes to migrate: %v", err)
+		return
+	}
+
+	type row struct {
+		id                               int
+		title, description, instructions string
+	}
+	var existing []row
+	for rows.Next() {
+		var r row
+		if err := rows.Scan(&r.id, &r.title, &r.description, &r.instructions); err != nil {
+			rows.Close()
+			log.Printf("Could not read a recipe to migrate: %v", err)
+			return
+		}
+		existing = append(existing, r)
+	}
+	rows.Close()
+
+	for _, r := range existing {
+		language := DefaultLanguage
+		if looksCzech(r.title + " " + r.description + " " + r.instructions) {
+			language = "cs"
+		}
+		if _, err := tx.Exec(`
+			INSERT OR IGNORE INTO recipe_translations (recipe_id, language, title, description, instructions)
+			VALUES (?, ?, ?, ?, ?)
+		`, r.id, language, r.title, r.description, r.instructions); err != nil {
+			log.Printf("Could not migrate recipe %d: %v", r.id, err)
+			return
+		}
+	}
+
+	// Verify before dropping anything: every recipe must have come out the
+	// other side with text attached, or the columns holding the only copy stay
+	// exactly where they are.
+	var migrated int
+	if err := tx.QueryRow("SELECT COUNT(DISTINCT recipe_id) FROM recipe_translations").Scan(&migrated); err != nil {
+		log.Printf("Could not verify the recipe translation migration: %v", err)
+		return
+	}
+	if migrated != len(existing) {
+		log.Printf("Recipe translation migration would lose rows (%d recipes, %d translated) - leaving the schema alone", len(existing), migrated)
+		return
+	}
+
+	// The index on recipes(title) has to go before the column does: SQLite
+	// checks every index after a DROP COLUMN and refuses the whole statement
+	// when one of them still names the column that just left. The equivalent
+	// index now lives on recipe_translations(title).
+	if _, err := tx.Exec("DROP INDEX IF EXISTS idx_recipes_title"); err != nil {
+		log.Printf("Could not drop idx_recipes_title: %v", err)
+		return
+	}
+
+	for _, column := range []string{"title", "description", "instructions"} {
+		if _, err := tx.Exec("ALTER TABLE recipes DROP COLUMN " + column); err != nil {
+			log.Printf("Could not drop recipes.%s: %v", column, err)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Could not commit the recipe translation migration: %v", err)
+		return
+	}
+	log.Printf("✅ Migrated %d recipes into recipe_translations", len(existing))
+}
+
+// seedTranslations maps the names this app seeds a database with, and the Czech
+// they were renamed to by hand before there was a translations table, onto the
+// English canonical the schema now wants. It is a fixed list rather than an AI
+// call because a migration runs at startup: a container that cannot boot
+// without reaching an external API is a worse thing than an untranslated name,
+// and whatever is missing here is filled in later by the backfill endpoint.
+var seedTranslations = map[string]string{
+	// Czech name as it may be stored now -> English canonical
+	"máslo": "Butter", "sůl": "Salt", "pepř": "Pepper", "cukr": "Sugar",
+	"mouka": "Flour", "hladká mouka": "Flour", "mléko": "Milk", "vejce": "Eggs",
+	"vejce (ks)": "Eggs", "cibule": "Onion", "česnek": "Garlic", "olej": "Oil",
+	"olivový olej": "Olive Oil", "sýr": "Cheese", "parmazán": "Parmesan",
+	"rajčata": "Tomatoes", "rajče": "Tomatoes", "brambory": "Potatoes",
+	"mrkev": "Carrots", "kuřecí maso": "Chicken", "kuře": "Chicken",
+	"hovězí maso": "Beef", "hovězí": "Beef", "vepřové maso": "Pork",
+	"rýže": "Rice", "těstoviny": "Pasta", "špagety": "Spaghetti",
+	"slanina": "Bacon", "smetana": "Cream", "voda": "Water", "bazalka": "Basil",
+	"petržel": "Parsley", "citron": "Lemon", "houby": "Mushrooms",
+	"paprika": "Bell Pepper", "brokolice": "Broccoli", "špenát": "Spinach",
+	"droždí": "Yeast", "med": "Honey", "ocet": "Vinegar",
+	// tags
+	"předkrm": "Appetizer", "hlavní jídlo": "Main Dish", "dezert": "Dessert",
+	"snídaně": "Breakfast", "oběd": "Lunch", "večeře": "Dinner",
+	"svačina": "Snack", "polévka": "Soup", "salát": "Salad",
+	"vegetariánské": "Vegetarian", "veganské": "Vegan", "bezlepkové": "Gluten Free",
+	"rychlé": "Quick", "zdravé": "Healthy", "pečivo": "Baking",
+	"nápoj": "Drink", "italská kuchyně": "Italian", "italská": "Italian",
+	"česká kuchyně": "Czech", "těstoviny (tag)": "Pasta",
+}
+
+// migrateTaxonomyTranslations turns whatever ingredients and tags are called
+// today into an English canonical plus a translation in the language they were
+// actually written in.
+//
+// Three cases, and only the first can be resolved offline: a name the seed list
+// knows becomes its English canonical with the old name kept as the Czech
+// translation; a name that merely looks Czech stays as it is and is recorded as
+// its own Czech translation, so the English side is visibly missing rather than
+// silently wrong; anything else is assumed already English and left alone.
+// FillMissingTranslations is what closes the remaining gaps, with an AI and a
+// person watching, rather than a migration guessing.
+func migrateTaxonomyTranslations() {
+	migrateOneTaxonomy("ingredients", "ingredient_translations", "ingredient_id")
+	migrateOneTaxonomy("tags", "tag_translations", "tag_id")
+}
+
+func migrateOneTaxonomy(table, translations, key string) {
+	var done int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM " + translations).Scan(&done); err != nil {
+		log.Printf("Error checking %s: %v", translations, err)
+		return
+	}
+	if done > 0 {
+		return // already migrated
+	}
+
+	rows, err := DB.Query("SELECT id, name FROM " + table)
+	if err != nil {
+		log.Printf("Could not read %s to migrate: %v", table, err)
+		return
+	}
+	type entry struct {
+		id   int
+		name string
+	}
+	var entries []entry
+	for rows.Next() {
+		var e entry
+		if err := rows.Scan(&e.id, &e.name); err != nil {
+			rows.Close()
+			return
+		}
+		entries = append(entries, e)
+	}
+	rows.Close()
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+
+	renamed := 0
+	for _, e := range entries {
+		english, known := seedTranslations[strings.ToLower(strings.TrimSpace(e.name))]
+
+		switch {
+		case known && !strings.EqualFold(english, e.name):
+			// The canonical becomes English; what was there is kept as Czech.
+			// INSERT OR IGNORE on the rename, because two Czech names can map
+			// onto one English one and the column is UNIQUE - the loser keeps
+			// its own name and gets picked up by the backfill instead.
+			if _, err := tx.Exec("UPDATE OR IGNORE "+table+" SET name = ? WHERE id = ?", english, e.id); err != nil {
+				continue
+			}
+			if _, err := tx.Exec("INSERT OR IGNORE INTO "+translations+" ("+key+", language, name) VALUES (?, 'cs', ?)", e.id, e.name); err != nil {
+				continue
+			}
+			renamed++
+		case looksCzech(e.name):
+			// Cannot be translated here, but recording it as Czech means the
+			// English list shows the gap instead of showing Czech unlabelled.
+			if _, err := tx.Exec("INSERT OR IGNORE INTO "+translations+" ("+key+", language, name) VALUES (?, 'cs', ?)", e.id, e.name); err != nil {
+				continue
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Could not commit the %s translation migration: %v", table, err)
+		return
+	}
+	if renamed > 0 {
+		log.Printf("🌍 Gave %d of %d %s an English canonical name", renamed, len(entries), table)
+	}
 }
 
 // migrateRecipeIngredientsKey rebuilds recipe_ingredients so its primary key is a
@@ -928,26 +1270,18 @@ var ErrImageNotFound = errors.New("image not found or access denied")
 // sorts first. The whole set is renumbered from 0 rather than pushing the
 // chosen one below the others, which would drift further negative on every
 // change.
-func SetRecipeImageCover(imageID, userID int) (int, error) {
-	if !utils.IsValidID(imageID) || !utils.IsValidID(userID) {
+func SetRecipeImageCover(imageID int) (int, error) {
+	if !utils.IsValidID(imageID) {
 		return 0, ErrImageNotFound
 	}
 
-	var recipeID, createdBy int
-	err := DB.QueryRow(`
-		SELECT ri.recipe_id, r.created_by
-		FROM recipe_images ri
-		JOIN recipes r ON ri.recipe_id = r.id
-		WHERE ri.id = ?
-	`, imageID).Scan(&recipeID, &createdBy)
+	var recipeID int
+	err := DB.QueryRow("SELECT recipe_id FROM recipe_images WHERE id = ?", imageID).Scan(&recipeID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrImageNotFound
 	}
 	if err != nil {
 		return 0, err
-	}
-	if createdBy != userID {
-		return 0, ErrImageNotFound
 	}
 
 	rows, err := DB.Query(
@@ -1075,13 +1409,14 @@ func IsValidationError(err error) bool {
 
 // RecipeInput carries the scalar fields of a recipe write.
 type RecipeInput struct {
-	Title        string
-	Description  string
-	Instructions string
-	PrepTime     int
-	CookTime     int
-	Servings     int
-	ServingUnit  string
+	// Texts holds the recipe's words, keyed by language code, and must carry at
+	// least one. Everything below is language-neutral and lives on the recipe
+	// row itself - a cooking time does not need translating.
+	Texts       map[string]models.RecipeText
+	PrepTime    int
+	CookTime    int
+	Servings    int
+	ServingUnit string
 }
 
 // RecipeIngredientInput is one ingredient row of a recipe write.
@@ -1096,15 +1431,35 @@ func validateRecipeInput(in *RecipeInput) error {
 		in.ServingUnit = "people"
 	}
 
+	if len(in.Texts) == 0 {
+		return newValidationError("A recipe needs a title and a method in at least one language")
+	}
+
 	checks := []utils.ValidationResult{
-		utils.ValidateRecipeTitle(in.Title),
-		utils.ValidateRecipeDescription(in.Description),
-		utils.ValidateRecipeInstructions(in.Instructions),
 		utils.ValidateServingUnit(in.ServingUnit),
 		utils.ValidateNumericInput(in.PrepTime, 0, 1440, "Prep time"),
 		utils.ValidateNumericInput(in.CookTime, 0, 1440, "Cook time"),
 		utils.ValidateNumericInput(in.Servings, 1, 100, "Servings"),
 	}
+
+	// Every language is validated, not just the first: a write that half
+	// succeeded would leave a recipe readable in one language and broken in
+	// another, which is worse than refusing the whole thing.
+	normalized := make(map[string]models.RecipeText, len(in.Texts))
+	for language, text := range in.Texts {
+		language = NormalizeLanguage(language)
+		text.Title = strings.TrimSpace(text.Title)
+		text.Description = strings.TrimSpace(text.Description)
+		text.Instructions = strings.TrimSpace(text.Instructions)
+
+		checks = append(checks,
+			utils.ValidateRecipeTitle(text.Title),
+			utils.ValidateRecipeDescription(text.Description),
+			utils.ValidateRecipeInstructions(text.Instructions),
+		)
+		normalized[language] = text
+	}
+	in.Texts = normalized
 
 	for _, check := range checks {
 		if !check.Valid {
@@ -1112,6 +1467,25 @@ func validateRecipeInput(in *RecipeInput) error {
 		}
 	}
 
+	return nil
+}
+
+// writeRecipeTexts replaces a recipe's translations with the ones given. A
+// language the caller did not send is removed: the edit form sends every
+// language it is showing, so an omission means "this one is gone", and leaving
+// orphans behind would resurrect deleted text on the next read.
+func writeRecipeTexts(tx *sql.Tx, recipeID int64, texts map[string]models.RecipeText) error {
+	if _, err := tx.Exec("DELETE FROM recipe_translations WHERE recipe_id = ?", recipeID); err != nil {
+		return err
+	}
+	for language, text := range texts {
+		if _, err := tx.Exec(`
+			INSERT INTO recipe_translations (recipe_id, language, title, description, instructions)
+			VALUES (?, ?, ?, ?, ?)
+		`, recipeID, language, text.Title, text.Description, text.Instructions); err != nil {
+			return newValidationError("could not store the %s text: %v", language, err)
+		}
+	}
 	return nil
 }
 
@@ -1130,14 +1504,17 @@ func CreateRecipeTx(in RecipeInput, userID int, tagIDs []int, ingredients []Reci
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Stmt(stmtCreateRecipe).Exec(in.Title, in.Description, in.Instructions,
-		in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, userID)
+	result, err := tx.Stmt(stmtCreateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, userID)
 	if err != nil {
 		return 0, err
 	}
 
 	recipeID, err := result.LastInsertId()
 	if err != nil {
+		return 0, err
+	}
+
+	if err := writeRecipeTexts(tx, recipeID, in.Texts); err != nil {
 		return 0, err
 	}
 
@@ -1169,8 +1546,7 @@ func UpdateRecipeTx(recipeID, userID int, in RecipeInput, tagIDs []int, ingredie
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Stmt(stmtUpdateRecipe).Exec(in.Title, in.Description, in.Instructions,
-		in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, recipeID, userID)
+	result, err := tx.Stmt(stmtUpdateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, recipeID)
 	if err != nil {
 		return err
 	}
@@ -1181,6 +1557,10 @@ func UpdateRecipeTx(recipeID, userID int, in RecipeInput, tagIDs []int, ingredie
 	}
 	if rowsAffected == 0 {
 		return ErrRecipeNotFound
+	}
+
+	if err := writeRecipeTexts(tx, int64(recipeID), in.Texts); err != nil {
+		return err
 	}
 
 	if err := replaceRecipeRelations(tx, int64(recipeID), tagIDs, ingredients); err != nil {
@@ -1275,10 +1655,12 @@ func idArgs(ids []int) []interface{} {
 // attachRelations loads the ingredients, images and tags for a whole page of
 // recipes in three queries instead of three per recipe. Listing 50 recipes used
 // to cost 151 round trips; it now costs 4.
-func attachRelations(recipes []models.Recipe) []models.Recipe {
+func attachRelations(recipes []models.Recipe, language string) []models.Recipe {
 	if len(recipes) == 0 {
 		return recipes
 	}
+
+	language = NormalizeLanguage(language)
 
 	ids := make([]int, len(recipes))
 	for i := range recipes {
@@ -1286,10 +1668,14 @@ func attachRelations(recipes []models.Recipe) []models.Recipe {
 		recipes[i].Ingredients = []models.RecipeIngredient{}
 		recipes[i].Images = []models.RecipeImage{}
 		recipes[i].Tags = []models.Tag{}
+		recipes[i].Languages = []string{}
 	}
 
 	in := placeholders(len(ids))
 	args := idArgs(ids)
+	// The name lookups take the language as their first parameter, ahead of the
+	// id list; images do not, and keep using args as it is.
+	nameArgs := append([]any{language}, args...)
 
 	index := make(map[int]*models.Recipe, len(recipes))
 	for i := range recipes {
@@ -1297,12 +1683,12 @@ func attachRelations(recipes []models.Recipe) []models.Recipe {
 	}
 
 	if rows, err := DB.Query(`
-		SELECT ri.recipe_id, ri.ingredient_id, i.name, ri.unit, ri.quantity
+		SELECT ri.recipe_id, ri.ingredient_id, `+ingredientNameSQL+`, ri.unit, ri.quantity
 		FROM recipe_ingredients ri
 		JOIN ingredients i ON ri.ingredient_id = i.id
 		WHERE ri.recipe_id IN (`+in+`)
-		ORDER BY i.name
-	`, args...); err == nil {
+		ORDER BY 3
+	`, nameArgs...); err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var recipeID int
@@ -1339,12 +1725,12 @@ func attachRelations(recipes []models.Recipe) []models.Recipe {
 	}
 
 	if rows, err := DB.Query(`
-		SELECT rt.recipe_id, t.id, t.name, t.color
+		SELECT rt.recipe_id, t.id, `+tagNameSQL+`, t.color
 		FROM recipe_tags rt
 		JOIN tags t ON rt.tag_id = t.id
 		WHERE rt.recipe_id IN (`+in+`)
-		ORDER BY t.name
-	`, args...); err == nil {
+		ORDER BY 3
+	`, nameArgs...); err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var recipeID int
@@ -1360,18 +1746,42 @@ func attachRelations(recipes []models.Recipe) []models.Recipe {
 		log.Printf("Error loading recipe tags: %v", err)
 	}
 
+	// Which languages each recipe exists in, for the "shown in Czech" label and
+	// the translate button. One query for the page, like everything else here -
+	// asking per recipe is how the 3N+1 this function exists to kill got in.
+	if rows, err := DB.Query(`
+		SELECT recipe_id, language
+		FROM recipe_translations
+		WHERE recipe_id IN (`+in+`)
+		ORDER BY language
+	`, args...); err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var recipeID int
+			var language string
+			if err := rows.Scan(&recipeID, &language); err != nil {
+				continue
+			}
+			if recipe, ok := index[recipeID]; ok {
+				recipe.Languages = append(recipe.Languages, language)
+			}
+		}
+	} else {
+		log.Printf("Error loading recipe languages: %v", err)
+	}
+
 	return recipes
 }
 
 // Database query functions
-func GetAllRecipes() ([]models.Recipe, error) {
+func GetAllRecipes(language string) ([]models.Recipe, error) {
+	language = NormalizeLanguage(language)
 	rows, err := DB.Query(`
-		SELECT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		SELECT `+recipeColumns+`
 		FROM recipes r
-		JOIN users u ON r.created_by = u.id
+		JOIN users u ON r.created_by = u.id`+recipeTextJoin+`
 		ORDER BY r.created_at DESC
-	`)
+	`, language)
 	if err != nil {
 		return nil, err
 	}
@@ -1379,29 +1789,28 @@ func GetAllRecipes() ([]models.Recipe, error) {
 
 	recipes := []models.Recipe{}
 	for rows.Next() {
-		var recipe models.Recipe
-		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
-			&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.CreatedBy,
-			&recipe.CreatedAt, &recipe.AuthorName)
+		recipe, err := scanRecipe(rows.Scan)
 		if err != nil {
 			continue
 		}
-
 		recipes = append(recipes, recipe)
 	}
 
-	return attachRelations(recipes), nil
+	return attachRelations(recipes, language), nil
 }
 
 // Secure recipe search
-func SearchRecipes(query string) ([]models.Recipe, error) {
+func SearchRecipes(query, language string) ([]models.Recipe, error) {
 	// Validate search query
 	if validation := utils.ValidateSearchQuery(query); !validation.Valid {
 		return nil, fmt.Errorf("invalid search query: %s", validation.Message)
 	}
 
-	searchPattern := "%" + query + "%"
-	rows, err := stmtSearchRecipes.Query(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern, searchPattern)
+	language = NormalizeLanguage(language)
+	p := "%" + query + "%"
+	// One for the display language, six for the EXISTS clauses, one for the
+	// title-first ordering.
+	rows, err := stmtSearchRecipes.Query(language, p, p, p, p, p, p, p, p)
 	if err != nil {
 		return nil, err
 	}
@@ -1411,23 +1820,18 @@ func SearchRecipes(query string) ([]models.Recipe, error) {
 	seenRecipes := make(map[int]bool)
 
 	for rows.Next() {
-		var recipe models.Recipe
-		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
-			&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.CreatedBy,
-			&recipe.CreatedAt, &recipe.AuthorName)
+		recipe, err := scanRecipe(rows.Scan)
 		if err != nil {
 			continue
 		}
-
 		if seenRecipes[recipe.ID] {
 			continue
 		}
-
 		recipes = append(recipes, recipe)
 		seenRecipes[recipe.ID] = true
 	}
 
-	return attachRelations(recipes), nil
+	return attachRelations(recipes, language), nil
 }
 
 // Secure ingredient creation
@@ -1478,12 +1882,16 @@ func CreateTagSecure(name, color string) (*models.Tag, error) {
 }
 
 // Secure recipe deletion (with ownership check)
-func DeleteRecipeSecure(recipeID, userID int) error {
-	if !utils.IsValidID(recipeID) || !utils.IsValidID(userID) {
-		return fmt.Errorf("invalid recipe or user ID")
+// DeleteRecipeSecure removes a recipe. It takes no user id: the collection is
+// shared, so there is no owner to compare against, and an argument that is
+// accepted but never consulted is exactly how a check comes to be believed in
+// without existing.
+func DeleteRecipeSecure(recipeID int) error {
+	if !utils.IsValidID(recipeID) {
+		return fmt.Errorf("invalid recipe ID")
 	}
 
-	result, err := stmtDeleteRecipe.Exec(recipeID, userID)
+	result, err := stmtDeleteRecipe.Exec(recipeID)
 	if err != nil {
 		return err
 	}
@@ -1564,11 +1972,17 @@ func IngredientUsage(ingredientID int) (int, []string, error) {
 	return count, titles, nil
 }
 
-// TagUsageByOthers reports how many recipes belonging to somebody other than
-// userID carry this tag, plus a few of their titles for the error message.
-func TagUsageByOthers(tagID, userID int) (int, []string, error) {
-	if !utils.IsValidID(tagID) || !utils.IsValidID(userID) {
-		return 0, nil, fmt.Errorf("invalid tag or user ID")
+// TagUsage reports how many recipes carry this tag, plus a few of their titles
+// for the error message.
+//
+// It used to count only recipes belonging to somebody else, which protected
+// strangers' recipes from having their tags stripped. In a shared collection
+// there are no strangers, so that rule protected nothing - and the useful
+// question became the one already asked of ingredients: is anything still using
+// it? Deleting a tag now needs it to be unused, whoever wrote the recipes.
+func TagUsage(tagID int) (int, []string, error) {
+	if !utils.IsValidID(tagID) {
+		return 0, nil, fmt.Errorf("invalid tag ID")
 	}
 
 	var count int
@@ -1576,8 +1990,8 @@ func TagUsageByOthers(tagID, userID int) (int, []string, error) {
 		SELECT COUNT(*)
 		FROM recipe_tags rt
 		JOIN recipes r ON rt.recipe_id = r.id
-		WHERE rt.tag_id = ? AND r.created_by != ?
-	`, tagID, userID).Scan(&count)
+		WHERE rt.tag_id = ?
+	`, tagID).Scan(&count)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -1590,10 +2004,10 @@ func TagUsageByOthers(tagID, userID int) (int, []string, error) {
 		SELECT r.title
 		FROM recipe_tags rt
 		JOIN recipes r ON rt.recipe_id = r.id
-		WHERE rt.tag_id = ? AND r.created_by != ?
+		WHERE rt.tag_id = ?
 		ORDER BY r.title
 		LIMIT 3
-	`, tagID, userID)
+	`, tagID)
 	if err != nil {
 		return count, nil, nil
 	}
@@ -1635,51 +2049,73 @@ func DeleteTagSecure(tagID int) error {
 }
 
 // Get recipe by ID with ownership validation
-func GetRecipeByIDSecure(id int) (*models.Recipe, error) {
+func GetRecipeByIDSecure(id int, language string) (*models.Recipe, error) {
 	if !utils.IsValidID(id) {
 		return nil, fmt.Errorf("invalid recipe ID")
 	}
 
-	var recipe models.Recipe
-	err := stmtGetRecipeByID.QueryRow(id).Scan(&recipe.ID, &recipe.Title, &recipe.Description,
-		&recipe.Instructions, &recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit,
-		&recipe.CreatedBy, &recipe.CreatedAt, &recipe.AuthorName)
-
+	language = NormalizeLanguage(language)
+	recipe, err := scanRecipe(stmtGetRecipeByID.QueryRow(language, id).Scan)
 	if err != nil {
 		return nil, err
 	}
 
-	recipe.Ingredients = GetRecipeIngredients(recipe.ID)
+	recipe.Ingredients = GetRecipeIngredients(recipe.ID, language)
 	recipe.Images = GetRecipeImages(recipe.ID)
-	recipe.Tags = GetRecipeTags(recipe.ID)
+	recipe.Tags = GetRecipeTags(recipe.ID, language)
+	recipe.Languages = RecipeLanguages(recipe.ID)
+	if texts, err := RecipeTextsFor(recipe.ID); err == nil {
+		recipe.Texts = texts
+	}
 	return &recipe, nil
 }
 
-// Check if user owns recipe
-func UserOwnsRecipe(recipeID, userID int) (bool, error) {
-	if !utils.IsValidID(recipeID) || !utils.IsValidID(userID) {
-		return false, fmt.Errorf("invalid recipe or user ID")
-	}
-
-	var createdBy int
-	err := DB.QueryRow("SELECT created_by FROM recipes WHERE id = ?", recipeID).Scan(&createdBy)
+// RecipeLanguages lists the languages a recipe has text in, so the UI can offer
+// the ones that exist and mark the ones that do not.
+func RecipeLanguages(recipeID int) []string {
+	languages := []string{}
+	rows, err := DB.Query("SELECT language FROM recipe_translations WHERE recipe_id = ? ORDER BY language", recipeID)
 	if err != nil {
-		return false, err
+		return languages
 	}
-
-	return createdBy == userID, nil
+	defer rows.Close()
+	for rows.Next() {
+		var language string
+		if err := rows.Scan(&language); err == nil {
+			languages = append(languages, language)
+		}
+	}
+	return languages
 }
 
-func GetRecipesByTag(tagID int) ([]models.Recipe, error) {
+// Check if user owns recipe
+// RecipeExists is what the handlers ask before a write, in place of the
+// ownership check this replaced. Whether a recipe exists is still worth knowing
+// separately - it is the difference between a 404 and a silent no-op - but who
+// wrote it no longer decides anything. Returns sql.ErrNoRows for a missing
+// recipe, which the callers turn into a 404.
+func RecipeExists(recipeID int) (bool, error) {
+	if !utils.IsValidID(recipeID) {
+		return false, fmt.Errorf("invalid recipe ID")
+	}
+
+	var found int
+	if err := DB.QueryRow("SELECT 1 FROM recipes WHERE id = ?", recipeID).Scan(&found); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func GetRecipesByTag(tagID int, language string) ([]models.Recipe, error) {
+	language = NormalizeLanguage(language)
 	rows, err := DB.Query(`
-		SELECT DISTINCT r.id, r.title, r.description, r.instructions, r.prep_time, r.cook_time, 
-		       r.servings, COALESCE(r.serving_unit, 'people'), r.created_by, r.created_at, u.username
+		SELECT DISTINCT `+recipeColumns+`
 		FROM recipes r
-		JOIN users u ON r.created_by = u.id
+		JOIN users u ON r.created_by = u.id`+recipeTextJoin+`
 		JOIN recipe_tags rt ON r.id = rt.recipe_id
 		WHERE rt.tag_id = ?
 		ORDER BY r.created_at DESC
-	`, tagID)
+	`, language, tagID)
 	if err != nil {
 		return nil, err
 	}
@@ -1687,22 +2123,18 @@ func GetRecipesByTag(tagID int) ([]models.Recipe, error) {
 
 	recipes := []models.Recipe{}
 	for rows.Next() {
-		var recipe models.Recipe
-		err := rows.Scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions,
-			&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.CreatedBy,
-			&recipe.CreatedAt, &recipe.AuthorName)
+		recipe, err := scanRecipe(rows.Scan)
 		if err != nil {
 			continue
 		}
-
 		recipes = append(recipes, recipe)
 	}
 
-	return attachRelations(recipes), nil
+	return attachRelations(recipes, language), nil
 }
 
-func GetAllIngredients() ([]models.Ingredient, error) {
-	rows, err := DB.Query("SELECT id, name FROM ingredients ORDER BY name")
+func GetAllIngredients(language string) ([]models.Ingredient, error) {
+	rows, err := DB.Query("SELECT id, "+ingredientNameSQL+" FROM ingredients i ORDER BY 2", NormalizeLanguage(language))
 	if err != nil {
 		return nil, err
 	}
@@ -1721,8 +2153,8 @@ func GetAllIngredients() ([]models.Ingredient, error) {
 	return ingredients, nil
 }
 
-func GetAllTags() ([]models.Tag, error) {
-	rows, err := DB.Query("SELECT id, name, color FROM tags ORDER BY name")
+func GetAllTags(language string) ([]models.Tag, error) {
+	rows, err := DB.Query("SELECT id, "+tagNameSQL+", color FROM tags t ORDER BY 2", NormalizeLanguage(language))
 	if err != nil {
 		return nil, err
 	}
@@ -1741,14 +2173,14 @@ func GetAllTags() ([]models.Tag, error) {
 	return tags, nil
 }
 
-func GetRecipeIngredients(recipeID int) []models.RecipeIngredient {
+func GetRecipeIngredients(recipeID int, language string) []models.RecipeIngredient {
 	rows, err := DB.Query(`
-		SELECT ri.ingredient_id, i.name, ri.unit, ri.quantity
+		SELECT ri.ingredient_id, `+ingredientNameSQL+`, ri.unit, ri.quantity
 		FROM recipe_ingredients ri
 		JOIN ingredients i ON ri.ingredient_id = i.id
 		WHERE ri.recipe_id = ?
-		ORDER BY i.name
-	`, recipeID)
+		ORDER BY 2
+	`, NormalizeLanguage(language), recipeID)
 
 	if err != nil {
 		return []models.RecipeIngredient{}
@@ -1768,14 +2200,14 @@ func GetRecipeIngredients(recipeID int) []models.RecipeIngredient {
 	return ingredients
 }
 
-func GetRecipeTags(recipeID int) []models.Tag {
+func GetRecipeTags(recipeID int, language string) []models.Tag {
 	rows, err := DB.Query(`
-		SELECT t.id, t.name, t.color
+		SELECT t.id, `+tagNameSQL+`, t.color
 		FROM recipe_tags rt
 		JOIN tags t ON rt.tag_id = t.id
 		WHERE rt.recipe_id = ?
-		ORDER BY t.name
-	`, recipeID)
+		ORDER BY 2
+	`, NormalizeLanguage(language), recipeID)
 
 	if err != nil {
 		return []models.Tag{}
@@ -1829,4 +2261,194 @@ func GetTagByID(id int) (*models.Tag, error) {
 		return nil, err
 	}
 	return &tag, nil
+}
+
+// AllIngredientNames returns every name each ingredient is known by - the
+// English canonical plus every translation - keyed by id. It is what the AI
+// resolver matches against, so a model that writes "Máslo" finds the stored
+// "Butter" instead of creating a duplicate beside it.
+func AllIngredientNames() (map[int][]string, error) {
+	return allNames("SELECT id, name FROM ingredients", "SELECT ingredient_id, name FROM ingredient_translations")
+}
+
+// AllTagNames is the same, for tags.
+func AllTagNames() (map[int][]string, error) {
+	return allNames("SELECT id, name FROM tags", "SELECT tag_id, name FROM tag_translations")
+}
+
+func allNames(canonicalQuery, translationQuery string) (map[int][]string, error) {
+	names := map[int][]string{}
+
+	for _, query := range []string{canonicalQuery, translationQuery} {
+		rows, err := DB.Query(query)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id int
+			var name string
+			if err := rows.Scan(&id, &name); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			names[id] = append(names[id], name)
+		}
+		rows.Close()
+	}
+
+	return names, nil
+}
+
+// SetIngredientTranslation records what an ingredient is called in one
+// language. Upsert rather than insert: a rename in Czech should move the Czech
+// name, not collide with the row already holding it.
+func SetIngredientTranslation(ingredientID int, language, name string) error {
+	return setTranslation("ingredient_translations", "ingredient_id", ingredientID, language, name,
+		utils.ValidateIngredientName)
+}
+
+// SetTagTranslation is the same, for tags.
+func SetTagTranslation(tagID int, language, name string) error {
+	return setTranslation("tag_translations", "tag_id", tagID, language, name, utils.ValidateTagName)
+}
+
+func setTranslation(table, key string, id int, language, name string,
+	validate func(string) utils.ValidationResult) error {
+
+	if !utils.IsValidID(id) {
+		return fmt.Errorf("invalid id")
+	}
+	name = strings.TrimSpace(name)
+	if validation := validate(name); !validation.Valid {
+		return newValidationError("%s", validation.Message)
+	}
+
+	language = NormalizeLanguage(language)
+	// English is the canonical on the row itself; storing it here too would be
+	// a second copy to drift from it.
+	if language == DefaultLanguage {
+		_, err := DB.Exec("UPDATE "+strings.TrimSuffix(table, "_translations")+"s SET name = ? WHERE id = ?", name, id)
+		return err
+	}
+
+	_, err := DB.Exec(`
+		INSERT INTO `+table+` (`+key+`, language, name) VALUES (?, ?, ?)
+		ON CONFLICT(`+key+`, language) DO UPDATE SET name = excluded.name
+	`, id, language, name)
+	return err
+}
+
+// MissingTranslations lists ingredients and tags that have no name in the given
+// language, so the backfill knows what to ask an AI about.
+func MissingTranslations(language string) (ingredients, tags map[int]string, err error) {
+	language = NormalizeLanguage(language)
+	ingredients = map[int]string{}
+	tags = map[int]string{}
+
+	if language == DefaultLanguage {
+		// The canonical is the English name, so nothing can be missing.
+		return ingredients, tags, nil
+	}
+
+	for _, spec := range []struct {
+		query string
+		into  map[int]string
+	}{
+		{`SELECT i.id, i.name FROM ingredients i
+		  WHERE NOT EXISTS (SELECT 1 FROM ingredient_translations t WHERE t.ingredient_id = i.id AND t.language = ?)`, ingredients},
+		{`SELECT t.id, t.name FROM tags t
+		  WHERE NOT EXISTS (SELECT 1 FROM tag_translations x WHERE x.tag_id = t.id AND x.language = ?)`, tags},
+	} {
+		rows, queryErr := DB.Query(spec.query, language)
+		if queryErr != nil {
+			return nil, nil, queryErr
+		}
+		for rows.Next() {
+			var id int
+			var name string
+			if scanErr := rows.Scan(&id, &name); scanErr != nil {
+				rows.Close()
+				return nil, nil, scanErr
+			}
+			spec.into[id] = name
+		}
+		rows.Close()
+	}
+
+	return ingredients, tags, nil
+}
+
+// RecipeTextsFor returns every language version of one recipe, for the edit
+// form and for handing an existing recipe to the translator.
+func RecipeTextsFor(recipeID int) (map[string]models.RecipeText, error) {
+	texts := map[string]models.RecipeText{}
+	rows, err := DB.Query(
+		"SELECT language, title, COALESCE(description, ''), instructions FROM recipe_translations WHERE recipe_id = ?",
+		recipeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var language string
+		var text models.RecipeText
+		if err := rows.Scan(&language, &text.Title, &text.Description, &text.Instructions); err != nil {
+			continue
+		}
+		texts[language] = text
+	}
+	return texts, nil
+}
+
+// SetRecipeText stores one language of a recipe, leaving the others alone.
+// This is what the translate button writes; a full edit goes through
+// UpdateRecipeTx, which replaces the whole set.
+func SetRecipeText(recipeID int, language string, text models.RecipeText) error {
+	if !utils.IsValidID(recipeID) {
+		return ErrRecipeNotFound
+	}
+
+	language = NormalizeLanguage(language)
+	text.Title = strings.TrimSpace(text.Title)
+	text.Description = strings.TrimSpace(text.Description)
+	text.Instructions = strings.TrimSpace(text.Instructions)
+
+	for _, check := range []utils.ValidationResult{
+		utils.ValidateRecipeTitle(text.Title),
+		utils.ValidateRecipeDescription(text.Description),
+		utils.ValidateRecipeInstructions(text.Instructions),
+	} {
+		if !check.Valid {
+			return newValidationError("%s", check.Message)
+		}
+	}
+
+	_, err := DB.Exec(`
+		INSERT INTO recipe_translations (recipe_id, language, title, description, instructions)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(recipe_id, language) DO UPDATE SET
+			title = excluded.title,
+			description = excluded.description,
+			instructions = excluded.instructions
+	`, recipeID, language, text.Title, text.Description, text.Instructions)
+	return err
+}
+
+// DeleteRecipeText removes one language of a recipe. Refused when it is the
+// last one: a recipe with no text at all would vanish from every list, since
+// every read joins the translation that supplies its title.
+func DeleteRecipeText(recipeID int, language string) error {
+	language = NormalizeLanguage(language)
+
+	var count int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM recipe_translations WHERE recipe_id = ?", recipeID).Scan(&count); err != nil {
+		return err
+	}
+	if count <= 1 {
+		return newValidationError("A recipe must exist in at least one language")
+	}
+
+	_, err := DB.Exec("DELETE FROM recipe_translations WHERE recipe_id = ? AND language = ?", recipeID, language)
+	return err
 }

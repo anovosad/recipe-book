@@ -29,6 +29,13 @@ export interface Tag {
   color: string;
 }
 
+// One language's worth of a recipe's words.
+export interface RecipeText {
+  title: string;
+  description: string;
+  instructions: string;
+}
+
 export interface Recipe {
   id: number;
   title: string;
@@ -44,12 +51,23 @@ export interface Recipe {
   images: RecipeImage[];
   tags: Tag[];
   author_name: string;
+
+  // The language the text above is actually in, which is not always the one
+  // that was asked for: a recipe stored only in Czech is still shown to an
+  // English reader, labelled. `languages` is every version that exists.
+  language: string;
+  languages: string[];
+
+  // Every language version, present only when one recipe is fetched on its own.
+  // The edit form needs the whole set because saving replaces it.
+  texts?: Record<string, RecipeText>;
 }
 
 // What the server is configured to do. Recipe import needs an AI API key, and
 // without one the endpoint is not even mounted.
 export interface Features {
   recipe_import: boolean;
+  registration: boolean;
 }
 
 // An unsaved recipe read off a web page. `recipe` is shaped like a stored one
@@ -57,6 +75,9 @@ export interface Features {
 // `notes` is what the model flagged for a human to check.
 export interface RecipeImportDraft {
   recipe: Recipe;
+  // Every language the import produced. `recipe` is one of them, for display;
+  // this is what gets saved.
+  texts: Record<string, RecipeText>;
   notes: string[];
   source_url: string;
 }
@@ -92,9 +113,11 @@ export interface RecipeFormIngredient {
 }
 
 export interface RecipeForm {
-  title: string;
-  description: string;
-  instructions: string;
+  // The recipe's words in every language it has. The form edits one at a time -
+  // whichever the site is switched to - and carries the rest through untouched,
+  // because a save replaces the whole set and a missing language would be a
+  // deleted one.
+  texts: Record<string, RecipeText>;
   prep_time: number;
   cook_time: number;
   servings: number;

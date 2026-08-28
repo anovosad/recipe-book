@@ -120,6 +120,9 @@ services:
       # the frontend hides the field, rather than offering a button that fails.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - RECIPE_IMPORT_MODEL=${RECIPE_IMPORT_MODEL:-claude-opus-5}
+      # Registration is closed unless this says otherwise: every signed-in user
+      # can edit and delete every recipe, so an account is not a small thing.
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-false}
       
       # Database Configuration
       - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-25}
@@ -420,6 +423,7 @@ volumes:
 # - MCP_USER: which account MCP writes as (default: admin)
 # - ANTHROPIC_API_KEY: enables importing a recipe from a URL; unset hides it
 # - RECIPE_IMPORT_MODEL: which model reads the page (default: claude-opus-5)
+# - ALLOW_REGISTRATION: set true to let people sign themselves up (default: false)
 # - TIMEZONE: System timezone (default: UTC)
 # - APP_VERSION: Application version tag (default: latest)
 # 

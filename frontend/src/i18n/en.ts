@@ -102,6 +102,17 @@ export const en = {
   // Importing a recipe from a URL. Only offered when the server has an AI key,
   // and only when creating - importing over a recipe being edited would throw
   // away what is already there.
+  // Language of a recipe, and translating one that lacks the reader's.
+  'lang.shownIn': 'Shown in {language} — this recipe has no other version yet.',
+  'lang.translateTo': 'Translate to {language}',
+  'lang.translating': 'Translating…',
+  'lang.translated': 'Recipe translated',
+  'lang.translateFailed': 'Could not translate that recipe',
+  'lang.backfill': 'Fill in missing names',
+  'lang.backfilling': 'Filling in…',
+  'lang.backfilled': 'Filled in {ingredients} ingredient(s) and {tags} tag(s)',
+  'lang.backfillFailed': 'Could not fill in the missing names',
+  'lang.registrationClosed': 'Registration is closed on this site. Ask the owner for an account.',
   'import.title': 'Fill from a link',
   'import.hint': 'Paste a link to a recipe. It is read, translated into Czech and put into the form below. Nothing is saved until you press Create.',
   'import.placeholder': 'https://example.com/recipe',

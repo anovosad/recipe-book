@@ -158,9 +158,9 @@ func (s *server) listRecipes(raw json.RawMessage) (any, error) {
 		err     error
 	)
 	if strings.TrimSpace(args.Query) == "" {
-		recipes, err = database.GetAllRecipes()
+		recipes, err = database.GetAllRecipes(mcpLanguage)
 	} else {
-		recipes, err = database.SearchRecipes(strings.TrimSpace(args.Query))
+		recipes, err = database.SearchRecipes(strings.TrimSpace(args.Query), mcpLanguage)
 	}
 	if err != nil {
 		return nil, err
@@ -181,17 +181,17 @@ func (s *server) getRecipe(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 
-	recipe, err := database.GetRecipeByIDSecure(args.ID)
+	recipe, err := database.GetRecipeByIDSecure(args.ID, mcpLanguage)
 	if err != nil {
 		return nil, fmt.Errorf("no recipe with id %d", args.ID)
 	}
-	recipe.Ingredients = database.GetRecipeIngredients(recipe.ID)
-	recipe.Tags = database.GetRecipeTags(recipe.ID)
+	recipe.Ingredients = database.GetRecipeIngredients(recipe.ID, mcpLanguage)
+	recipe.Tags = database.GetRecipeTags(recipe.ID, mcpLanguage)
 	return recipeDetail(recipe), nil
 }
 
 func (s *server) listIngredients(json.RawMessage) (any, error) {
-	ingredients, err := database.GetAllIngredients()
+	ingredients, err := database.GetAllIngredients(mcpLanguage)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *server) listIngredients(json.RawMessage) (any, error) {
 }
 
 func (s *server) listTags(json.RawMessage) (any, error) {
-	tags, err := database.GetAllTags()
+	tags, err := database.GetAllTags(mcpLanguage)
 	if err != nil {
 		return nil, err
 	}
@@ -214,18 +214,52 @@ func (s *server) listTags(json.RawMessage) (any, error) {
 	return map[string]any{"count": len(listed), "tags": listed}, nil
 }
 
+// mcpLanguage is the language the MCP surface works in. English, because that
+// is the canonical the taxonomy is stored under and what an AI client is most
+// likely to be handed. A recipe added here is an English recipe; the web UI's
+// translate button is what gives it a Czech side.
+const mcpLanguage = database.DefaultLanguage
+
+// mcpIngredient keeps the flat {name, quantity, unit} shape the tool schema
+// promises, and is widened to the multilingual form on the way in.
+type mcpIngredient struct {
+	Name     string  `json:"name"`
+	Quantity float64 `json:"quantity"`
+	Unit     string  `json:"unit"`
+}
+
+func plainIngredients(given []mcpIngredient) []recipeinput.NamedIngredient {
+	wide := make([]recipeinput.NamedIngredient, 0, len(given))
+	for _, item := range given {
+		wide = append(wide, recipeinput.NamedIngredient{
+			Names:    recipeinput.PlainNames(item.Name),
+			Quantity: item.Quantity,
+			Unit:     item.Unit,
+		})
+	}
+	return wide
+}
+
+func plainTags(given []string) []recipeinput.NamedTag {
+	wide := make([]recipeinput.NamedTag, 0, len(given))
+	for _, name := range given {
+		wide = append(wide, recipeinput.NamedTag{Names: recipeinput.PlainNames(name)})
+	}
+	return wide
+}
+
 type recipeArgs struct {
-	ID           int                           `json:"id"`
-	Title        *string                       `json:"title"`
-	Instructions *string                       `json:"instructions"`
-	Description  *string                       `json:"description"`
-	PrepTime     *int                          `json:"prep_time"`
-	CookTime     *int                          `json:"cook_time"`
-	Servings     *int                          `json:"servings"`
-	ServingUnit  *string                       `json:"serving_unit"`
-	Ingredients  []recipeinput.NamedIngredient `json:"ingredients"`
-	Tags         []string                      `json:"tags"`
-	SourceURL    string                        `json:"source_url"`
+	ID           int             `json:"id"`
+	Title        *string         `json:"title"`
+	Instructions *string         `json:"instructions"`
+	Description  *string         `json:"description"`
+	PrepTime     *int            `json:"prep_time"`
+	CookTime     *int            `json:"cook_time"`
+	Servings     *int            `json:"servings"`
+	ServingUnit  *string         `json:"serving_unit"`
+	Ingredients  []mcpIngredient `json:"ingredients"`
+	Tags         []string        `json:"tags"`
+	SourceURL    string          `json:"source_url"`
 }
 
 func (s *server) createRecipe(raw json.RawMessage) (any, error) {
@@ -248,28 +282,32 @@ func (s *server) createRecipe(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 
-	names, err := recipeinput.NewResolver()
+	names, err := recipeinput.NewResolver(mcpLanguage)
 	if err != nil {
 		return nil, err
 	}
 
-	ingredients, err := recipeinput.ResolveIngredients(names, args.Ingredients)
+	ingredients, err := recipeinput.ResolveIngredients(names, plainIngredients(args.Ingredients))
 	if err != nil {
 		return nil, err
 	}
-	tagIDs, err := recipeinput.ResolveTags(names, args.Tags)
+	tagIDs, err := recipeinput.ResolveTags(names, plainTags(args.Tags))
 	if err != nil {
 		return nil, err
 	}
 
 	input := database.RecipeInput{
-		Title:        strings.TrimSpace(*args.Title),
-		Instructions: strings.TrimSpace(*args.Instructions),
-		Description:  recipeinput.WithSource(deref(args.Description, ""), args.SourceURL),
-		PrepTime:     deref(args.PrepTime, 0),
-		CookTime:     deref(args.CookTime, 0),
-		Servings:     deref(args.Servings, 4),
-		ServingUnit:  strings.TrimSpace(deref(args.ServingUnit, "")),
+		Texts: map[string]models.RecipeText{
+			mcpLanguage: {
+				Title:        strings.TrimSpace(*args.Title),
+				Instructions: strings.TrimSpace(*args.Instructions),
+				Description:  recipeinput.WithSource(deref(args.Description, ""), args.SourceURL),
+			},
+		},
+		PrepTime:    deref(args.PrepTime, 0),
+		CookTime:    deref(args.CookTime, 0),
+		Servings:    deref(args.Servings, 4),
+		ServingUnit: strings.TrimSpace(deref(args.ServingUnit, "")),
 	}
 
 	id, err := database.CreateRecipeTx(input, user.ID, tagIDs, ingredients)
@@ -279,7 +317,7 @@ func (s *server) createRecipe(raw json.RawMessage) (any, error) {
 
 	return map[string]any{
 		"id":      id,
-		"title":   input.Title,
+		"title":   input.Texts[mcpLanguage].Title,
 		"path":    fmt.Sprintf("/recipe/%d", id),
 		"message": "Recipe added.",
 	}, nil
@@ -299,22 +337,33 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 
-	current, err := database.GetRecipeByIDSecure(args.ID)
+	current, err := database.GetRecipeByIDSecure(args.ID, mcpLanguage)
 	if err != nil {
 		return nil, fmt.Errorf("no recipe with id %d", args.ID)
 	}
 
-	input := database.RecipeInput{
+	// Only the English text is touched; any other language the recipe has is
+	// carried through untouched, so an MCP edit cannot silently drop the Czech
+	// version of a recipe it never saw.
+	texts, err := database.RecipeTextsFor(args.ID)
+	if err != nil {
+		return nil, err
+	}
+	texts[mcpLanguage] = models.RecipeText{
 		Title:        strings.TrimSpace(deref(args.Title, current.Title)),
 		Instructions: strings.TrimSpace(deref(args.Instructions, current.Instructions)),
 		Description:  recipeinput.WithSource(deref(args.Description, current.Description), args.SourceURL),
-		PrepTime:     deref(args.PrepTime, current.PrepTime),
-		CookTime:     deref(args.CookTime, current.CookTime),
-		Servings:     deref(args.Servings, current.Servings),
-		ServingUnit:  strings.TrimSpace(deref(args.ServingUnit, current.ServingUnit)),
 	}
 
-	names, err := recipeinput.NewResolver()
+	input := database.RecipeInput{
+		Texts:       texts,
+		PrepTime:    deref(args.PrepTime, current.PrepTime),
+		CookTime:    deref(args.CookTime, current.CookTime),
+		Servings:    deref(args.Servings, current.Servings),
+		ServingUnit: strings.TrimSpace(deref(args.ServingUnit, current.ServingUnit)),
+	}
+
+	names, err := recipeinput.NewResolver(mcpLanguage)
 	if err != nil {
 		return nil, err
 	}
@@ -323,11 +372,11 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 	// which is what the underlying write does either way.
 	var ingredients []database.RecipeIngredientInput
 	if args.Ingredients != nil {
-		if ingredients, err = recipeinput.ResolveIngredients(names, args.Ingredients); err != nil {
+		if ingredients, err = recipeinput.ResolveIngredients(names, plainIngredients(args.Ingredients)); err != nil {
 			return nil, err
 		}
 	} else {
-		for _, existing := range database.GetRecipeIngredients(args.ID) {
+		for _, existing := range database.GetRecipeIngredients(args.ID, mcpLanguage) {
 			ingredients = append(ingredients, database.RecipeIngredientInput{
 				IngredientID: existing.IngredientID,
 				Quantity:     existing.Quantity,
@@ -338,11 +387,11 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 
 	var tagIDs []int
 	if args.Tags != nil {
-		if tagIDs, err = recipeinput.ResolveTags(names, args.Tags); err != nil {
+		if tagIDs, err = recipeinput.ResolveTags(names, plainTags(args.Tags)); err != nil {
 			return nil, err
 		}
 	} else {
-		for _, existing := range database.GetRecipeTags(args.ID) {
+		for _, existing := range database.GetRecipeTags(args.ID, mcpLanguage) {
 			tagIDs = append(tagIDs, existing.ID)
 		}
 	}
@@ -353,7 +402,7 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 
 	return map[string]any{
 		"id":      args.ID,
-		"title":   input.Title,
+		"title":   input.Texts[mcpLanguage].Title,
 		"path":    fmt.Sprintf("/recipe/%d", args.ID),
 		"message": "Recipe updated.",
 	}, nil

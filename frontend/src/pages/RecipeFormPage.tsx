@@ -17,14 +17,20 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
-import { Recipe, Ingredient, Tag, RecipeForm, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
+import { Recipe, Ingredient, Tag, RecipeForm, RecipeText, SERVING_UNITS, MEASUREMENT_UNITS } from '@/types';
 import { validateImageFile, getErrorMessage, cn } from '@/utils';
-import { useTranslation, useFormatters, translate, currentLanguage } from '@/i18n';
+import { useTranslation, useFormatters, translate, currentLanguage, useLanguageStore } from '@/i18n';
 import { Card, Button, Input, Textarea, Select, LoadingSpinner, Modal, TagChip } from '@/components/ui';
 import { invalidate } from '@/hooks/useOptimizedData';
 import toast from 'react-hot-toast';
 
-interface FormData extends Omit<RecipeForm, 'images'> {
+// The form edits one language at a time, so its own fields stay flat. The other
+// languages ride along in `otherTexts` and are merged back on save - a save
+// replaces the whole set, so dropping them would delete them.
+interface FormData extends Omit<RecipeForm, 'images' | 'texts'> {
+  title: string;
+  description: string;
+  instructions: string;
   images: FileList | null;
 }
 
@@ -54,6 +60,10 @@ const RecipeFormPage: React.FC = () => {
   const [importUrl, setImportUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [importNotes, setImportNotes] = useState<string[]>([]);
+
+  // Every language of this recipe except the one being edited on screen.
+  const [otherTexts, setOtherTexts] = useState<Record<string, RecipeText>>({});
+  const language = useLanguageStore(state => state.language);
   
   // Modal states
   const [showIngredientModal, setShowIngredientModal] = useState(false);
@@ -165,11 +175,23 @@ const RecipeFormPage: React.FC = () => {
   // recipe, and saving that wrote the empty values back.
   useEffect(() => {
     if (recipe && isFormReady) {
-      // Reset form with recipe data
+      // The fields show this language if the recipe has it, otherwise whatever
+      // the server fell back to - editing a recipe that has no Czech version
+      // should not present three empty boxes.
+      const stored = recipe.texts ?? {};
+      const shown = stored[language] ?? {
+        title: recipe.title,
+        description: recipe.description,
+        instructions: recipe.instructions
+      };
+      const rest = { ...stored };
+      delete rest[language];
+      setOtherTexts(rest);
+
       reset({
-        title: recipe.title || '',
-        description: recipe.description || '',
-        instructions: recipe.instructions || '',
+        title: shown.title || '',
+        description: shown.description || '',
+        instructions: shown.instructions || '',
         prep_time: recipe.prep_time || 0,
         cook_time: recipe.cook_time || 0,
         servings: recipe.servings || 4,
@@ -192,7 +214,7 @@ const RecipeFormPage: React.FC = () => {
         setSelectedTags(new Set());
       }
     }
-  }, [recipe, isFormReady, reset]);
+  }, [recipe, isFormReady, reset, language]);
 
   // Handle image preview
   useEffect(() => {
@@ -252,6 +274,13 @@ const RecipeFormPage: React.FC = () => {
       invalidate('ingredients', 'tags');
 
       const imported = draft.recipe;
+      // The import writes both languages. The one on screen goes into the
+      // fields; the other is carried to the save untouched, so a Czech reviewer
+      // still stores the English version they never looked at.
+      const rest = { ...(draft.texts ?? {}) };
+      delete rest[language];
+      setOtherTexts(rest);
+
       reset({
         title: imported.title || '',
         description: imported.description || '',
@@ -302,9 +331,14 @@ const RecipeFormPage: React.FC = () => {
 
       // Prepare form data (without images for the recipe API)
       const recipeData: Omit<RecipeForm, 'images'> = {
-        title: data.title,
-        description: data.description,
-        instructions: data.instructions,
+        texts: {
+          ...otherTexts,
+          [language]: {
+            title: data.title,
+            description: data.description,
+            instructions: data.instructions
+          }
+        },
         prep_time: data.prep_time,
         cook_time: data.cook_time,
         servings: data.servings,

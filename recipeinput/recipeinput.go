@@ -29,23 +29,60 @@ var tagPalette = []string{
 }
 
 // NamedIngredient is one line of a recipe as an AI writes it: the ingredient by
-// name, with how much of it.
+// name in as many languages as the writer could supply, with how much of it.
+//
+// Names is keyed by language code and English is the one that matters - it
+// becomes the canonical stored on the ingredient row - but any of them will
+// find an ingredient that already exists, which is what stops a Czech import
+// creating a second "Máslo" beside the stored "Butter".
 type NamedIngredient struct {
-	Name     string  `json:"name"`
-	Quantity float64 `json:"quantity"`
-	Unit     string  `json:"unit"`
+	Names    map[string]string `json:"names"`
+	Quantity float64           `json:"quantity"`
+	Unit     string            `json:"unit"`
+}
+
+// NamedTag is a tag under the same rules.
+type NamedTag struct {
+	Names map[string]string `json:"names"`
+}
+
+// canonical picks the name to store on the row itself: English when it was
+// given, otherwise whatever there is, so a missing translation costs a less
+// tidy canonical rather than a lost ingredient.
+func canonical(names map[string]string) string {
+	if name := strings.TrimSpace(names[database.DefaultLanguage]); name != "" {
+		return name
+	}
+	for _, language := range sortedLanguages(names) {
+		if name := strings.TrimSpace(names[language]); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func sortedLanguages(names map[string]string) []string {
+	languages := make([]string, 0, len(names))
+	for language := range names {
+		languages = append(languages, language)
+	}
+	slices.Sort(languages)
+	return languages
 }
 
 // Resolver maps names to ids, creating whatever is missing. Build one per
 // request: it caches the taxonomy as it was read, which is what keeps two
 // mentions of the same new ingredient in one recipe from creating it twice.
 type Resolver struct {
+	// Keyed on the normalised form of every name an ingredient or tag is known
+	// by, in every language, so a lookup succeeds whichever one the model used.
 	ingredients map[string]int
 	tags        map[string]int
 	tagCount    int
 
-	// The taxonomy as it is spelled, for the prompt. The maps above are keyed
-	// on the normalised form, which is not what a model should be shown.
+	// The taxonomy as it is spelled in the language being worked in, for the
+	// prompt. The maps above are keyed on the normalised form, which is not
+	// what a model should be shown.
 	ingredientNames []string
 	tagNames        []string
 }
@@ -54,29 +91,53 @@ func normalizeName(name string) string {
 	return strings.ToLower(strings.Join(strings.Fields(name), " "))
 }
 
-func NewResolver() (*Resolver, error) {
+// NewResolver builds the index. language decides only what the prompt is shown;
+// matching happens against every language the collection knows, because a model
+// writing Czech and a collection storing English canonicals would otherwise
+// never meet.
+func NewResolver(language string) (*Resolver, error) {
 	r := &Resolver{ingredients: map[string]int{}, tags: map[string]int{}}
 
-	existingIngredients, err := database.GetAllIngredients()
+	allIngredients, err := database.AllIngredientNames()
 	if err != nil {
 		return nil, err
 	}
-	for _, ingredient := range existingIngredients {
-		r.ingredients[normalizeName(ingredient.Name)] = ingredient.ID
+	for id, names := range allIngredients {
+		for _, name := range names {
+			r.ingredients[normalizeName(name)] = id
+		}
+	}
+
+	allTags, err := database.AllTagNames()
+	if err != nil {
+		return nil, err
+	}
+	for id, names := range allTags {
+		for _, name := range names {
+			r.tags[normalizeName(name)] = id
+		}
+	}
+	r.tagCount = len(allTags)
+
+	// What the prompt sees: the names as they read in the language being
+	// worked in, which is what the model should reuse.
+	displayIngredients, err := database.GetAllIngredients(language)
+	if err != nil {
+		return nil, err
+	}
+	for _, ingredient := range displayIngredients {
 		r.ingredientNames = append(r.ingredientNames, ingredient.Name)
 	}
 	slices.Sort(r.ingredientNames)
 
-	existingTags, err := database.GetAllTags()
+	displayTags, err := database.GetAllTags(language)
 	if err != nil {
 		return nil, err
 	}
-	for _, tag := range existingTags {
-		r.tags[normalizeName(tag.Name)] = tag.ID
+	for _, tag := range displayTags {
 		r.tagNames = append(r.tagNames, tag.Name)
 	}
 	slices.Sort(r.tagNames)
-	r.tagCount = len(existingTags)
 
 	return r, nil
 }
@@ -89,30 +150,56 @@ func (r *Resolver) IngredientNames() []string { return r.ingredientNames }
 // TagNames is the same, for tags.
 func (r *Resolver) TagNames() []string { return r.tagNames }
 
-func (r *Resolver) IngredientID(name string) (int, error) {
-	name = strings.TrimSpace(name)
+// IngredientID finds or creates an ingredient from the names given for it.
+//
+// A hit on any language wins, and the names that were not the hit are recorded
+// as translations - so importing a Czech recipe teaches the collection what its
+// English "Butter" is called in Czech, once, as a side effect of using it.
+func (r *Resolver) IngredientID(names map[string]string) (int, error) {
+	name := canonical(names)
 	if name == "" {
 		return 0, fmt.Errorf("ingredient name is empty")
 	}
-	if id, ok := r.ingredients[normalizeName(name)]; ok {
-		return id, nil
+
+	for _, language := range sortedLanguages(names) {
+		if id, ok := r.ingredients[normalizeName(names[language])]; ok {
+			r.rememberIngredient(id, names)
+			return id, nil
+		}
 	}
 
 	created, err := database.CreateIngredientSecure(name)
 	if err != nil {
 		return 0, fmt.Errorf("could not add ingredient %q: %w", name, err)
 	}
-	r.ingredients[normalizeName(name)] = created.ID
+	r.rememberIngredient(created.ID, names)
 	return created.ID, nil
 }
 
-func (r *Resolver) TagID(name string) (int, error) {
-	name = strings.TrimSpace(name)
+func (r *Resolver) rememberIngredient(id int, names map[string]string) {
+	for _, language := range sortedLanguages(names) {
+		name := strings.TrimSpace(names[language])
+		if name == "" {
+			continue
+		}
+		r.ingredients[normalizeName(name)] = id
+		if language != database.DefaultLanguage {
+			_ = database.SetIngredientTranslation(id, language, name)
+		}
+	}
+}
+
+func (r *Resolver) TagID(names map[string]string) (int, error) {
+	name := canonical(names)
 	if name == "" {
 		return 0, fmt.Errorf("tag name is empty")
 	}
-	if id, ok := r.tags[normalizeName(name)]; ok {
-		return id, nil
+
+	for _, language := range sortedLanguages(names) {
+		if id, ok := r.tags[normalizeName(names[language])]; ok {
+			r.rememberTag(id, names)
+			return id, nil
+		}
 	}
 
 	colour := tagPalette[r.tagCount%len(tagPalette)]
@@ -120,9 +207,22 @@ func (r *Resolver) TagID(name string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("could not add tag %q: %w", name, err)
 	}
-	r.tags[normalizeName(name)] = created.ID
 	r.tagCount++
+	r.rememberTag(created.ID, names)
 	return created.ID, nil
+}
+
+func (r *Resolver) rememberTag(id int, names map[string]string) {
+	for _, language := range sortedLanguages(names) {
+		name := strings.TrimSpace(names[language])
+		if name == "" {
+			continue
+		}
+		r.tags[normalizeName(name)] = id
+		if language != database.DefaultLanguage {
+			_ = database.SetTagTranslation(id, language, name)
+		}
+	}
 }
 
 // ResolveIngredients turns named lines into the rows a recipe write takes. A
@@ -131,7 +231,7 @@ func (r *Resolver) TagID(name string) (int, error) {
 func ResolveIngredients(names *Resolver, given []NamedIngredient) ([]database.RecipeIngredientInput, error) {
 	resolved := make([]database.RecipeIngredientInput, 0, len(given))
 	for _, item := range given {
-		id, err := names.IngredientID(item.Name)
+		id, err := names.IngredientID(item.Names)
 		if err != nil {
 			return nil, err
 		}
@@ -152,19 +252,25 @@ func ResolveIngredients(names *Resolver, given []NamedIngredient) ([]database.Re
 	return resolved, nil
 }
 
-func ResolveTags(names *Resolver, given []string) ([]int, error) {
+func ResolveTags(names *Resolver, given []NamedTag) ([]int, error) {
 	resolved := make([]int, 0, len(given))
-	for _, name := range given {
-		if strings.TrimSpace(name) == "" {
+	for _, tag := range given {
+		if canonical(tag.Names) == "" {
 			continue
 		}
-		id, err := names.TagID(name)
+		id, err := names.TagID(tag.Names)
 		if err != nil {
 			return nil, err
 		}
 		resolved = append(resolved, id)
 	}
 	return resolved, nil
+}
+
+// PlainNames wraps a bare name as an English one, for callers that only have a
+// single language to offer - the MCP tools, which predate translations.
+func PlainNames(name string) map[string]string {
+	return map[string]string{database.DefaultLanguage: name}
 }
 
 // WithSource records where a recipe came from. There is no column for it, and

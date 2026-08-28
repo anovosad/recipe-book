@@ -222,6 +222,12 @@ answers with the updated one.
 - `PUT /api/recipes/{id}` - Update recipe (auth required, owner only)
 - `DELETE /api/recipes/{id}` - Delete recipe (auth required, owner only)
 - `POST /api/recipes/import` - Read a recipe off a URL and return it as an unsaved draft (auth required; only mounted when `ANTHROPIC_API_KEY` is set)
+- `POST /api/recipes/{id}/translate` - Write and save one more language of an existing recipe (auth required)
+- `POST /api/translations/backfill` - Fill in ingredient and tag names missing in a language (auth required)
+
+Every recipe, ingredient and tag read accepts `?lang=cs|en` (falling back to
+`Accept-Language`, then English). The response says in `language` which one it
+actually used, since a recipe may not exist in the one you asked for.
 
 ### Images
 - `POST /api/recipes/{id}/images` - Attach images (auth required, owner only)
@@ -312,6 +318,50 @@ anything reaching into its container.
   (`docker run --rm -v recipe-book-letsencrypt:/etc/letsencrypt certbot/certbot delete`)
   and restart nginx. Note that browsers which already saw the HSTS header will
   refuse plain HTTP for a year regardless.
+
+## Languages
+
+Every recipe, ingredient and tag exists in Czech and English, and the switch in
+the nav bar changes all of it — not just the buttons.
+
+Ingredients and tags are stored under an **English canonical name** with the
+other languages hanging off it, so renaming "Máslo" cannot leave a second
+"Butter" behind. Recipes keep their words in `recipe_translations`, one row per
+language; times, servings, photos and the author live on the recipe itself,
+because none of those need translating.
+
+A recipe that has no version in the language you are reading in is still shown,
+in the language it does have, with a note saying so and a **Translate** button
+beside it. Hiding it instead would make the English collection look empty until
+everything had been translated twice.
+
+- **Importing** writes both languages in one pass, so a recipe pulled off a
+  Czech site arrives with an English side too.
+- **Translate** on a recipe page writes the missing language and saves it. This
+  one does save, unlike the import — it is translating text you already checked,
+  not reading a strange web page.
+- **`POST /api/translations/backfill`** fills in ingredient and tag names that
+  have no version in a language. Run it once after upgrading: the startup
+  migration renames what a built-in dictionary covers and deliberately leaves
+  the rest, because a container that cannot boot without reaching an external
+  API is worse than an untranslated name.
+
+Upgrading an existing database is automatic. Recipe text moves into the
+translation table on first start, and each recipe's language is guessed from its
+own accents — this app shipped English seed recipes and then acquired Czech
+imported ones, and nothing recorded which was which. A wrong guess is fixable
+in the form.
+
+## Who can edit what
+
+This is a family site, so it is deliberately flat: **any signed-in user may edit
+or delete any recipe.** Whoever wrote it is still shown on the recipe, but it
+does not gate anything.
+
+Because an account now carries the right to delete anything, **registration is
+closed by default**. Set `ALLOW_REGISTRATION=true`, add the person, and turn it
+off again. With it off the nav hides the link and `/register` says so rather
+than answering 404.
 
 ## Importing a recipe from a URL
 

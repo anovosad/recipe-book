@@ -84,6 +84,12 @@ api.interceptors.response.use(
   }
 );
 
+// withLang appends the reader's language to a GET. The server falls back on its
+// own when a recipe has no version in it, so this is a preference rather than a
+// filter - nothing disappears for asking in the wrong language.
+const withLang = (url: string): string =>
+  `${url}${url.includes('?') ? '&' : '?'}lang=${currentLanguage()}`;
+
 class ApiService {
   // Every /api response is the same envelope:
   //   { success: true,  data, message?, meta? }
@@ -179,17 +185,20 @@ class ApiService {
   }
 
   // Recipe API (JSON only - no images)
+  // Every read carries the language. The server answers in it where it can and
+  // says in `language` what it actually used, so a recipe that exists only in
+  // Czech still appears on the English side rather than going missing.
   async getRecipes(): Promise<Recipe[]> {
-    return this.requestData<Recipe[]>('GET', '/api/recipes');
+    return this.requestData<Recipe[]>('GET', withLang('/api/recipes'));
   }
 
   async getRecipe(id: number): Promise<Recipe> {
-    return this.requestData<Recipe>('GET', `/api/recipes/${id}`);
+    return this.requestData<Recipe>('GET', withLang(`/api/recipes/${id}`));
   }
 
   // The canonical spelling of a search is the filtered recipe collection.
   async searchRecipes(query: string): Promise<SearchResponse> {
-    const envelope = await this.request<Recipe[]>('GET', `/api/recipes?q=${encodeURIComponent(query)}`);
+    const envelope = await this.request<Recipe[]>('GET', withLang(`/api/recipes?q=${encodeURIComponent(query)}`));
     return {
       success: envelope.success,
       query: envelope.meta?.query ?? query,
@@ -199,7 +208,7 @@ class ApiService {
   }
 
   async getRecipesByTag(tagId: number): Promise<Recipe[]> {
-    return this.requestData<Recipe[]>('GET', `/api/recipes?tag=${tagId}`);
+    return this.requestData<Recipe[]>('GET', withLang(`/api/recipes?tag=${tagId}`));
   }
 
   // POST answers 201 with the created recipe (and a Location header), so `data`
@@ -209,9 +218,7 @@ class ApiService {
     const { images, ...jsonData } = recipeData as RecipeForm;
     
     const payload = {
-      title: jsonData.title,
-      description: jsonData.description || '',
-      instructions: jsonData.instructions,
+      texts: jsonData.texts,
       prep_time: jsonData.prep_time,
       cook_time: jsonData.cook_time,
       servings: jsonData.servings,
@@ -228,9 +235,7 @@ class ApiService {
     const { images, ...jsonData } = recipeData as RecipeForm;
     
     const payload = {
-      title: jsonData.title,
-      description: jsonData.description || '',
-      instructions: jsonData.instructions,
+      texts: jsonData.texts,
       prep_time: jsonData.prep_time,
       cook_time: jsonData.cook_time,
       servings: jsonData.servings,
@@ -285,9 +290,22 @@ class ApiService {
     return this.requestData<RecipeImportDraft>('POST', '/api/recipes/import', { url }, { timeout: 180000 });
   }
 
+  // Add one more language to a recipe that already exists. Unlike the import
+  // this one saves: the recipe was checked when it was written, and translating
+  // checked text is not the same gamble as reading a strange web page.
+  async translateRecipe(id: number, language: string): Promise<ApiResponse<Recipe>> {
+    return this.request('POST', `/api/recipes/${id}/translate`, { language }, { timeout: 180000 });
+  }
+
+  // Fill in the ingredient and tag names that have no version in a language.
+  // The one-off that finishes what the startup migration could not.
+  async backfillTranslations(language: string): Promise<ApiResponse<{ ingredients: number; tags: number }>> {
+    return this.request('POST', '/api/translations/backfill', { language }, { timeout: 180000 });
+  }
+
   // Ingredient API
   async getIngredients(): Promise<Ingredient[]> {
-    return this.requestData<Ingredient[]>('GET', '/api/ingredients');
+    return this.requestData<Ingredient[]>('GET', withLang('/api/ingredients'));
   }
 
   async createIngredient(ingredientData: IngredientForm): Promise<ApiResponse> {
@@ -304,7 +322,7 @@ class ApiService {
 
   // Tag API
   async getTags(): Promise<Tag[]> {
-    return this.requestData<Tag[]>('GET', '/api/tags');
+    return this.requestData<Tag[]>('GET', withLang('/api/tags'));
   }
 
   async createTag(tagData: TagForm): Promise<ApiResponse> {

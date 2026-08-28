@@ -48,11 +48,29 @@ function detectLanguage(): Language {
   return 'en';
 }
 
+// Listeners fired after the language changes. The data cache registers one;
+// keeping it a callback rather than an import stops this module from depending
+// on the data layer, which already depends on it for its error messages.
+const onLanguageChange = new Set<(language: Language) => void>();
+
+export function onLanguageChanged(listener: (language: Language) => void): () => void {
+  onLanguageChange.add(listener);
+  return () => onLanguageChange.delete(listener);
+}
+
 export const useLanguageStore = create<LanguageState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       language: detectLanguage(),
-      setLanguage: (language: Language) => set({ language })
+      setLanguage: (language: Language) => {
+        if (get().language === language) return;
+        set({ language });
+        // Everything cached was fetched in the old language, including the
+        // recipe list, the ingredient names and the tag chips. Without this the
+        // 30s cache serves the previous language until it expires, which reads
+        // as the switch simply not working.
+        onLanguageChange.forEach(listener => listener(language));
+      }
     }),
     {
       name: 'recipe-book-language',
