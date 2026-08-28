@@ -116,6 +116,10 @@ services:
       # from an AI client. Unset means the route is not mounted at all.
       - MCP_TOKEN=${MCP_TOKEN:-}
       - MCP_USER=${MCP_USER:-admin}
+      # Importing a recipe from a URL. Unset means the route is not mounted and
+      # the frontend hides the field, rather than offering a button that fails.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - RECIPE_IMPORT_MODEL=${RECIPE_IMPORT_MODEL:-claude-opus-5}
       
       # Database Configuration
       - DB_MAX_CONNECTIONS=${DB_MAX_CONNECTIONS:-25}
@@ -414,6 +418,8 @@ volumes:
 # - ENVIRONMENT: production/development (default: production)
 # - MCP_TOKEN: bearer token for the /mcp endpoint; unset disables it entirely
 # - MCP_USER: which account MCP writes as (default: admin)
+# - ANTHROPIC_API_KEY: enables importing a recipe from a URL; unset hides it
+# - RECIPE_IMPORT_MODEL: which model reads the page (default: claude-opus-5)
 # - TIMEZONE: System timezone (default: UTC)
 # - APP_VERSION: Application version tag (default: latest)
 # 

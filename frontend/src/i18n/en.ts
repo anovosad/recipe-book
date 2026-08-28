@@ -99,6 +99,19 @@ export const en = {
   'gallery.shortcuts': '← → navigate · + − zoom · R rotate · Esc close',
 
   // Recipe form
+  // Importing a recipe from a URL. Only offered when the server has an AI key,
+  // and only when creating - importing over a recipe being edited would throw
+  // away what is already there.
+  'import.title': 'Fill from a link',
+  'import.hint': 'Paste a link to a recipe. It is read, translated into Czech and put into the form below. Nothing is saved until you press Create.',
+  'import.placeholder': 'https://example.com/recipe',
+  'import.action': 'Read the page',
+  'import.working': 'Reading the page…',
+  'import.needUrl': 'Paste a recipe link first',
+  'import.done': 'Recipe read. Check it over before saving.',
+  'import.failed': 'That page could not be imported',
+  'import.notes': 'Worth a second look',
+  'import.notesHint': 'The AI flagged these. Everything else it was confident about — but a quick read of the quantities never hurts.',
   'form.createTitle': 'New recipe',
   'form.editTitle': 'Edit recipe',
   'form.editing': 'Editing: {title}',

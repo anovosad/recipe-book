@@ -108,6 +108,10 @@ type gzipResponseWriter struct {
 	useGzip     bool
 }
 
+// Unwrap lets http.ResponseController reach the underlying writer; see the note
+// on responseWrapper.Unwrap in security.go.
+func (w *gzipResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 func (w *gzipResponseWriter) WriteHeader(code int) {
 	if w.wroteHeader {
 		return
@@ -171,6 +175,14 @@ func LightRateLimitConfig() *RateLimitConfig {
 		SearchRate:   rate.Every(1 * time.Second),
 		SearchBurst:  50,
 		SearchWindow: time.Minute,
+
+		// Recipe import: 10 at once, then one a minute. Tight enough that a
+		// stolen session cannot run up a bill, loose enough that an evening
+		// spent filing recipes does not hit it - and note that a rejected URL
+		// costs a token too, so a few typos must not exhaust it.
+		ImportRate:   rate.Every(1 * time.Minute),
+		ImportBurst:  10,
+		ImportWindow: 15 * time.Minute,
 
 		// General: Higher limits
 		GeneralRate:   rate.Every(300 * time.Millisecond),

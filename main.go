@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"recipe-book/database"
 	"recipe-book/handlers"
+	"recipe-book/importer"
 	"recipe-book/mcp"
 	"recipe-book/middleware"
 	"strings"
@@ -52,6 +53,13 @@ func main() {
 
 	// Health check endpoint (no database dependency)
 	r.HandleFunc("/health", quickHealthCheckHandler).Methods("GET")
+
+	// Importing a recipe from a URL needs a key to reach the AI with. Without
+	// one the route is left unmounted and the frontend hides the field, rather
+	// than offering something that answers with the same failure every time.
+	if service, enabled := importer.New(); enabled {
+		handlers.EnableRecipeImport(service)
+	}
 
 	// API routes with specific rate limiting
 	setupAPIRoutes(r, securityManager)
@@ -123,6 +131,10 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	api.HandleFunc("/logout", handlers.LogoutHandler).Methods("POST")
 	api.HandleFunc("/auth/check", handlers.CheckAuthHandler).Methods("GET")
 
+	// What this deployment can do. The frontend asks so it can hide the recipe
+	// import where no API key is configured and the route below is unmounted.
+	api.HandleFunc("/features", handlers.FeaturesHandler).Methods("GET")
+
 	// Wrapped in the login limiter rather than registered on loginRouter: the
 	// body carries a password guess and deserves that tighter budget, but a
 	// route on one of the rate-limit subrouters is invisible to
@@ -138,6 +150,18 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	api.Handle("/recipes",
 		sm.SearchRateLimitIfQuery()(http.HandlerFunc(handlers.GetRecipesHandler))).Methods("GET")
 	api.HandleFunc("/recipes", handlers.CreateRecipeHandler).Methods("POST")
+
+	// Reading a page with an AI costs money and pulls on somebody else's
+	// server, so it carries the tightest budget there is rather than the
+	// general one. Wrapped on `api` for the same reason /auth/password is:
+	// apiNotFoundHandler probes this subrouter alone, so a route parked on one
+	// of the rate-limit subrouters answers 404 to the wrong method instead of
+	// 405. Registered only when there is a key to use, so that GET /api/import
+	// and friends stay a plain 404 on a server that cannot do it at all.
+	if handlers.RecipeImportAvailable() {
+		api.Handle("/recipes/import",
+			sm.ImportRateLimit()(http.HandlerFunc(handlers.ImportRecipeHandler))).Methods("POST")
+	}
 	api.HandleFunc("/recipes/tag/{id:[0-9]+}", handlers.GetRecipesByTagHandler).Methods("GET")
 	api.HandleFunc("/recipes/{id:[0-9]+}", handlers.GetRecipeHandler).Methods("GET")
 	api.HandleFunc("/recipes/{id:[0-9]+}", handlers.UpdateRecipeHandler).Methods("PUT")

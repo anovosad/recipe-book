@@ -39,14 +39,6 @@ var supportedProtocols = map[string]bool{
 	"2025-06-18": true,
 }
 
-// Colours new tags cycle through, matching the palette the app seeds with, so a
-// tag created from here does not stand out as the one grey chip.
-var tagPalette = []string{
-	"#ff6b6b", "#ff8e53", "#fab005", "#ffd93d",
-	"#69db7c", "#4ecdc4", "#a8e6cf", "#74c0fc",
-	"#9775fa", "#f06292", "#ff5722", "#9aa1ae",
-}
-
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	ID      json.RawMessage `json:"id"`
@@ -241,79 +233,6 @@ func (s *server) actingUser() (*models.User, error) {
 		return nil, fmt.Errorf("MCP_USER %q does not exist; set it to an account that does", s.username)
 	}
 	return user, nil
-}
-
-// resolver turns the names a model has read off a page into the ids the
-// database wants, creating whatever is missing. Names are matched case- and
-// space-insensitively, so "olive oil" finds the seeded "Olive Oil" instead of
-// creating a duplicate.
-type resolver struct {
-	ingredients map[string]int
-	tags        map[string]int
-	tagCount    int
-}
-
-func normalizeName(name string) string {
-	return strings.ToLower(strings.Join(strings.Fields(name), " "))
-}
-
-func newResolver() (*resolver, error) {
-	r := &resolver{ingredients: map[string]int{}, tags: map[string]int{}}
-
-	existingIngredients, err := database.GetAllIngredients()
-	if err != nil {
-		return nil, err
-	}
-	for _, ingredient := range existingIngredients {
-		r.ingredients[normalizeName(ingredient.Name)] = ingredient.ID
-	}
-
-	existingTags, err := database.GetAllTags()
-	if err != nil {
-		return nil, err
-	}
-	for _, tag := range existingTags {
-		r.tags[normalizeName(tag.Name)] = tag.ID
-	}
-	r.tagCount = len(existingTags)
-
-	return r, nil
-}
-
-func (r *resolver) ingredientID(name string) (int, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return 0, fmt.Errorf("ingredient name is empty")
-	}
-	if id, ok := r.ingredients[normalizeName(name)]; ok {
-		return id, nil
-	}
-
-	created, err := database.CreateIngredientSecure(name)
-	if err != nil {
-		return 0, fmt.Errorf("could not add ingredient %q: %w", name, err)
-	}
-	r.ingredients[normalizeName(name)] = created.ID
-	return created.ID, nil
-}
-
-func (r *resolver) tagID(name string) (int, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return 0, fmt.Errorf("tag name is empty")
-	}
-	if id, ok := r.tags[normalizeName(name)]; ok {
-		return id, nil
-	}
-
-	colour := tagPalette[r.tagCount%len(tagPalette)]
-	created, err := database.CreateTagSecure(name, colour)
-	if err != nil {
-		return 0, fmt.Errorf("could not add tag %q: %w", name, err)
-	}
-	r.tags[normalizeName(name)] = created.ID
-	r.tagCount++
-	return created.ID, nil
 }
 
 func recipeSummary(recipe models.Recipe) map[string]any {

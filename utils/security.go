@@ -381,16 +381,14 @@ func ValidateQuantity(quantity float64) ValidationResult {
 	return ValidationResult{true, "", "quantity"}
 }
 
-// ValidateUnit validates measurement units
-func ValidateUnit(unit string) ValidationResult {
-	unit = strings.TrimSpace(unit)
-
-	if len(unit) == 0 {
-		return ValidationResult{false, "Unit is required", "unit"}
-	}
-
-	// Comprehensive list of allowed units
-	allowedUnits := []string{
+// AllowedUnits is every measurement unit a recipe line may carry, and
+// AllowedServingUnits every unit a serving may be counted in. They are exported
+// because the importer puts them in the JSON schema it hands the model as an
+// enum - constraining the answer at the source beats correcting it afterwards -
+// and a second copy of the list would drift from the one that validates.
+// The frontend's MEASUREMENT_UNITS/SERVING_UNITS mirror them.
+var (
+	AllowedUnits = []string{
 		// Volume
 		"tsp", "tbsp", "cup", "ml", "l", "fl oz",
 		// Weight
@@ -401,9 +399,22 @@ func ValidateUnit(unit string) ValidationResult {
 		"pinch", "dash", "to taste",
 	}
 
-	unitLower := strings.ToLower(unit)
-	for _, allowed := range allowedUnits {
-		if unitLower == strings.ToLower(allowed) {
+	AllowedServingUnits = []string{
+		"people", "servings", "portions", "pieces", "slices", "cups", "bowls",
+		"glasses", "liters", "ml", "kg", "g", "dozen", "cookies", "muffins", "pancakes",
+	}
+)
+
+// ValidateUnit validates measurement units
+func ValidateUnit(unit string) ValidationResult {
+	unit = strings.TrimSpace(unit)
+
+	if len(unit) == 0 {
+		return ValidationResult{false, "Unit is required", "unit"}
+	}
+
+	for _, allowed := range AllowedUnits {
+		if strings.EqualFold(unit, allowed) {
 			return ValidationResult{true, "", "unit"}
 		}
 	}
@@ -419,12 +430,7 @@ func ValidateServingUnit(unit string) ValidationResult {
 		unit = "people" // Default
 	}
 
-	allowedUnits := []string{
-		"people", "servings", "portions", "pieces", "slices", "cups", "bowls",
-		"glasses", "liters", "ml", "kg", "g", "dozen", "cookies", "muffins", "pancakes",
-	}
-
-	for _, allowed := range allowedUnits {
+	for _, allowed := range AllowedServingUnits {
 		if strings.EqualFold(unit, allowed) {
 			return ValidationResult{true, "", "serving_unit"}
 		}

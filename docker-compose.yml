@@ -43,6 +43,10 @@ services:
       # Model Context Protocol endpoint at /mcp. Unset means it is not mounted.
       - MCP_TOKEN=${MCP_TOKEN:-}
       - MCP_USER=${MCP_USER:-admin}
+      # Importing a recipe from a URL. Unset means the route is not mounted and
+      # the frontend hides the field, rather than offering a button that fails.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - RECIPE_IMPORT_MODEL=${RECIPE_IMPORT_MODEL:-claude-opus-5}
     restart: unless-stopped
     networks:
       - recipe-network

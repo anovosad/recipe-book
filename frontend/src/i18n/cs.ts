@@ -105,6 +105,16 @@ export const cs: Dictionary = {
   'gallery.shortcuts': '← → procházení · + − přiblížení · R otočení · Esc zavřít',
 
   // Recipe form
+  'import.title': 'Vyplnit z odkazu',
+  'import.hint': 'Vložte odkaz na recept. Načte se, přeloží do češtiny a vyplní formulář níže. Dokud nedáte Vytvořit recept, nic se neuloží.',
+  'import.placeholder': 'https://example.com/recept',
+  'import.action': 'Načíst stránku',
+  'import.working': 'Načítám stránku…',
+  'import.needUrl': 'Nejdřív vložte odkaz na recept',
+  'import.done': 'Recept načten. Před uložením ho prosím zkontrolujte.',
+  'import.failed': 'Tuhle stránku se nepodařilo načíst',
+  'import.notes': 'Stojí za kontrolu',
+  'import.notesHint': 'Tohle si AI nebyla jistá. U zbytku si jistá byla — ale projít si množství nikdy neuškodí.',
   'form.createTitle': 'Nový recept',
   'form.editTitle': 'Upravit recept',
   'form.editing': 'Upravujete: {title}',

@@ -14,7 +14,9 @@ import {
   IngredientForm,
   TagForm,
   ApiResponse,
-  SearchResponse
+  SearchResponse,
+  Features,
+  RecipeImportDraft
 } from '@/types';
 
 // Configure axios defaults
@@ -92,13 +94,17 @@ class ApiService {
   private async request<T = any>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
-    data?: any
+    data?: any,
+    // Per-request axios overrides. Only the import uses one: reading a page
+    // with an AI runs far past the 15s default that suits every other call.
+    options?: { timeout?: number }
   ): Promise<ApiResponse<T>> {
     try {
       const config: any = {
         method,
         url,
-        ...(data && { data })
+        ...(data && { data }),
+        ...options
       };
 
       const response = await api(config);
@@ -115,9 +121,10 @@ class ApiService {
   private async requestData<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     url: string,
-    data?: any
+    data?: any,
+    options?: { timeout?: number }
   ): Promise<T> {
-    const envelope = await this.request<T>(method, url, data);
+    const envelope = await this.request<T>(method, url, data, options);
     return envelope.data as T;
   }
 
@@ -263,6 +270,19 @@ class ApiService {
   // setting a flag. Answers with the recipe's images in their new order.
   async setImageCover(imageId: number): Promise<ApiResponse<RecipeImage[]>> {
     return this.request('PUT', `/api/images/${imageId}/cover`);
+  }
+
+  // What this deployment can do. Asked once so the recipe form only offers the
+  // URL import where the server has a key to do it with.
+  async getFeatures(): Promise<Features> {
+    return this.requestData<Features>('GET', '/api/features');
+  }
+
+  // Read a recipe off a web page. Nothing is saved - the draft goes into the
+  // form for review. Fetching the page and having a model read it takes tens of
+  // seconds, hence the timeout well past the default.
+  async importRecipe(url: string): Promise<RecipeImportDraft> {
+    return this.requestData<RecipeImportDraft>('POST', '/api/recipes/import', { url }, { timeout: 180000 });
   }
 
   // Ingredient API

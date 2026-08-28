@@ -7,6 +7,7 @@ import (
 
 	"recipe-book/database"
 	"recipe-book/models"
+	"recipe-book/recipeinput"
 )
 
 type toolFunc func(json.RawMessage) (any, error)
@@ -213,24 +214,18 @@ func (s *server) listTags(json.RawMessage) (any, error) {
 	return map[string]any{"count": len(listed), "tags": listed}, nil
 }
 
-type ingredientArg struct {
-	Name     string  `json:"name"`
-	Quantity float64 `json:"quantity"`
-	Unit     string  `json:"unit"`
-}
-
 type recipeArgs struct {
-	ID           int             `json:"id"`
-	Title        *string         `json:"title"`
-	Instructions *string         `json:"instructions"`
-	Description  *string         `json:"description"`
-	PrepTime     *int            `json:"prep_time"`
-	CookTime     *int            `json:"cook_time"`
-	Servings     *int            `json:"servings"`
-	ServingUnit  *string         `json:"serving_unit"`
-	Ingredients  []ingredientArg `json:"ingredients"`
-	Tags         []string        `json:"tags"`
-	SourceURL    string          `json:"source_url"`
+	ID           int                           `json:"id"`
+	Title        *string                       `json:"title"`
+	Instructions *string                       `json:"instructions"`
+	Description  *string                       `json:"description"`
+	PrepTime     *int                          `json:"prep_time"`
+	CookTime     *int                          `json:"cook_time"`
+	Servings     *int                          `json:"servings"`
+	ServingUnit  *string                       `json:"serving_unit"`
+	Ingredients  []recipeinput.NamedIngredient `json:"ingredients"`
+	Tags         []string                      `json:"tags"`
+	SourceURL    string                        `json:"source_url"`
 }
 
 func (s *server) createRecipe(raw json.RawMessage) (any, error) {
@@ -253,16 +248,16 @@ func (s *server) createRecipe(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 
-	names, err := newResolver()
+	names, err := recipeinput.NewResolver()
 	if err != nil {
 		return nil, err
 	}
 
-	ingredients, err := resolveIngredients(names, args.Ingredients)
+	ingredients, err := recipeinput.ResolveIngredients(names, args.Ingredients)
 	if err != nil {
 		return nil, err
 	}
-	tagIDs, err := resolveTags(names, args.Tags)
+	tagIDs, err := recipeinput.ResolveTags(names, args.Tags)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +265,7 @@ func (s *server) createRecipe(raw json.RawMessage) (any, error) {
 	input := database.RecipeInput{
 		Title:        strings.TrimSpace(*args.Title),
 		Instructions: strings.TrimSpace(*args.Instructions),
-		Description:  withSource(deref(args.Description, ""), args.SourceURL),
+		Description:  recipeinput.WithSource(deref(args.Description, ""), args.SourceURL),
 		PrepTime:     deref(args.PrepTime, 0),
 		CookTime:     deref(args.CookTime, 0),
 		Servings:     deref(args.Servings, 4),
@@ -312,14 +307,14 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 	input := database.RecipeInput{
 		Title:        strings.TrimSpace(deref(args.Title, current.Title)),
 		Instructions: strings.TrimSpace(deref(args.Instructions, current.Instructions)),
-		Description:  withSource(deref(args.Description, current.Description), args.SourceURL),
+		Description:  recipeinput.WithSource(deref(args.Description, current.Description), args.SourceURL),
 		PrepTime:     deref(args.PrepTime, current.PrepTime),
 		CookTime:     deref(args.CookTime, current.CookTime),
 		Servings:     deref(args.Servings, current.Servings),
 		ServingUnit:  strings.TrimSpace(deref(args.ServingUnit, current.ServingUnit)),
 	}
 
-	names, err := newResolver()
+	names, err := recipeinput.NewResolver()
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +323,7 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 	// which is what the underlying write does either way.
 	var ingredients []database.RecipeIngredientInput
 	if args.Ingredients != nil {
-		if ingredients, err = resolveIngredients(names, args.Ingredients); err != nil {
+		if ingredients, err = recipeinput.ResolveIngredients(names, args.Ingredients); err != nil {
 			return nil, err
 		}
 	} else {
@@ -343,7 +338,7 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 
 	var tagIDs []int
 	if args.Tags != nil {
-		if tagIDs, err = resolveTags(names, args.Tags); err != nil {
+		if tagIDs, err = recipeinput.ResolveTags(names, args.Tags); err != nil {
 			return nil, err
 		}
 	} else {
@@ -362,64 +357,6 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 		"path":    fmt.Sprintf("/recipe/%d", args.ID),
 		"message": "Recipe updated.",
 	}, nil
-}
-
-func resolveIngredients(names *resolver, given []ingredientArg) ([]database.RecipeIngredientInput, error) {
-	resolved := make([]database.RecipeIngredientInput, 0, len(given))
-	for _, item := range given {
-		id, err := names.ingredientID(item.Name)
-		if err != nil {
-			return nil, err
-		}
-		unit := strings.TrimSpace(item.Unit)
-		if unit == "" {
-			unit = "piece"
-		}
-		quantity := item.Quantity
-		if quantity <= 0 {
-			quantity = 1
-		}
-		resolved = append(resolved, database.RecipeIngredientInput{
-			IngredientID: id,
-			Quantity:     quantity,
-			Unit:         unit,
-		})
-	}
-	return resolved, nil
-}
-
-func resolveTags(names *resolver, given []string) ([]int, error) {
-	resolved := make([]int, 0, len(given))
-	for _, name := range given {
-		if strings.TrimSpace(name) == "" {
-			continue
-		}
-		id, err := names.tagID(name)
-		if err != nil {
-			return nil, err
-		}
-		resolved = append(resolved, id)
-	}
-	return resolved, nil
-}
-
-// withSource records where a recipe came from. There is no column for it, and
-// the description is the one field a reader will actually see it in. Skipped
-// when it would push the description past what the validator accepts.
-func withSource(description, sourceURL string) string {
-	sourceURL = strings.TrimSpace(sourceURL)
-	if sourceURL == "" || strings.Contains(description, sourceURL) {
-		return description
-	}
-
-	suffix := "Source: " + sourceURL
-	if description != "" {
-		suffix = "\n\n" + suffix
-	}
-	if len(description)+len(suffix) > 1000 {
-		return description
-	}
-	return description + suffix
 }
 
 func deref[T any](pointer *T, fallback T) T {

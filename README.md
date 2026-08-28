@@ -210,6 +210,8 @@ answers with the updated one.
 - `POST /api/login` - User login
 - `POST /api/logout` - End the session
 - `GET /api/auth/check` - Current user
+- `PUT /api/auth/password` - Change the signed-in user's password
+- `GET /api/features` - What this deployment can do (currently: whether recipe import is configured)
 
 ### Recipes
 - `GET /api/recipes` - Get all recipes
@@ -219,17 +221,21 @@ answers with the updated one.
 - `GET /api/recipes/{id}` - Get specific recipe
 - `PUT /api/recipes/{id}` - Update recipe (auth required, owner only)
 - `DELETE /api/recipes/{id}` - Delete recipe (auth required, owner only)
+- `POST /api/recipes/import` - Read a recipe off a URL and return it as an unsaved draft (auth required; only mounted when `ANTHROPIC_API_KEY` is set)
 
 ### Images
 - `POST /api/recipes/{id}/images` - Attach images (auth required, owner only)
 - `DELETE /api/images/{id}` - Delete an image (auth required, owner only)
+- `PUT /api/images/{id}/cover` - Make an image the cover (auth required, owner only)
 
 ### Ingredients and tags
 - `GET /api/ingredients` - Get all ingredients
 - `POST /api/ingredients` - Create new ingredient (auth required)
+- `PUT /api/ingredients/{id}` - Rename an ingredient (auth required)
 - `DELETE /api/ingredients/{id}` - Delete an ingredient (refused while a recipe uses it)
 - `GET /api/tags` - Get all tags
 - `POST /api/tags` - Create new tag (auth required)
+- `PUT /api/tags/{id}` - Rename a tag or change its colour (auth required)
 - `DELETE /api/tags/{id}` - Delete a tag (refused while another user's recipe carries it)
 
 ## TLS / HTTPS
@@ -306,6 +312,59 @@ anything reaching into its container.
   (`docker run --rm -v recipe-book-letsencrypt:/etc/letsencrypt certbot/certbot delete`)
   and restart nginx. Note that browsers which already saw the HSTS header will
   refuse plain HTTP for a year regardless.
+
+## Importing a recipe from a URL
+
+Paste a link into the "Fill from a link" box on the new-recipe page and the
+server fetches the page, reduces it to the recipe and has Claude write it back
+as a record this collection can hold: in Czech, with imperial measures converted
+where the conversion is exact, and with the ingredients and tags matched against
+the ones already stored. The form fills itself in; **nothing is saved until you
+press Create**, because a model reading a page gets a quantity wrong now and
+then and the check costs five seconds.
+
+**It is off until you give it an API key.** Set `ANTHROPIC_API_KEY`; without it
+the `/api/recipes/import` route is not mounted and the field does not appear.
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+RECIPE_IMPORT_MODEL=claude-opus-5   # optional, this is the default
+```
+
+A page that publishes [schema.org Recipe](https://schema.org/Recipe) data — most
+recipe sites do — is read from that rather than from its text, so the
+ingredients, the steps and the times come from the site itself and the model
+only translates and converts. It costs a few cents per import and takes some
+tens of seconds. Sites that publish nothing structured fall back to the page
+text with the navigation, scripts and styling stripped out; that works, it just
+costs more and leans harder on the model.
+
+A site's structured data is not always right — one Czech recipe site publishes a
+carbonara whose ingredient list has no eggs in it, though its own method beats
+them into the sauce — so the model is told to check the list against the steps
+and add what is missing, and it says so in the notes when it does.
+
+What it will not do is fill a gap with something plausible. An amount the page
+never gives comes back as "to taste", a time it never states comes back as 0,
+and a stated range gives you its lower end — each with a note saying so. The
+point is that you can fill in a blank while reviewing the draft, but you cannot
+spot an invented quantity that looks like every other quantity on the page. Read
+the notes; that is what they are for.
+
+A few sites sit behind bot protection and answer 403 to anything that is not a
+browser. The importer identifies itself honestly rather than pretending to be
+Chrome, so those pages cannot be imported and say so.
+
+What it will and will not convert: ounces, pounds, fluid ounces, pints, quarts
+and Fahrenheit all become metric. Cups, tablespoons and teaspoons of anything
+solid stay as they are — a cup of flour and a cup of sugar do not weigh the
+same, and a guessed gram figure produces a recipe that does not work. Anything
+the model was unsure of comes back as a note above the form.
+
+One thing it does write before you press Create: an ingredient or tag the recipe
+needs and the collection does not have yet is created during the import, so the
+draft can reference it. Discarding the import leaves those behind; they are
+deletable from the ingredients and tags pages.
 
 ## MCP (AI access)
 

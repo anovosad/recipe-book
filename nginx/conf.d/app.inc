@@ -39,6 +39,19 @@ location /api/search {
     proxy_pass http://recipe_app;
 }
 
+# Reading a recipe off a URL fetches a third-party page and pays an AI to read
+# it, which takes far longer than anything else here and costs money on every
+# request. So: its own budget, and its own patience - the 60s inherited above
+# would cut the connection while the answer was still being written. The app
+# holds the same two limits itself; this layer is what a client that never
+# reaches the app is stopped by.
+location /api/recipes/import {
+    limit_req zone=import burst=10 nodelay;
+    proxy_pass http://recipe_app;
+    proxy_read_timeout 180s;
+    proxy_send_timeout 180s;
+}
+
 location /api/ {
     limit_req zone=general burst=20 nodelay;
     proxy_pass http://recipe_app;

@@ -10,7 +10,10 @@ import {
   Tag as TagIcon,
   Clock,
   ChefHat,
-  Star
+  Star,
+  Link2,
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
@@ -43,6 +46,14 @@ const RecipeFormPage: React.FC = () => {
   // after the upload, once the new images have ids.
   const [coverPreviewIndex, setCoverPreviewIndex] = useState<number | null>(null);
   const [isFormReady, setIsFormReady] = useState(false);
+
+  // Importing a recipe from a URL. `canImport` follows the server: without an
+  // AI key the endpoint is not mounted at all, and a button that 404s is worse
+  // than no button.
+  const [canImport, setCanImport] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [importNotes, setImportNotes] = useState<string[]>([]);
   
   // Modal states
   const [showIngredientModal, setShowIngredientModal] = useState(false);
@@ -103,6 +114,17 @@ const RecipeFormPage: React.FC = () => {
 
         setIngredients(ingredientsData || []);
         setTags(tagsData || []);
+
+        // Caught separately from the two above: a server that does not know
+        // /api/features must still open the form, it just does not offer the
+        // import. Failing the whole load over an optional feature would be a
+        // blank page instead of a missing button.
+        try {
+          const features = await apiService.getFeatures();
+          setCanImport(!!features?.recipe_import);
+        } catch {
+          setCanImport(false);
+        }
 
         // Load recipe if editing
         if (isEditMode && id) {
@@ -199,6 +221,69 @@ const RecipeFormPage: React.FC = () => {
       setCoverPreviewIndex(null);
     }
   }, [watchedImages]);
+
+  // Read a recipe off a web page and drop it into the form.
+  //
+  // Nothing is saved here - what comes back is a draft, and the person still
+  // presses Create. The one thing the server does write is the taxonomy: an
+  // ingredient or tag the recipe needs and the collection lacks is created
+  // during the import, so both pickers are reloaded before the draft's ids are
+  // handed to the form, or a brand-new ingredient would render as an empty
+  // select.
+  const handleImport = async () => {
+    const url = importUrl.trim();
+    if (!url) {
+      toast.error(t('import.needUrl'));
+      return;
+    }
+
+    setIsImporting(true);
+    setImportNotes([]);
+
+    try {
+      const draft = await apiService.importRecipe(url);
+
+      const [ingredientsData, tagsData] = await Promise.all([
+        apiService.getIngredients(),
+        apiService.getTags()
+      ]);
+      setIngredients(ingredientsData || []);
+      setTags(tagsData || []);
+      invalidate('ingredients', 'tags');
+
+      const imported = draft.recipe;
+      reset({
+        title: imported.title || '',
+        description: imported.description || '',
+        instructions: imported.instructions || '',
+        prep_time: imported.prep_time || 0,
+        cook_time: imported.cook_time || 0,
+        servings: imported.servings || 4,
+        serving_unit: imported.serving_unit || 'people',
+        ingredients: imported.ingredients?.length
+          ? imported.ingredients.map(ing => ({
+              ingredient_id: ing.ingredient_id,
+              quantity: ing.quantity,
+              unit: ing.unit
+            }))
+          : [{ ingredient_id: 0, quantity: 0, unit: '' }],
+        tags: imported.tags?.map(tag => tag.id) || [],
+        // Photos already chosen are left alone: they came from the person, not
+        // from the page, and resetting them would drop the previews too.
+        images: watchedImages ?? null
+      });
+      setSelectedTags(new Set(imported.tags?.map(tag => tag.id) || []));
+      setImportNotes(draft.notes || []);
+
+      toast.success(t('import.done'));
+    } catch (error: any) {
+      // The service throws the error envelope, so the server's own sentence -
+      // "that page does not appear to hold a recipe" - is what gets shown.
+      toast.error(error?.error || t('import.failed'));
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const onSubmit = async (data: FormData) => {
     setIsLoading(true);
@@ -424,6 +509,65 @@ const RecipeFormPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Import from a URL. Create-only: running it over a recipe being edited
+          would throw away what is already stored. */}
+      {!isEditMode && canImport && (
+        <Card>
+          <h2 className="mb-2 flex items-center gap-2 text-xl font-semibold">
+            <Sparkles className="w-5 h-5" />
+            {t('import.title')}
+          </h2>
+          <p className="mb-4 text-sm text-ink-500">{t('import.hint')}</p>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            {/* The wrapper carries the growth, not the Input: its className
+                lands on the <input>, while the field's own div is the flex
+                item. */}
+            <div className="flex-1">
+              <Input
+                type="url"
+                inputMode="url"
+                value={importUrl}
+                onChange={event => setImportUrl(event.target.value)}
+                onKeyDown={event => {
+                  // The panel sits outside the <form>, so Enter has nothing to
+                  // submit; wiring it here is what makes paste-and-go work.
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (!isImporting) handleImport();
+                  }
+                }}
+                placeholder={t('import.placeholder')}
+                disabled={isImporting}
+              />
+            </div>
+            <Button
+              type="button"
+              onClick={handleImport}
+              loading={isImporting}
+              disabled={isImporting || !importUrl.trim()}
+              icon={<Link2 className="w-4 h-4" />}
+            >
+              {isImporting ? t('import.working') : t('import.action')}
+            </Button>
+          </div>
+
+          {importNotes.length > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-300/60 bg-amber-50/70 p-4 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <h3 className="flex items-center gap-2 text-sm font-semibold">
+                <AlertTriangle className="w-4 h-4" />
+                {t('import.notes')}
+              </h3>
+              <p className="mt-1 text-xs text-ink-500">{t('import.notesHint')}</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">
+                {importNotes.map((note, index) => (
+                  <li key={index}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Basic Information */}

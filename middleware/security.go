@@ -31,6 +31,7 @@ type SecurityManager struct {
 	loginLimiters    map[string]*RateLimiter
 	registerLimiters map[string]*RateLimiter
 	searchLimiters   map[string]*RateLimiter
+	importLimiters   map[string]*RateLimiter
 	generalLimiters  map[string]*RateLimiter
 
 	// Blocked IPs
@@ -92,6 +93,13 @@ type RateLimitConfig struct {
 	SearchBurst  int
 	SearchWindow time.Duration
 
+	// Recipe imports: each one fetches somebody else's page and pays an AI to
+	// read it, so this is the tightest budget here that still lets a person
+	// import a few recipes in one sitting.
+	ImportRate   rate.Limit
+	ImportBurst  int
+	ImportWindow time.Duration
+
 	// General requests: 100 per minute
 	GeneralRate   rate.Limit
 	GeneralBurst  int
@@ -119,6 +127,11 @@ func DefaultRateLimitConfig() *RateLimitConfig {
 		SearchBurst:  30,
 		SearchWindow: time.Minute,
 
+		// Recipe import: 8 at once, then one every 2 minutes
+		ImportRate:   rate.Every(2 * time.Minute),
+		ImportBurst:  8,
+		ImportWindow: 15 * time.Minute,
+
 		// General: 100 per minute
 		GeneralRate:   rate.Every(600 * time.Millisecond), // 1 request every 600ms
 		GeneralBurst:  100,
@@ -140,6 +153,7 @@ func NewSecurityManager(config *RateLimitConfig) *SecurityManager {
 		loginLimiters:    make(map[string]*RateLimiter),
 		registerLimiters: make(map[string]*RateLimiter),
 		searchLimiters:   make(map[string]*RateLimiter),
+		importLimiters:   make(map[string]*RateLimiter),
 		generalLimiters:  make(map[string]*RateLimiter),
 		blockedIPs:       make(map[string]time.Time),
 		violations:       make(map[string]*violationRecord),
@@ -376,6 +390,12 @@ func (sm *SecurityManager) cleanupRoutine() {
 			}
 		}
 
+		for ip, limiter := range sm.importLimiters {
+			if limiter.lastSeen.Before(cutoff) {
+				delete(sm.importLimiters, ip)
+			}
+		}
+
 		for ip, limiter := range sm.generalLimiters {
 			if limiter.lastSeen.Before(cutoff) {
 				delete(sm.generalLimiters, ip)
@@ -482,6 +502,35 @@ func (sm *SecurityManager) RegisterRateLimit() func(http.Handler) http.Handler {
 			if !limiter.Allow() {
 				sm.handleRateViolation(ip, "register", sm.config.BlockDuration)
 				respondError(w, r, http.StatusTooManyRequests, "Too many registration attempts. Please try again later.", retryDetails(sm.config.RegisterWindow))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// ImportRateLimit guards importing a recipe from a URL. Every request makes the
+// server fetch a third-party page and pay a model to read it, so it gets its
+// own budget rather than riding the general one - and a violation is counted
+// rather than blocking outright, since overrunning it is what an impatient
+// person does, not an attacker.
+func (sm *SecurityManager) ImportRateLimit() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := sm.getClientIP(r)
+
+			if blocked, remaining := sm.isBlocked(ip); blocked {
+				w.Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())))
+				respondError(w, r, http.StatusTooManyRequests, fmt.Sprintf("Rate limit exceeded. Try again in %v", remaining.Round(time.Second)), retryDetails(remaining))
+				return
+			}
+
+			limiter := sm.getRateLimiter(sm.importLimiters, ip, sm.config.ImportRate, sm.config.ImportBurst)
+
+			if !limiter.Allow() {
+				sm.handleRateViolation(ip, "import", sm.config.BlockDuration)
+				respondError(w, r, http.StatusTooManyRequests, "Too many recipe imports. Please try again shortly.", retryDetails(sm.config.ImportWindow))
 				return
 			}
 
@@ -663,6 +712,12 @@ func (rw *responseWrapper) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap is how http.ResponseController reaches the real writer through a
+// middleware chain. Without it a handler cannot extend its own deadlines -
+// which the recipe import needs, since reading a page with an AI runs past the
+// server's write timeout that every other endpoint fits inside comfortably.
+func (rw *responseWrapper) Unwrap() http.ResponseWriter { return rw.ResponseWriter }
 
 // SQL Injection protection middleware
 func SQLInjectionProtection() func(http.Handler) http.Handler {

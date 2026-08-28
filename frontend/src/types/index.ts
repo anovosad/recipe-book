@@ -46,6 +46,21 @@ export interface Recipe {
   author_name: string;
 }
 
+// What the server is configured to do. Recipe import needs an AI API key, and
+// without one the endpoint is not even mounted.
+export interface Features {
+  recipe_import: boolean;
+}
+
+// An unsaved recipe read off a web page. `recipe` is shaped like a stored one
+// so the form can populate itself from it exactly as it does when editing;
+// `notes` is what the model flagged for a human to check.
+export interface RecipeImportDraft {
+  recipe: Recipe;
+  notes: string[];
+  source_url: string;
+}
+
 // Ingredient types
 export interface Ingredient {
   id: number;
