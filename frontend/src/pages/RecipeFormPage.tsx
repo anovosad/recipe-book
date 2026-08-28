@@ -11,6 +11,8 @@ import {
   Clock,
   ChefHat,
   Star,
+  ChevronUp,
+  ChevronDown,
   Link2,
   Sparkles,
   AlertTriangle
@@ -98,7 +100,7 @@ const RecipeFormPage: React.FC = () => {
     }
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, move } = useFieldArray({
     control,
     name: 'ingredients'
   });
@@ -752,6 +754,8 @@ const RecipeFormPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
+            <p className="mb-3 text-sm text-ink-500">{t('form.ingredientOrderHint')}</p>
+
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3">
                 <div className="flex-1">
@@ -818,6 +822,32 @@ const RecipeFormPage: React.FC = () => {
                     ]}
                     error={errors.ingredients?.[index]?.unit?.message}
                   />
+                </div>
+
+                {/* Order is stored, so it is worth being able to set it. The
+                    list is short and this has to work on a phone in a kitchen,
+                    which is why it is two buttons rather than drag and drop. */}
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() => move(index, index - 1)}
+                    disabled={index === 0}
+                    aria-label={t('form.moveIngredientUp')}
+                    title={t('form.moveIngredientUp')}
+                    className="rounded-t-md px-1.5 py-0.5 text-ink-500 transition-colors hover:bg-white/70 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(index, index + 1)}
+                    disabled={index === fields.length - 1}
+                    aria-label={t('form.moveIngredientDown')}
+                    title={t('form.moveIngredientDown')}
+                    className="rounded-b-md px-1.5 py-0.5 text-ink-500 transition-colors hover:bg-white/70 hover:text-brand-600 disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
                 </div>
 
                 <Button
