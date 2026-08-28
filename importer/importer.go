@@ -174,7 +174,7 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL, language string, names 
 		}
 		texts[code] = models.RecipeText{
 			Title:        title,
-			Description:  recipeinput.WithSource(clean(text.Description, maxDescriptionRunes), sourceURL),
+			Description:  clean(text.Description, maxDescriptionRunes),
 			Instructions: instructions,
 		}
 	}
@@ -277,6 +277,7 @@ func (s *Service) draftFrom(answer *aiRecipe, sourceURL, language string, names 
 		CookTime:     clamp(answer.CookTime, 0, 1440),
 		Servings:     clamp(servings, 1, 100),
 		ServingUnit:  servingUnit,
+		SourceURL:    sourceURL,
 		Ingredients:  make([]models.RecipeIngredient, 0, len(resolvedIngredients)),
 		Images:       []models.RecipeImage{},
 		Tags:         make([]models.Tag, 0, len(tagIDs)),

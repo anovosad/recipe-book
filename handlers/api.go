@@ -52,6 +52,7 @@ type RecipeRequest struct {
 	CookTime    int                   `json:"cook_time"`
 	Servings    int                   `json:"servings"`
 	ServingUnit string                `json:"serving_unit"`
+	SourceURL   string                `json:"source_url"`
 	Ingredients []RecipeIngredientReq `json:"ingredients"`
 	Tags        []int                 `json:"tags"`
 }
@@ -1161,6 +1162,7 @@ func recipeInputFromRequest(req RecipeRequest) (database.RecipeInput, []database
 		CookTime:    req.CookTime,
 		Servings:    req.Servings,
 		ServingUnit: strings.TrimSpace(req.ServingUnit),
+		SourceURL:   strings.TrimSpace(req.SourceURL),
 	}
 
 	ingredients := make([]database.RecipeIngredientInput, 0, len(req.Ingredients))

@@ -71,6 +71,7 @@ export const en = {
 
   // Recipe detail
   'recipe.back': 'Back to recipes',
+  'recipe.source': 'Source: {host}',
   'recipe.created': 'Created {date}',
   'recipe.prepTime': 'Prep time',
   'recipe.cookTime': 'Cook time',
@@ -132,6 +133,9 @@ export const en = {
   'form.titlePlaceholder': 'A descriptive name for the dish',
   'form.description': 'Description',
   'form.descriptionPlaceholder': 'A sentence or two (optional)',
+  'form.sourceUrl': 'Source link',
+  'form.sourceUrlPlaceholder': 'https://example.com/recipe',
+  'form.sourceUrlHelp': 'Where this recipe came from. Shown as a link on the recipe page.',
   'form.details': 'Details',
   'form.prepTime': 'Prep time (minutes)',
   'form.cookTime': 'Cook time (minutes)',

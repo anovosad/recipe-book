@@ -77,6 +77,7 @@ export const cs: Dictionary = {
 
   // Recipe detail
   'recipe.back': 'Zpět na recepty',
+  'recipe.source': 'Zdroj: {host}',
   'recipe.created': 'Vytvořeno {date}',
   'recipe.prepTime': 'Příprava',
   'recipe.cookTime': 'Vaření',
@@ -134,6 +135,9 @@ export const cs: Dictionary = {
   'form.titlePlaceholder': 'Výstižný název jídla',
   'form.description': 'Popis',
   'form.descriptionPlaceholder': 'Věta nebo dvě (nepovinné)',
+  'form.sourceUrl': 'Odkaz na zdroj',
+  'form.sourceUrlPlaceholder': 'https://example.com/recept',
+  'form.sourceUrlHelp': 'Odkud recept pochází. Na stránce receptu se zobrazí jako odkaz.',
   'form.details': 'Podrobnosti',
   'form.prepTime': 'Příprava (minuty)',
   'form.cookTime': 'Vaření (minuty)',

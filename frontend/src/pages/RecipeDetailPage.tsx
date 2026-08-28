@@ -22,11 +22,21 @@ import { Recipe } from '@/types';
 import { formatCookingQuantity, parseInstructions, cn } from '@/utils';
 import { useTranslation, useFormatters, useLanguageStore, LANGUAGES } from '@/i18n';
 import { Card, Button, LoadingSpinner, Alert, TagChip } from '@/components/ui';
-import { Languages as LanguagesIcon } from 'lucide-react';
+import { Languages as LanguagesIcon, ExternalLink } from 'lucide-react';
 import RecipeImageGallery from '@/components/RecipeImageGallery';
 import toast from 'react-hot-toast';
 
 const MAX_SERVINGS = 50;
+
+// The host is the useful part of a source link - "varecha.pravda.sk" says
+// where a recipe came from, where the full URL is forty characters of slug.
+const sourceHost = (url: string): string => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+};
 
 const RecipeDetailPage: React.FC = () => {
   const language = useLanguageStore(state => state.language);
@@ -203,6 +213,21 @@ const RecipeDetailPage: React.FC = () => {
             )}
             {recipe.description && (
               <p className="mt-3 text-lg leading-relaxed text-ink-500">{recipe.description}</p>
+            )}
+
+            {/* Its own line, not a bare URL inside the description. rel keeps
+                the referrer and the window handle away from the other site. */}
+            {recipe.source_url && (
+              <a
+                href={recipe.source_url}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="mt-3 inline-flex max-w-full items-center gap-1.5 text-sm text-ink-300 underline decoration-dotted underline-offset-4 transition-colors hover:text-brand-600"
+                title={recipe.source_url}
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t('recipe.source', { host: sourceHost(recipe.source_url) })}</span>
+              </a>
             )}
             <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-300">
               <Calendar className="h-4 w-4" />

@@ -47,6 +47,7 @@ type Recipe struct {
 	CookTime     int                `json:"cook_time"`
 	Servings     int                `json:"servings"`
 	ServingUnit  string             `json:"serving_unit"`
+	SourceURL    string             `json:"source_url"`
 	CreatedBy    int                `json:"created_by"`
 	CreatedAt    time.Time          `json:"created_at"`
 	Ingredients  []RecipeIngredient `json:"ingredients"`

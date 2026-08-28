@@ -272,22 +272,3 @@ func ResolveTags(names *Resolver, given []NamedTag) ([]int, error) {
 func PlainNames(name string) map[string]string {
 	return map[string]string{database.DefaultLanguage: name}
 }
-
-// WithSource records where a recipe came from. There is no column for it, and
-// the description is the one field a reader will actually see it in. Skipped
-// when it would push the description past what the validator accepts.
-func WithSource(description, sourceURL string) string {
-	sourceURL = strings.TrimSpace(sourceURL)
-	if sourceURL == "" || strings.Contains(description, sourceURL) {
-		return description
-	}
-
-	suffix := "Source: " + sourceURL
-	if description != "" {
-		suffix = "\n\n" + suffix
-	}
-	if len(description)+len(suffix) > 1000 {
-		return description
-	}
-	return description + suffix
-}

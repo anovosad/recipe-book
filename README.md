@@ -411,6 +411,9 @@ solid stay as they are — a cup of flour and a cup of sugar do not weigh the
 same, and a guessed gram figure produces a recipe that does not work. Anything
 the model was unsure of comes back as a note above the form.
 
+The page it came from is kept in its own field and shown as a small link under
+the description, rather than pasted onto the end of it.
+
 One thing it does write before you press Create: an ingredient or tag the recipe
 needs and the collection does not have yet is created during the import, so the
 draft can reference it. Discarding the import leaves those behind; they are

@@ -94,6 +94,7 @@ const RecipeFormPage: React.FC = () => {
       cook_time: 0,
       servings: 4,
       serving_unit: 'people',
+      source_url: '',
       ingredients: [{ ingredient_id: 0, quantity: 0, unit: '' }],
       tags: [],
       images: null
@@ -232,6 +233,7 @@ const RecipeFormPage: React.FC = () => {
         cook_time: recipe.cook_time || 0,
         servings: recipe.servings || 4,
         serving_unit: recipe.serving_unit || 'people',
+        source_url: recipe.source_url || '',
         ingredients: recipe.ingredients?.length > 0 
           ? recipe.ingredients.map(ing => ({
               ingredient_id: ing.ingredient_id || 0,
@@ -328,6 +330,7 @@ const RecipeFormPage: React.FC = () => {
         cook_time: imported.cook_time || 0,
         servings: imported.servings || 4,
         serving_unit: imported.serving_unit || 'people',
+        source_url: imported.source_url || '',
         ingredients: imported.ingredients?.length
           ? imported.ingredients.map(ing => ({
               ingredient_id: ing.ingredient_id,
@@ -382,6 +385,7 @@ const RecipeFormPage: React.FC = () => {
         cook_time: data.cook_time,
         servings: data.servings,
         serving_unit: data.serving_unit,
+        source_url: data.source_url,
         ingredients: validIngredients,
         tags: Array.from(selectedTags),
       };
@@ -671,6 +675,18 @@ const RecipeFormPage: React.FC = () => {
               error={errors.description?.message}
               placeholder={t('form.descriptionPlaceholder')}
               rows={3}
+            />
+
+            {/* Filled in by the import, editable by hand, and blank for a
+                recipe that came out of somebody's head. */}
+            <Input
+              label={t('form.sourceUrl')}
+              type="url"
+              inputMode="url"
+              {...register('source_url')}
+              error={errors.source_url?.message}
+              placeholder={t('form.sourceUrlPlaceholder')}
+              helperText={t('form.sourceUrlHelp')}
             />
           </div>
         </Card>

@@ -90,7 +90,7 @@ func toolDefinitions() []toolDefinition {
 						"description": "Categories such as Dessert, Main Dish, Vegan. Existing ones are reused.",
 						"items": {"type": "string"}
 					},
-					"source_url": {"type": "string", "description": "Where the recipe came from. Appended to the description."}
+					"source_url": {"type": "string", "description": "The page the recipe came from. Shown as a link on the recipe."}
 				},
 				"required": ["title", "instructions", "ingredients"],
 				"additionalProperties": false
@@ -301,13 +301,14 @@ func (s *server) createRecipe(raw json.RawMessage) (any, error) {
 			mcpLanguage: {
 				Title:        strings.TrimSpace(*args.Title),
 				Instructions: strings.TrimSpace(*args.Instructions),
-				Description:  recipeinput.WithSource(deref(args.Description, ""), args.SourceURL),
+				Description:  deref(args.Description, ""),
 			},
 		},
 		PrepTime:    deref(args.PrepTime, 0),
 		CookTime:    deref(args.CookTime, 0),
 		Servings:    deref(args.Servings, 4),
 		ServingUnit: strings.TrimSpace(deref(args.ServingUnit, "")),
+		SourceURL:   strings.TrimSpace(args.SourceURL),
 	}
 
 	id, err := database.CreateRecipeTx(input, user.ID, tagIDs, ingredients)
@@ -352,7 +353,7 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 	texts[mcpLanguage] = models.RecipeText{
 		Title:        strings.TrimSpace(deref(args.Title, current.Title)),
 		Instructions: strings.TrimSpace(deref(args.Instructions, current.Instructions)),
-		Description:  recipeinput.WithSource(deref(args.Description, current.Description), args.SourceURL),
+		Description:  deref(args.Description, current.Description),
 	}
 
 	input := database.RecipeInput{
@@ -361,6 +362,7 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 		CookTime:    deref(args.CookTime, current.CookTime),
 		Servings:    deref(args.Servings, current.Servings),
 		ServingUnit: strings.TrimSpace(deref(args.ServingUnit, current.ServingUnit)),
+		SourceURL:   firstNonEmpty(strings.TrimSpace(args.SourceURL), current.SourceURL),
 	}
 
 	names, err := recipeinput.NewResolver(mcpLanguage)
@@ -406,6 +408,15 @@ func (s *server) updateRecipe(raw json.RawMessage) (any, error) {
 		"path":    fmt.Sprintf("/recipe/%d", args.ID),
 		"message": "Recipe updated.",
 	}, nil
+}
+
+// firstNonEmpty keeps a stored source url when the caller sent none, so an
+// update that says nothing about where the recipe came from does not erase it.
+func firstNonEmpty(given, stored string) string {
+	if given != "" {
+		return given
+	}
+	return stored
 }
 
 func deref[T any](pointer *T, fallback T) T {

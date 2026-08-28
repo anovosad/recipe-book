@@ -240,8 +240,8 @@ func prepareStatements() {
 	}
 
 	stmtCreateRecipe, err = DB.Prepare(`
-		INSERT INTO recipes (prep_time, cook_time, servings, serving_unit, created_by)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO recipes (prep_time, cook_time, servings, serving_unit, source_url, created_by)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		log.Fatal("Failed to prepare stmtCreateRecipe:", err)
@@ -252,7 +252,7 @@ func prepareStatements() {
 	// typed is still a recipe you may fix. created_by stays, because whose
 	// recipe it is remains worth showing - it just is not an access check.
 	stmtUpdateRecipe, err = DB.Prepare(`
-		UPDATE recipes SET prep_time = ?, cook_time = ?, servings = ?, serving_unit = ?
+		UPDATE recipes SET prep_time = ?, cook_time = ?, servings = ?, serving_unit = ?, source_url = ?
 		WHERE id = ?
 	`)
 	if err != nil {
@@ -333,6 +333,10 @@ func createTables() {
 		cook_time INTEGER CHECK(cook_time >= 0 AND cook_time <= 1440),
 		servings INTEGER CHECK(servings >= 1 AND servings <= 100),
 		serving_unit TEXT DEFAULT 'people' CHECK(length(serving_unit) <= 20),
+		-- Where the recipe came from, when it came from somewhere. It used to be
+		-- appended to the description as "Source: <url>", which put a raw link
+		-- in the middle of prose; a column lets the page render it as a link.
+		source_url TEXT CHECK(length(source_url) <= 2048),
 		created_by INTEGER NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE CASCADE
@@ -429,6 +433,7 @@ func createTables() {
 	migrateRecipeTranslations()
 	migrateTaxonomyTranslations()
 	migrateRecipeIngredientOrder()
+	migrateRecipeSourceURL()
 }
 
 // recipeTextJoin resolves which language a recipe is shown in.
@@ -453,13 +458,13 @@ const recipeTextJoin = `
 const recipeColumns = `
 	r.id, tr.title, COALESCE(tr.description, ''), tr.instructions, tr.language,
 	r.prep_time, r.cook_time, r.servings, COALESCE(r.serving_unit, 'people'),
-	r.created_by, r.created_at, u.username`
+	COALESCE(r.source_url, ''), r.created_by, r.created_at, u.username`
 
 // scanRecipe reads recipeColumns off a row.
 func scanRecipe(scan func(...any) error) (models.Recipe, error) {
 	var recipe models.Recipe
 	err := scan(&recipe.ID, &recipe.Title, &recipe.Description, &recipe.Instructions, &recipe.Language,
-		&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit,
+		&recipe.PrepTime, &recipe.CookTime, &recipe.Servings, &recipe.ServingUnit, &recipe.SourceURL,
 		&recipe.CreatedBy, &recipe.CreatedAt, &recipe.AuthorName)
 	recipe.Ingredients = []models.RecipeIngredient{}
 	recipe.Images = []models.RecipeImage{}
@@ -646,6 +651,96 @@ func migrateRecipeIngredientOrder() {
 	}
 
 	log.Println("🥄 Recipe ingredients now keep the order they were written in")
+}
+
+// migrateRecipeSourceURL adds recipes.source_url and lifts the link out of the
+// descriptions it was being appended to.
+//
+// "Source: <url>" glued onto the end of a description was a workaround for
+// having nowhere to put it, and it reads as exactly that - a bare URL in the
+// middle of a sentence about the dish. The suffix is recognisable enough to
+// remove safely: it is always preceded by a blank line and always the last
+// thing in the text. Anything that does not match that shape is left alone,
+// including a description where somebody happened to mention a link.
+func migrateRecipeSourceURL() {
+	var hasColumn int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('recipes') WHERE name='source_url'").Scan(&hasColumn)
+	if err != nil {
+		log.Printf("Error checking the recipes schema: %v", err)
+		return
+	}
+	if hasColumn == 0 {
+		if _, err := DB.Exec("ALTER TABLE recipes ADD COLUMN source_url TEXT"); err != nil {
+			log.Printf("Could not add recipes.source_url: %v", err)
+			return
+		}
+	}
+
+	rows, err := DB.Query(`
+		SELECT recipe_id, language, description FROM recipe_translations
+		WHERE description LIKE '%' || char(10) || char(10) || 'Source: %'
+	`)
+	if err != nil {
+		return
+	}
+
+	type found struct {
+		recipeID int
+		language string
+		cleaned  string
+		url      string
+	}
+	var moved []found
+	for rows.Next() {
+		var f found
+		var description string
+		if err := rows.Scan(&f.recipeID, &f.language, &description); err != nil {
+			continue
+		}
+		marker := "\n\nSource: "
+		at := strings.LastIndex(description, marker)
+		if at < 0 {
+			continue
+		}
+		url := strings.TrimSpace(description[at+len(marker):])
+		// Only when the suffix really is just a link: a description ending in a
+		// sentence that starts "Source: " and runs on is not one of ours.
+		if strings.ContainsAny(url, " \n\t") || !strings.HasPrefix(url, "http") {
+			continue
+		}
+		f.cleaned = strings.TrimSpace(description[:at])
+		f.url = url
+		moved = append(moved, f)
+	}
+	rows.Close()
+
+	if len(moved) == 0 {
+		return
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return
+	}
+	defer tx.Rollback()
+
+	for _, f := range moved {
+		if _, err := tx.Exec("UPDATE recipe_translations SET description = ? WHERE recipe_id = ? AND language = ?",
+			f.cleaned, f.recipeID, f.language); err != nil {
+			return
+		}
+		// The same link is appended to every language, so whichever row is seen
+		// last wins and they all carry the same value anyway.
+		if _, err := tx.Exec("UPDATE recipes SET source_url = ? WHERE id = ?", f.url, f.recipeID); err != nil {
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Could not commit the source_url migration: %v", err)
+		return
+	}
+	log.Printf("🔗 Moved %d recipe source links out of their descriptions", len(moved))
 }
 
 // seedTranslations maps the names this app seeds a database with, and the Czech
@@ -1478,6 +1573,7 @@ type RecipeInput struct {
 	CookTime    int
 	Servings    int
 	ServingUnit string
+	SourceURL   string
 }
 
 // RecipeIngredientInput is one ingredient row of a recipe write.
@@ -1494,6 +1590,14 @@ func validateRecipeInput(in *RecipeInput) error {
 
 	if len(in.Texts) == 0 {
 		return newValidationError("A recipe needs a title and a method in at least one language")
+	}
+
+	in.SourceURL = strings.TrimSpace(in.SourceURL)
+	if in.SourceURL != "" {
+		if len(in.SourceURL) > 2048 ||
+			!(strings.HasPrefix(in.SourceURL, "http://") || strings.HasPrefix(in.SourceURL, "https://")) {
+			return newValidationError("The source has to be an http or https link")
+		}
 	}
 
 	checks := []utils.ValidationResult{
@@ -1565,7 +1669,7 @@ func CreateRecipeTx(in RecipeInput, userID int, tagIDs []int, ingredients []Reci
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Stmt(stmtCreateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, userID)
+	result, err := tx.Stmt(stmtCreateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, in.SourceURL, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -1607,7 +1711,7 @@ func UpdateRecipeTx(recipeID, userID int, in RecipeInput, tagIDs []int, ingredie
 	}
 	defer tx.Rollback()
 
-	result, err := tx.Stmt(stmtUpdateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, recipeID)
+	result, err := tx.Stmt(stmtUpdateRecipe).Exec(in.PrepTime, in.CookTime, in.Servings, in.ServingUnit, in.SourceURL, recipeID)
 	if err != nil {
 		return err
 	}

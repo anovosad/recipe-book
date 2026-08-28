@@ -45,6 +45,10 @@ export interface Recipe {
   cook_time: number;
   servings: number;
   serving_unit: string;
+  // Where the recipe came from, when it came from a web page. Rendered as a
+  // link rather than glued onto the end of the description, which is where it
+  // used to live.
+  source_url: string;
   created_by: number;
   created_at: string;
   ingredients: RecipeIngredient[];
@@ -122,6 +126,7 @@ export interface RecipeForm {
   cook_time: number;
   servings: number;
   serving_unit: string;
+  source_url: string;
   ingredients: RecipeFormIngredient[];
   tags: number[];
   images?: File[];

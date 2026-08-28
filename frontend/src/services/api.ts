@@ -223,6 +223,7 @@ class ApiService {
       cook_time: jsonData.cook_time,
       servings: jsonData.servings,
       serving_unit: jsonData.serving_unit,
+      source_url: jsonData.source_url || '',
       ingredients: jsonData.ingredients,
       tags: jsonData.tags
     };
@@ -240,6 +241,7 @@ class ApiService {
       cook_time: jsonData.cook_time,
       servings: jsonData.servings,
       serving_unit: jsonData.serving_unit,
+      source_url: jsonData.source_url || '',
       ingredients: jsonData.ingredients,
       tags: jsonData.tags
     };
