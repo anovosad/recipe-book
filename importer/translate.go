@@ -210,3 +210,98 @@ func slicesSortInts(values []int) {
 		}
 	}
 }
+
+// EnglishCanonicals picks the names that are not English out of a list, and
+// says what each should be.
+//
+// Distinct from TranslateNames, which translates everything it is given: here
+// most of the list is already correct and must come back untouched. A model
+// asked to "translate" a list of English words will improve them - "Tomato"
+// becomes "Tomatoes", "Pasta" becomes "Noodles" - and every one of those is a
+// rename of a real ingredient. So the answer carries only what needed changing,
+// and anything it returns unchanged is dropped here as well.
+func (s *Service) EnglishCanonicals(ctx context.Context, names map[int]string, kind string) (map[int]string, error) {
+	if len(names) == 0 {
+		return map[int]string{}, nil
+	}
+
+	ids := make([]int, 0, len(names))
+	for id := range names {
+		ids = append(ids, id)
+	}
+	slicesSortInts(ids)
+
+	var list strings.Builder
+	for _, id := range ids {
+		list.WriteString(fmt.Sprintf("%d\t%s\n", id, names[id]))
+	}
+
+	system := fmt.Sprintf(`You are given a list of cooking %s names, one per line as "id<TAB>name". Some are English and some are not.
+
+Return an entry ONLY for the names that are not English, giving each one's ordinary English name. A name that is already English must not appear in your answer at all - not even unchanged. Do not tidy, pluralise or improve an English name: "Tomato" and "Pasta" are English and are none of your business.
+
+Be careful with words that look English but are not. "Olej" is Czech for "Oil". "Maso" is Czech for "Meat". Judge the language of the word, not whether it is spelled with accents - plenty of Czech words have none.
+
+Give the ordinary English name a cook would use, singular and capitalised.`, kind)
+
+	message, err := s.client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
+		Model:     anthropic.Model(s.model),
+		MaxTokens: 8000,
+		System:    []anthropic.BetaTextBlockParam{{Text: system}},
+		OutputConfig: anthropic.BetaOutputConfigParam{
+			Format: anthropic.BetaJSONOutputFormatParam{Schema: json.RawMessage(`{
+			  "type": "object",
+			  "properties": {
+			    "not_english": {
+			      "type": "array",
+			      "description": "Only the entries whose name is not English. Omit everything already English.",
+			      "items": {
+			        "type": "object",
+			        "properties": {
+			          "id":      {"type": "integer", "description": "The id exactly as it was given."},
+			          "english": {"type": "string", "description": "The ordinary English name."}
+			        },
+			        "required": ["id", "english"],
+			        "additionalProperties": false
+			      }
+			    }
+			  },
+			  "required": ["not_english"],
+			  "additionalProperties": false
+			}`)},
+		},
+		Messages: []anthropic.BetaMessageParam{
+			anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(list.String())),
+		},
+	})
+	if err != nil {
+		log.Printf("importer: could not sort %s canonicals: %v", kind, err)
+		return nil, fmt.Errorf("the AI service could not be reached")
+	}
+
+	var answer struct {
+		NotEnglish []struct {
+			ID      int    `json:"id"`
+			English string `json:"english"`
+		} `json:"not_english"`
+	}
+	if err := json.Unmarshal([]byte(betaText(message)), &answer); err != nil {
+		return nil, fmt.Errorf("the AI answered in an unexpected shape")
+	}
+
+	english := map[int]string{}
+	for _, entry := range answer.NotEnglish {
+		original, asked := names[entry.ID]
+		if !asked {
+			continue // an id nobody asked about must not be written anywhere
+		}
+		name := clean(entry.English, 100)
+		if name == "" || strings.EqualFold(name, original) {
+			continue // no change is not a change
+		}
+		english[entry.ID] = name
+	}
+
+	log.Printf("importer: %d of %d %s canonicals are not English", len(english), len(names), kind)
+	return english, nil
+}

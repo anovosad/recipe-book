@@ -2452,3 +2452,144 @@ func DeleteRecipeText(recipeID int, language string) error {
 	_, err := DB.Exec("DELETE FROM recipe_translations WHERE recipe_id = ? AND language = ?", recipeID, language)
 	return err
 }
+
+// taxonomyTables names the three tables one kind of taxonomy lives in. The
+// values are compile-time constants, never anything a caller supplies, so
+// interpolating them into SQL is safe in the way a user-supplied name would
+// not be.
+type taxonomyTables struct {
+	table        string // ingredients / tags
+	translations string // ingredient_translations / tag_translations
+	key          string // ingredient_id / tag_id
+	link         string // recipe_ingredients / recipe_tags
+	linkKey      string // ingredient_id / tag_id
+}
+
+var (
+	ingredientTables = taxonomyTables{"ingredients", "ingredient_translations", "ingredient_id", "recipe_ingredients", "ingredient_id"}
+	tagTables        = taxonomyTables{"tags", "tag_translations", "tag_id", "recipe_tags", "tag_id"}
+)
+
+// AllCanonicals returns every ingredient and tag canonical name, keyed by id.
+//
+// Every one of them, not just the ones that look Czech. looksCzech decides on
+// diacritics, which is right for a migration that must work offline but too
+// blunt here: "Olej" is a Czech word spelled entirely in ASCII, and it sat in
+// the English column untouched through a whole backfill because of it. Deciding
+// which of these are actually English is a job for the model that is being
+// called anyway, so the whole list goes to it.
+func AllCanonicals() (ingredients, tags map[int]string, err error) {
+	ingredients, err = allCanonicals(ingredientTables)
+	if err != nil {
+		return nil, nil, err
+	}
+	tags, err = allCanonicals(tagTables)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ingredients, tags, nil
+}
+
+func allCanonicals(t taxonomyTables) (map[int]string, error) {
+	found := map[int]string{}
+	rows, err := DB.Query("SELECT id, name FROM " + t.table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			continue
+		}
+		found[id] = name
+	}
+	return found, nil
+}
+
+// AdoptIngredientCanonical gives one ingredient its English canonical name,
+// keeping what it was called as the Czech translation.
+func AdoptIngredientCanonical(id int, english string) (merged bool, err error) {
+	return adoptCanonical(ingredientTables, id, english, utils.ValidateIngredientName)
+}
+
+// AdoptTagCanonical is the same, for tags.
+func AdoptTagCanonical(id int, english string) (merged bool, err error) {
+	return adoptCanonical(tagTables, id, english, utils.ValidateTagName)
+}
+
+// adoptCanonical renames a row to its English name - or merges it into the row
+// that already has that name.
+//
+// The merge is the case that matters. A collection translated by hand ends up
+// holding both "Mléko" and "Milk" as separate ingredients, and simply renaming
+// one would collide with the UNIQUE index on name. They are the same thing, so
+// the recipes pointing at the Czech row are moved to the English one and the
+// duplicate goes. INSERT OR IGNORE on the move, because a recipe already listing
+// both would otherwise violate the (recipe_id, ingredient_id, unit) key - it
+// keeps the row it had rather than failing the whole merge.
+func adoptCanonical(t taxonomyTables, id int, english string,
+	validate func(string) utils.ValidationResult) (bool, error) {
+
+	if !utils.IsValidID(id) {
+		return false, fmt.Errorf("invalid id")
+	}
+	english = strings.TrimSpace(english)
+	if validation := validate(english); !validation.Valid {
+		return false, newValidationError("%s", validation.Message)
+	}
+	if looksCzech(english) {
+		return false, newValidationError("%q is not an English name", english)
+	}
+
+	var current string
+	if err := DB.QueryRow("SELECT name FROM "+t.table+" WHERE id = ?", id).Scan(&current); err != nil {
+		return false, err
+	}
+	if strings.EqualFold(current, english) {
+		return false, nil // already there
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	var keepID int
+	err = tx.QueryRow("SELECT id FROM "+t.table+" WHERE lower(name) = lower(?) AND id != ?", english, id).Scan(&keepID)
+
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// Nothing else holds the English name: rename in place and keep what it
+		// was called as its Czech side.
+		if _, err := tx.Exec("UPDATE "+t.table+" SET name = ? WHERE id = ?", english, id); err != nil {
+			return false, err
+		}
+		if _, err := tx.Exec("INSERT INTO "+t.translations+" ("+t.key+", language, name) VALUES (?, 'cs', ?) "+
+			"ON CONFLICT("+t.key+", language) DO UPDATE SET name = excluded.name", id, current); err != nil {
+			return false, err
+		}
+		return false, tx.Commit()
+
+	case err != nil:
+		return false, err
+	}
+
+	// The English row already exists. Move everything onto it and drop this one.
+	if _, err := tx.Exec("INSERT OR IGNORE INTO "+t.translations+" ("+t.key+", language, name) VALUES (?, 'cs', ?)",
+		keepID, current); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec("UPDATE OR IGNORE "+t.link+" SET "+t.linkKey+" = ? WHERE "+t.linkKey+" = ?", keepID, id); err != nil {
+		return false, err
+	}
+	// Whatever the OR IGNORE above refused to move was a duplicate of a row the
+	// recipe already had; deleting the row itself takes those with it.
+	if _, err := tx.Exec("DELETE FROM "+t.table+" WHERE id = ?", id); err != nil {
+		return false, err
+	}
+
+	return true, tx.Commit()
+}

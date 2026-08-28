@@ -230,23 +230,63 @@ func BackfillTranslationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	target := database.NormalizeLanguage(req.Language)
 
-	missingIngredients, missingTags, err := database.MissingTranslations(target)
-	if err != nil {
-		sendJSONError(w, http.StatusInternalServerError, "Could not work out what is missing")
-		return
-	}
-	if len(missingIngredients) == 0 && len(missingTags) == 0 {
-		sendJSONSuccess(w, "Nothing was missing", map[string]int{"ingredients": 0, "tags": 0})
-		return
-	}
-
+	// Both passes call the AI, so the whole thing gets the import's budget
+	// rather than the server's ordinary write timeout.
 	ctx, cancel := context.WithTimeout(r.Context(), importWorkBudget)
 	defer cancel()
 	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(importWriteBudget)); err != nil {
 		log.Printf("backfill: could not extend the write deadline: %v", err)
 	}
 
-	written := map[string]int{"ingredients": 0, "tags": 0}
+	// First pass: names whose canonical is still Czech.
+	//
+	// The startup migration renames what its built-in dictionary covers and
+	// leaves the rest, so a hand-translated collection keeps canonicals like
+	// "Krystalový cukr". No amount of filling in translations fixes those - the
+	// canonical *is* the English side - so they have to be turned round before
+	// the gaps are worth filling. Where the English name already exists as its
+	// own row ("Mléko" beside "Milk") the two are merged rather than collided.
+	adopted, merged := 0, 0
+	if allIngredients, allTags, err := database.AllCanonicals(); err == nil {
+		for _, pass := range []struct {
+			names map[int]string
+			kind  string
+			adopt func(int, string) (bool, error)
+		}{
+			{allIngredients, "ingredient", database.AdoptIngredientCanonical},
+			{allTags, "tag", database.AdoptTagCanonical},
+		} {
+			if len(pass.names) == 0 {
+				continue
+			}
+			english, err := recipeImporter.EnglishCanonicals(ctx, pass.names, pass.kind)
+			if err != nil {
+				log.Printf("backfill: could not englishify %s names: %v", pass.kind, err)
+				continue
+			}
+			for id, name := range english {
+				didMerge, err := pass.adopt(id, name)
+				if err != nil {
+					log.Printf("backfill: %s %d could not adopt %q: %v", pass.kind, id, name, err)
+					continue
+				}
+				adopted++
+				if didMerge {
+					merged++
+				}
+			}
+		}
+	}
+
+	// Second pass: what is now missing in the language actually asked for.
+	// Recomputed after the first pass, which may have merged rows away.
+	missingIngredients, missingTags, err := database.MissingTranslations(target)
+	if err != nil {
+		sendJSONError(w, http.StatusInternalServerError, "Could not work out what is missing")
+		return
+	}
+
+	written := map[string]int{"ingredients": 0, "tags": 0, "englishified": adopted, "merged": merged}
 
 	if len(missingIngredients) > 0 {
 		names, err := recipeImporter.TranslateNames(ctx, missingIngredients, target, "ingredient")
@@ -270,7 +310,8 @@ func BackfillTranslationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.LogSecurityEvent("TRANSLATIONS_BACKFILLED", getClientIP(r),
-		fmt.Sprintf("Language:%s, Ingredients:%d, Tags:%d, User:%s", target, written["ingredients"], written["tags"], user.Username))
+		fmt.Sprintf("Language:%s, Ingredients:%d, Tags:%d, Englishified:%d, Merged:%d, User:%s",
+			target, written["ingredients"], written["tags"], adopted, merged, user.Username))
 
 	sendJSONSuccess(w, "Translations filled in", written)
 }
