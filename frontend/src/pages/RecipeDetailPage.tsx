@@ -74,7 +74,10 @@ const RecipeDetailPage: React.FC = () => {
     };
 
     loadRecipe();
-  }, [id, setCurrentRecipe]);
+    // `language` matters: the server answers in it, so switching has to refetch
+    // or the title, description, method, ingredients and tags all stay in the
+    // language the page was opened in.
+  }, [id, setCurrentRecipe, language]);
 
   const [isTranslating, setIsTranslating] = useState(false);
 

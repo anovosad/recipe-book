@@ -6,7 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Ingredient } from '@/types';
-import { useTranslation, translate, currentLanguage } from '@/i18n';
+import { useTranslation, translate, useLanguageStore } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -35,21 +35,27 @@ export const IngredientsPage: React.FC = () => {
 
   // Declared above the effect that calls it: reading a `const` from inside its
   // temporal dead zone is what react-hooks/immutability rejects.
+  const language = useLanguageStore(state => state.language);
+
   const loadIngredients = useCallback(async () => {
     try {
       const data = await apiService.getIngredients();
       setIngredients(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load ingredients:', error);
-      // translate() rather than t(): this callback must not depend on a
-      // function identity, or the effect below re-fires whenever that
-      // identity changes and the page fetches in a loop.
-      toast.error(translate(currentLanguage(), 'ingredients.loadFailed'));
+      // translate(language, ...) rather than t(): `t` is a fresh function on
+      // every render, and keying this callback on one is how a fetch loop
+      // starts. `language` is a plain string, and it is a real dependency -
+      // the names this fetches come back translated, so a switch must refetch.
+      toast.error(translate(language, 'ingredients.loadFailed'));
       setIngredients([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+    // `language` and nothing else: the names come back translated, so a switch
+    // has to refetch. A function identity in here is what starts a fetch loop,
+    // which is why the toast above calls translate() rather than t().
+  }, [language]);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadIngredients happens after an await,

@@ -6,7 +6,7 @@ import apiService from '@/services/api';
 import { invalidate } from '@/hooks/useOptimizedData';
 import { Tag } from '@/types';
 import { cn } from '@/utils';
-import { useTranslation, translate, currentLanguage } from '@/i18n';
+import { useTranslation, translate, useLanguageStore } from '@/i18n';
 import { Button, Input, LoadingSpinner, EmptyState, Modal, TagChip } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -44,20 +44,26 @@ export const TagsPage: React.FC = () => {
 
   // Declared above the effect that calls it: reading a `const` from inside its
   // temporal dead zone is what react-hooks/immutability rejects.
+  const language = useLanguageStore(state => state.language);
+
   const loadTags = useCallback(async () => {
     try {
       const data = await apiService.getTags();
       setTags(data);
     } catch (error) {
       console.error('Failed to load tags:', error);
-      // translate() rather than t(): this callback must not depend on a
-      // function identity, or the effect below re-fires whenever that
-      // identity changes and the page fetches in a loop.
-      toast.error(translate(currentLanguage(), 'tags.loadFailed'));
+      // translate(language, ...) rather than t(): `t` is a fresh function on
+      // every render, and keying this callback on one is how a fetch loop
+      // starts. `language` is a plain string, and it is a real dependency -
+      // the names this fetches come back translated, so a switch must refetch.
+      toast.error(translate(language, 'tags.loadFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+    // `language` and nothing else: the names come back translated, so a switch
+    // has to refetch. A function identity in here is what starts a fetch loop,
+    // which is why the toast above calls translate() rather than t().
+  }, [language]);
 
   useEffect(() => {
     // Fetching on mount: every setState in loadTags happens after an await,

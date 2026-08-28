@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm, useFieldArray } from 'react-hook-form';
 import {
@@ -80,6 +80,7 @@ const RecipeFormPage: React.FC = () => {
     handleSubmit,
     formState: { errors },
     setValue,
+    getValues,
     watch,
     reset
   } = useForm<FormData>({
@@ -162,9 +163,42 @@ const RecipeFormPage: React.FC = () => {
     };
 
     loadData();
-    // No `t` in the dependencies on purpose: this loads the recipe once, and
-    // keying it on a function identity is how a fetch loop starts.
-  }, [id, isEditMode, navigate]);
+    // `language` is in here because the ingredient and tag pickers come back
+    // translated, so a switch has to refetch them. No `t` though: that is a
+    // fresh function on every render, and keying a fetch on one starts a loop.
+  }, [id, isEditMode, navigate, language]);
+
+  // Switching language while editing swaps which version is in the fields, and
+  // keeps what was typed in the one being left.
+  //
+  // Deliberately not a refetch: the load above brings the recipe back as it is
+  // stored, which would throw away unsaved edits the moment somebody pressed
+  // the language switch. The form already holds every version - the one on
+  // screen and the rest in otherTexts - so the swap is local, and nothing is
+  // lost until Save decides what to write.
+  const shownLanguage = useRef(language);
+  useEffect(() => {
+    const previous = shownLanguage.current;
+    if (previous === language) return;
+    shownLanguage.current = language;
+
+    const leaving = {
+      title: getValues('title'),
+      description: getValues('description'),
+      instructions: getValues('instructions')
+    };
+    const arriving = otherTexts[language] ?? { title: '', description: '', instructions: '' };
+
+    setOtherTexts(current => {
+      const next = { ...current, [previous]: leaving };
+      delete next[language];
+      return next;
+    });
+
+    setValue('title', arriving.title);
+    setValue('description', arriving.description);
+    setValue('instructions', arriving.instructions);
+  }, [language, otherTexts, getValues, setValue]);
 
   // Populate form when recipe and reference data are loaded.
   //
@@ -214,7 +248,10 @@ const RecipeFormPage: React.FC = () => {
         setSelectedTags(new Set());
       }
     }
-  }, [recipe, isFormReady, reset, language]);
+    // No `language` here: the effect above owns switching between versions, and
+    // re-running this one would reset the form over whatever was being typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipe, isFormReady, reset]);
 
   // Handle image preview
   useEffect(() => {
