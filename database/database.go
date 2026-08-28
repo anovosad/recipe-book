@@ -347,6 +347,11 @@ func createTables() {
 		ingredient_id INTEGER NOT NULL,
 		quantity REAL NOT NULL CHECK(quantity > 0 AND quantity <= 10000),
 		unit TEXT NOT NULL CHECK(length(unit) >= 1 AND length(unit) <= 20),
+		-- The order the recipe lists them in. Reads used to sort by name, which
+		-- is alphabetical order, not cooking order: a recipe that says flour,
+		-- yeast, water, salt came back as flour, salt, water, yeast, and the
+		-- first three ingredients of a bread are the ones you combine first.
+		display_order INTEGER NOT NULL DEFAULT 0,
 		UNIQUE (recipe_id, ingredient_id, unit),
 		FOREIGN KEY (recipe_id) REFERENCES recipes (id) ON DELETE CASCADE,
 		FOREIGN KEY (ingredient_id) REFERENCES ingredients (id) ON DELETE CASCADE
@@ -423,6 +428,7 @@ func createTables() {
 	migrateUserPasswordChangedAt()
 	migrateRecipeTranslations()
 	migrateTaxonomyTranslations()
+	migrateRecipeIngredientOrder()
 }
 
 // recipeTextJoin resolves which language a recipe is shown in.
@@ -599,6 +605,47 @@ func migrateRecipeTranslations() {
 		return
 	}
 	log.Printf("✅ Migrated %d recipes into recipe_translations", len(existing))
+}
+
+// migrateRecipeIngredientOrder adds recipe_ingredients.display_order and fills
+// it in from the order the rows were written.
+//
+// Nothing is lost here, which is the pleasant part: the surrogate id is an
+// autoincrement, so ascending id within a recipe *is* the order the ingredients
+// were submitted in - which for an imported recipe is the order the page listed
+// them. The information was there all along; only the ORDER BY was throwing it
+// away.
+func migrateRecipeIngredientOrder() {
+	var hasColumn int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('recipe_ingredients') WHERE name='display_order'").Scan(&hasColumn)
+	if err != nil {
+		log.Printf("Error checking the recipe_ingredients schema: %v", err)
+		return
+	}
+	if hasColumn > 0 {
+		return
+	}
+
+	if _, err := DB.Exec("ALTER TABLE recipe_ingredients ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0"); err != nil {
+		log.Printf("Could not add recipe_ingredients.display_order: %v", err)
+		return
+	}
+
+	// ROW_NUMBER over each recipe, ordered by the id that recorded the
+	// insertion order in the first place.
+	if _, err := DB.Exec(`
+		UPDATE recipe_ingredients SET display_order = (
+			SELECT position FROM (
+				SELECT id, ROW_NUMBER() OVER (PARTITION BY recipe_id ORDER BY id) - 1 AS position
+				FROM recipe_ingredients
+			) ranked WHERE ranked.id = recipe_ingredients.id
+		)
+	`); err != nil {
+		log.Printf("Could not fill in recipe_ingredients.display_order: %v", err)
+		return
+	}
+
+	log.Println("🥄 Recipe ingredients now keep the order they were written in")
 }
 
 // seedTranslations maps the names this app seeds a database with, and the Czech
@@ -1094,10 +1141,14 @@ func insertDefaultRecipes() {
 	fmt.Println("🍳 Adding default recipes...")
 
 	for _, recipe := range defaultRecipes {
+		// The text goes in recipe_translations, not on the recipe row - those
+		// columns were dropped when recipes became multilingual, and this
+		// insert still named them, so seeding a brand new database failed
+		// silently and left it with no recipes at all.
 		result, err := DB.Exec(`
-			INSERT INTO recipes (title, description, instructions, prep_time, cook_time, servings, serving_unit, created_by)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		`, recipe.Title, recipe.Description, recipe.Instructions, recipe.PrepTime, recipe.CookTime, recipe.Servings, recipe.ServingUnit, userID)
+			INSERT INTO recipes (prep_time, cook_time, servings, serving_unit, created_by)
+			VALUES (?, ?, ?, ?, ?)
+		`, recipe.PrepTime, recipe.CookTime, recipe.Servings, recipe.ServingUnit, userID)
 
 		if err != nil {
 			log.Printf("Error inserting recipe %s: %v", recipe.Title, err)
@@ -1106,8 +1157,18 @@ func insertDefaultRecipes() {
 
 		recipeID, _ := result.LastInsertId()
 
-		// Add ingredients
-		for _, ingredient := range recipe.Ingredients {
+		// The seed recipes are written in English, which is also the canonical
+		// the taxonomy is stored under.
+		if _, err := DB.Exec(`
+			INSERT INTO recipe_translations (recipe_id, language, title, description, instructions)
+			VALUES (?, ?, ?, ?, ?)
+		`, recipeID, DefaultLanguage, recipe.Title, recipe.Description, recipe.Instructions); err != nil {
+			log.Printf("Error inserting text for recipe %s: %v", recipe.Title, err)
+			continue
+		}
+
+		// Add ingredients, keeping the order they are listed in above
+		for position, ingredient := range recipe.Ingredients {
 			var ingredientID int
 			err := DB.QueryRow("SELECT id FROM ingredients WHERE name = ?", ingredient.Name).Scan(&ingredientID)
 			if err != nil {
@@ -1115,8 +1176,8 @@ func insertDefaultRecipes() {
 				continue
 			}
 
-			_, err = DB.Exec("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
-				recipeID, ingredientID, ingredient.Quantity, ingredient.Unit)
+			_, err = DB.Exec("INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, display_order) VALUES (?, ?, ?, ?, ?)",
+				recipeID, ingredientID, ingredient.Quantity, ingredient.Unit, position)
 			if err != nil {
 				log.Printf("Error inserting ingredient %s for recipe %s: %v", ingredient.Name, recipe.Title, err)
 			}
@@ -1606,7 +1667,7 @@ func replaceRecipeRelations(tx *sql.Tx, recipeID int64, tagIDs []int, ingredient
 	}
 
 	seenIngredients := make(map[ingredientKey]bool)
-	for _, ingredient := range ingredients {
+	for position, ingredient := range ingredients {
 		if !utils.IsValidID(ingredient.IngredientID) {
 			return newValidationError("invalid ingredient id: %d", ingredient.IngredientID)
 		}
@@ -1625,8 +1686,8 @@ func replaceRecipeRelations(tx *sql.Tx, recipeID int64, tagIDs []int, ingredient
 		}
 
 		if _, err := tx.Exec(
-			"INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit) VALUES (?, ?, ?, ?)",
-			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit,
+			"INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, display_order) VALUES (?, ?, ?, ?, ?)",
+			recipeID, ingredient.IngredientID, ingredient.Quantity, ingredient.Unit, position,
 		); err != nil {
 			return newValidationError("ingredient %d could not be attached (does it exist?)", ingredient.IngredientID)
 		}
@@ -1687,7 +1748,7 @@ func attachRelations(recipes []models.Recipe, language string) []models.Recipe {
 		FROM recipe_ingredients ri
 		JOIN ingredients i ON ri.ingredient_id = i.id
 		WHERE ri.recipe_id IN (`+in+`)
-		ORDER BY 3
+		ORDER BY ri.recipe_id, ri.display_order, ri.id
 	`, nameArgs...); err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -2179,7 +2240,10 @@ func GetRecipeIngredients(recipeID int, language string) []models.RecipeIngredie
 		FROM recipe_ingredients ri
 		JOIN ingredients i ON ri.ingredient_id = i.id
 		WHERE ri.recipe_id = ?
-		ORDER BY 2
+		-- The order the recipe lists them in, not alphabetical: the first three
+		-- ingredients of a bread are the ones you combine first. ri.id breaks a
+		-- tie, which is what rows written before display_order existed have.
+		ORDER BY ri.display_order, ri.id
 	`, NormalizeLanguage(language), recipeID)
 
 	if err != nil {
