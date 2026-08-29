@@ -16,7 +16,8 @@ import {
   ApiResponse,
   SearchResponse,
   Features,
-  RecipeImportDraft
+  RecipeImportDraft,
+  NewUserForm
 } from '@/types';
 
 // Configure axios defaults
@@ -303,6 +304,24 @@ class ApiService {
   // The one-off that finishes what the startup migration could not.
   async backfillTranslations(language: string): Promise<ApiResponse<{ ingredients: number; tags: number }>> {
     return this.request('POST', '/api/translations/backfill', { language }, { timeout: 180000 });
+  }
+
+  // Account management. Only an administrator gets past these; everyone else
+  // is answered 403, and the UI does not offer them.
+  async getUsers(): Promise<User[]> {
+    return this.requestData<User[]>('GET', '/api/users');
+  }
+
+  async createUser(user: NewUserForm): Promise<ApiResponse> {
+    return this.request('POST', '/api/users', user);
+  }
+
+  async setUserAdmin(id: number, isAdmin: boolean): Promise<ApiResponse<User[]>> {
+    return this.request('PUT', `/api/users/${id}/admin`, { is_admin: isAdmin });
+  }
+
+  async deleteUser(id: number): Promise<ApiResponse<User[]>> {
+    return this.request('DELETE', `/api/users/${id}`);
   }
 
   // Ingredient API

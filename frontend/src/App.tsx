@@ -21,7 +21,8 @@ import {
   TagsPage,
   LoginPage,
   RegisterPage,
-  PageLoader
+  PageLoader,
+  UsersPage
 } from './components/LazyComponents';
 import NotFoundPage from './pages/NotFoundPage';
 
@@ -106,6 +107,19 @@ const App: React.FC = () => {
                   }
                 />
                 
+                {/* Account management. PrivateRoute is all this needs: the API
+                    refuses anyone who is not an administrator whatever the
+                    router lets through, and the nav only offers the link to
+                    people who are. */}
+                <Route
+                  path="/users"
+                  element={
+                    <PrivateRoute>
+                      <UsersPage />
+                    </PrivateRoute>
+                  }
+                />
+
                 {/* 404 route */}
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>

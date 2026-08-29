@@ -131,6 +131,16 @@ func setupAPIRoutes(r *mux.Router, sm *middleware.SecurityManager) {
 	api.HandleFunc("/logout", handlers.LogoutHandler).Methods("POST")
 	api.HandleFunc("/auth/check", handlers.CheckAuthHandler).Methods("GET")
 
+	// Account management, for the people allowed to hand out accounts. Behind
+	// the register limiter: creating an account is the same kind of act whether
+	// it is somebody signing themselves up or an administrator doing it, and it
+	// is not something anybody does in a hurry.
+	api.HandleFunc("/users", handlers.ListUsersHandler).Methods("GET")
+	api.Handle("/users",
+		sm.RegisterRateLimit()(http.HandlerFunc(handlers.CreateUserHandler))).Methods("POST")
+	api.HandleFunc("/users/{id:[0-9]+}", handlers.DeleteUserHandler).Methods("DELETE")
+	api.HandleFunc("/users/{id:[0-9]+}/admin", handlers.SetUserAdminHandler).Methods("PUT")
+
 	// What this deployment can do. The frontend asks so it can hide the recipe
 	// import where no API key is configured and the route below is unmounted.
 	api.HandleFunc("/features", handlers.FeaturesHandler).Methods("GET")

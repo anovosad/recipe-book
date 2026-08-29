@@ -104,6 +104,28 @@ export const en = {
   // and only when creating - importing over a recipe being edited would throw
   // away what is already there.
   // Language of a recipe, and translating one that lacks the reader's.
+  // Managing who has an account. Only an administrator sees any of this.
+  'users.title': 'Accounts',
+  'users.intro': 'Registration is closed, so accounts are handed out here. Everyone with one can edit and delete any recipe.',
+  'users.addTitle': 'Add an account',
+  'users.listTitle': 'Everyone with an account',
+  'users.username': 'Username',
+  'users.email': 'Email',
+  'users.password': 'Password',
+  'users.passwordHelp': 'At least 6 characters, with a letter and a number. Shown as you type — pass it on, they can change it after signing in.',
+  'users.makeAdmin': 'Can manage accounts',
+  'users.create': 'Create account',
+  'users.creating': 'Creating…',
+  'users.created': 'Account created for {username}',
+  'users.admin': 'Manages accounts',
+  'users.grantAdmin': 'Let them manage accounts',
+  'users.revokeAdmin': 'Stop them managing accounts',
+  'users.you': '(you)',
+  'users.cannotDeleteSelf': 'You cannot delete the account you are signed in with',
+  'users.deleteConfirm': 'Delete the account {username}? Their recipes stay in the collection and are put under your name.',
+  'users.deleted': 'Account {username} deleted; the recipes were kept',
+  'users.loadFailed': 'Could not load the accounts',
+  'nav.users': 'Accounts',
   'lang.shownIn': 'Shown in {language} — this recipe has no other version yet.',
   'lang.translateTo': 'Translate to {language}',
   'lang.translating': 'Translating…',

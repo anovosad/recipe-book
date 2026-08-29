@@ -187,12 +187,12 @@ func prepareStatements() {
 	var err error
 
 	// User-related statements
-	stmtGetUser, err = DB.Prepare("SELECT id, username, email, password FROM users WHERE username = ?")
+	stmtGetUser, err = DB.Prepare("SELECT id, username, email, password, is_admin FROM users WHERE username = ?")
 	if err != nil {
 		log.Fatal("Failed to prepare stmtGetUser:", err)
 	}
 
-	stmtCreateUser, err = DB.Prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)")
+	stmtCreateUser, err = DB.Prepare("INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?)")
 	if err != nil {
 		log.Fatal("Failed to prepare stmtCreateUser:", err)
 	}
@@ -305,6 +305,7 @@ func createTables() {
 		username TEXT UNIQUE NOT NULL CHECK(length(username) >= 3 AND length(username) <= 30),
 		email TEXT UNIQUE NOT NULL CHECK(length(email) <= 254),
 		password TEXT NOT NULL CHECK(length(password) >= 6),
+		is_admin INTEGER NOT NULL DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		-- Unix seconds, not a DATETIME: this is compared against a JWT's issued-at
 		-- claim, and a stored string would have to be parsed back with an assumed
@@ -434,6 +435,7 @@ func createTables() {
 	migrateTaxonomyTranslations()
 	migrateRecipeIngredientOrder()
 	migrateRecipeSourceURL()
+	migrateUserIsAdmin()
 }
 
 // recipeTextJoin resolves which language a recipe is shown in.
@@ -741,6 +743,48 @@ func migrateRecipeSourceURL() {
 		return
 	}
 	log.Printf("🔗 Moved %d recipe source links out of their descriptions", len(moved))
+}
+
+// migrateUserIsAdmin adds users.is_admin and grants it to the seeded account.
+//
+// Somebody has to be able to hand out the first account, and the seeded admin
+// is the only account that certainly exists. If it is gone - deleted, renamed -
+// the oldest remaining account gets it instead, because a collection with no
+// administrator has no way to make one without a shell.
+func migrateUserIsAdmin() {
+	var hasColumn int
+	err := DB.QueryRow("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name='is_admin'").Scan(&hasColumn)
+	if err != nil {
+		log.Printf("Error checking the users schema: %v", err)
+		return
+	}
+	if hasColumn == 0 {
+		if _, err := DB.Exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"); err != nil {
+			log.Printf("Could not add users.is_admin: %v", err)
+			return
+		}
+	}
+
+	var admins int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1").Scan(&admins); err != nil {
+		return
+	}
+	if admins > 0 {
+		return
+	}
+
+	result, err := DB.Exec("UPDATE users SET is_admin = 1 WHERE username = 'admin'")
+	if err != nil {
+		log.Printf("Could not grant admin to the seeded account: %v", err)
+		return
+	}
+	if rows, _ := result.RowsAffected(); rows == 0 {
+		// No account called admin any more; fall back to the oldest one.
+		if _, err := DB.Exec("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)"); err != nil {
+			return
+		}
+	}
+	log.Println("👤 Granted account administration to the first account")
 }
 
 // seedTranslations maps the names this app seeds a database with, and the Czech
@@ -1301,6 +1345,12 @@ func insertDefaultRecipes() {
 
 // Secure user creation with prepared statements
 func CreateUserSecure(username, email, hashedPassword string) error {
+	return CreateUserWithRole(username, email, hashedPassword, false)
+}
+
+// CreateUserWithRole is the same, for the account-management endpoint, which
+// may hand out administration along with the account.
+func CreateUserWithRole(username, email, hashedPassword string, isAdmin bool) error {
 	// Validate inputs
 	if validation := utils.ValidateUsername(username); !validation.Valid {
 		return fmt.Errorf("invalid username: %s", validation.Message)
@@ -1310,7 +1360,7 @@ func CreateUserSecure(username, email, hashedPassword string) error {
 		return fmt.Errorf("invalid email: %s", validation.Message)
 	}
 
-	_, err := stmtCreateUser.Exec(username, email, hashedPassword)
+	_, err := stmtCreateUser.Exec(username, email, hashedPassword, isAdmin)
 	return err
 }
 
@@ -1324,7 +1374,7 @@ func GetUserByUsernameSecure(username string) (*models.User, string, error) {
 	var user models.User
 	var hashedPassword string
 
-	err := stmtGetUser.QueryRow(username).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword)
+	err := stmtGetUser.QueryRow(username).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword, &user.IsAdmin)
 	if err != nil {
 		return nil, "", err
 	}
@@ -2760,4 +2810,107 @@ func adoptCanonical(t taxonomyTables, id int, english string,
 	}
 
 	return true, tx.Commit()
+}
+
+// ListUsers returns every account, for the administration page. No password
+// material of any kind is selected.
+func ListUsers() ([]models.User, error) {
+	rows, err := DB.Query("SELECT id, username, email, is_admin FROM users ORDER BY username")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := []models.User{}
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.IsAdmin); err != nil {
+			continue
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+// SetUserAdmin grants or withdraws account administration.
+//
+// Withdrawing from the last administrator is refused: nothing else in the app
+// can grant it back, so the collection would be left needing a shell to
+// administer it.
+func SetUserAdmin(userID int, isAdmin bool) error {
+	if !utils.IsValidID(userID) {
+		return sql.ErrNoRows
+	}
+
+	if !isAdmin {
+		var admins int
+		if err := DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?", userID).Scan(&admins); err != nil {
+			return err
+		}
+		if admins == 0 {
+			return newValidationError("Somebody has to be able to manage accounts")
+		}
+	}
+
+	result, err := DB.Exec("UPDATE users SET is_admin = ? WHERE id = ?", isAdmin, userID)
+	if err != nil {
+		return err
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// DeleteUser removes an account and hands its recipes to reassignTo.
+//
+// The reassignment is the point. recipes.created_by is ON DELETE CASCADE, so
+// deleting an account would take its recipes with it - and in a collection
+// where everyone may edit everything, whose name is on a recipe is the least
+// important thing about it. Losing the family's dumpling recipe because the
+// account that typed it was tidied away would be indefensible.
+func DeleteUser(userID, reassignTo int) error {
+	if !utils.IsValidID(userID) || !utils.IsValidID(reassignTo) {
+		return sql.ErrNoRows
+	}
+	if userID == reassignTo {
+		return newValidationError("An account cannot delete itself")
+	}
+
+	var isAdmin bool
+	if err := DB.QueryRow("SELECT is_admin FROM users WHERE id = ?", userID).Scan(&isAdmin); err != nil {
+		return err
+	}
+	if isAdmin {
+		var admins int
+		if err := DB.QueryRow("SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?", userID).Scan(&admins); err != nil {
+			return err
+		}
+		if admins == 0 {
+			return newValidationError("Somebody has to be able to manage accounts")
+		}
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("UPDATE recipes SET created_by = ? WHERE created_by = ?", reassignTo, userID); err != nil {
+		return err
+	}
+	result, err := tx.Exec("DELETE FROM users WHERE id = ?", userID)
+	if err != nil {
+		return err
+	}
+	if rows, err := result.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return sql.ErrNoRows
+	}
+
+	return tx.Commit()
 }

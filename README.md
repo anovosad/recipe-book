@@ -212,6 +212,10 @@ answers with the updated one.
 - `GET /api/auth/check` - Current user
 - `PUT /api/auth/password` - Change the signed-in user's password
 - `GET /api/features` - What this deployment can do (currently: whether recipe import is configured)
+- `GET /api/users` - Everyone with an account (administrators only)
+- `POST /api/users` - Add an account (administrators only)
+- `PUT /api/users/{id}/admin` - Grant or withdraw account administration (administrators only)
+- `DELETE /api/users/{id}` - Remove an account, keeping its recipes (administrators only)
 
 ### Recipes
 - `GET /api/recipes` - Get all recipes
@@ -359,9 +363,15 @@ or delete any recipe.** Whoever wrote it is still shown on the recipe, but it
 does not gate anything.
 
 Because an account now carries the right to delete anything, **registration is
-closed by default**. Set `ALLOW_REGISTRATION=true`, add the person, and turn it
-off again. With it off the nav hides the link and `/register` says so rather
-than answering 404.
+closed by default**. Accounts are handed out from inside the app instead: an
+administrator gets an **Accounts** page in the nav, and can add someone, grant
+or withdraw account administration, and remove an account — no restart, no open
+signup form on a public address. `ALLOW_REGISTRATION=true` still opens public
+self-signup if you want it.
+
+Deleting an account keeps its recipes; they are put under the name of whoever
+did the deleting. The last administrator cannot be demoted or deleted, since
+nothing else in the app could grant it back.
 
 ## Importing a recipe from a URL
 

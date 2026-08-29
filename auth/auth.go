@@ -81,8 +81,9 @@ func GetUserFromToken(r *http.Request) (*models.User, error) {
 
 	var user models.User
 	var passwordChangedAt int64
-	err = database.DB.QueryRow("SELECT id, username, email, password_changed_at FROM users WHERE id = ?", claims.UserID).
-		Scan(&user.ID, &user.Username, &user.Email, &passwordChangedAt)
+	err = database.DB.QueryRow(
+		"SELECT id, username, email, password_changed_at, is_admin FROM users WHERE id = ?", claims.UserID).
+		Scan(&user.ID, &user.Username, &user.Email, &passwordChangedAt, &user.IsAdmin)
 	if err != nil {
 		return nil, err
 	}

@@ -5,6 +5,16 @@ export interface User {
   id: number;
   username: string;
   email: string;
+  // Whether this account may manage other accounts. It decides nothing else:
+  // recipes are shared and every signed-in user may edit any of them.
+  is_admin?: boolean;
+}
+
+export interface NewUserForm {
+  username: string;
+  email: string;
+  password: string;
+  is_admin: boolean;
 }
 
 // Recipe types

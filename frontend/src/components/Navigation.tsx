@@ -11,7 +11,8 @@ import {
   LogOut,
   Menu,
   X,
-  KeyRound
+  KeyRound,
+  Users
 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import apiService from '@/services/api';
@@ -19,6 +20,8 @@ import { cn } from '@/utils';
 import { useTranslation, LANGUAGES, type Language } from '@/i18n';
 import ChangePasswordModal from '@/components/ChangePasswordModal';
 
+// Shown to everyone. The accounts link is added below, only for the people who
+// can actually use it - the API refuses the rest whatever the nav offers.
 const navLinks = [
   { path: '/', label: 'nav.recipes', icon: List },
   { path: '/ingredients', label: 'nav.ingredients', icon: Leaf },
@@ -70,6 +73,12 @@ const Navigation: React.FC = () => {
   }, []);
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuthStore();
+
+  // Declared after `user`, not before: reading a const from inside its temporal
+  // dead zone is what react-hooks/immutability rejects.
+  const links = user?.is_admin
+    ? [...navLinks, { path: '/users', label: 'nav.users' as const, icon: Users }]
+    : navLinks;
   const { t } = useTranslation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -138,7 +147,7 @@ const Navigation: React.FC = () => {
 
             {/* Desktop Navigation */}
             <div className="hidden items-center gap-1 lg:flex">
-              {navLinks.map(({ path, label, icon: Icon }) => (
+              {links.map(({ path, label, icon: Icon }) => (
                 <Link key={path} to={path} className={desktopLink(path)}>
                   <Icon className="h-4 w-4" />
                   <span>{t(label)}</span>
@@ -209,7 +218,7 @@ const Navigation: React.FC = () => {
           {isMobileMenuOpen && (
             <div id="mobile-menu" className="animate-rise border-t border-black/5 py-4 lg:hidden">
               <div className="flex flex-col gap-1">
-                {navLinks.map(({ path, label, icon: Icon }) => (
+                {links.map(({ path, label, icon: Icon }) => (
                   <Link key={path} to={path} className={mobileLink(path)}>
                     <Icon className="h-5 w-5" />
                     <span>{t(label)}</span>

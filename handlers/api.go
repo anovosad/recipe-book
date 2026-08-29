@@ -207,6 +207,9 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			"id":       user.ID,
 			"username": user.Username,
 			"email":    user.Email,
+			// So the nav can offer account management immediately, rather than
+			// only after the next auth check.
+			"is_admin": user.IsAdmin,
 		},
 	})
 }
@@ -291,6 +294,7 @@ func CheckAuthHandler(w http.ResponseWriter, r *http.Request) {
 		"id":       user.ID,
 		"username": user.Username,
 		"email":    user.Email,
+		"is_admin": user.IsAdmin,
 	})
 }
 

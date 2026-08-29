@@ -8,6 +8,12 @@ type User struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"-"`
+
+	// IsAdmin decides one thing only: whether this account may manage other
+	// accounts. Recipes are shared and every signed-in user may edit any of
+	// them, so this is not a general privilege level - it is the answer to
+	// "who is allowed to hand out an account".
+	IsAdmin bool `json:"is_admin"`
 }
 
 type Ingredient struct {
