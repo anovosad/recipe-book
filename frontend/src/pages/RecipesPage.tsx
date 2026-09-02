@@ -352,7 +352,7 @@ const RecipesPage: React.FC = () => {
             <RecipeCard
               key={recipe.id}
               recipe={recipe}
-              isOwner={user?.id === recipe.created_by}
+              canEdit={!!user}
               onDelete={handleDeleteRecipe}
             />
           ))}

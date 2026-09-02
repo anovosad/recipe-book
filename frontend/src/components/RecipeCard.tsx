@@ -8,7 +8,10 @@ import { Button, TagChip } from '@/components/ui';
 
 interface RecipeCardProps {
   recipe: Recipe;
-  isOwner?: boolean;
+  // Whether to offer the edit and delete controls. Not "is this yours": the
+  // collection is shared and anyone signed in may change any of it, so this is
+  // simply whether somebody is signed in.
+  canEdit?: boolean;
   onEdit?: (recipe: Recipe) => void;
   onDelete?: (recipe: Recipe) => void;
   className?: string;
@@ -18,7 +21,7 @@ const MAX_TAGS = 3;
 
 export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
   recipe,
-  isOwner = false,
+  canEdit = false,
   onEdit,
   onDelete,
   className
@@ -115,7 +118,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = React.memo(({
         <div className="mt-auto flex items-center justify-between gap-3 border-t border-black/5 pt-3.5 text-xs text-ink-300">
           <span className="truncate">{t('common.by', { author: recipe.author_name })}</span>
 
-          {isOwner && (onEdit || onDelete) && (
+          {canEdit && (onEdit || onDelete) && (
             <div className="flex shrink-0 items-center gap-1">
               {onEdit && (
                 <Button

@@ -167,7 +167,11 @@ const RecipeDetailPage: React.FC = () => {
     );
   }
 
-  const isOwner = user?.id === recipe.created_by;
+  // Signed in is the whole test. Authorisation went flat when the collection
+  // became shared - the API dropped every "AND created_by = ?" - and this check
+  // was left behind, so the buttons stayed hidden for a write the server would
+  // have accepted.
+  const canEdit = !!user;
   const scalingRatio = originalServings > 0 ? servings / originalServings : 1;
   const isScaled = scalingRatio !== 1;
   const totalTime = (recipe.prep_time || 0) + (recipe.cook_time || 0);
@@ -237,7 +241,7 @@ const RecipeDetailPage: React.FC = () => {
             </p>
           </div>
 
-          {isOwner && (
+          {canEdit && (
             <div className="flex shrink-0 items-center gap-2">
               <Button
                 as={Link}
